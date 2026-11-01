@@ -1,4 +1,4 @@
-<Application x:Class="StreamRoom.App.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" StartupUri="MainWindow.xaml">
+<Application x:Class="StreamRoom.App.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" StartupUri="ShellWindow.xaml">
   <Application.Resources>
     <SolidColorBrush x:Key="PanelBrush" Color="#191D28" />
     <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#EBEDF5"/><Setter Property="FontFamily" Value="Segoe UI"/></Style>

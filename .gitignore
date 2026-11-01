@@ -8,6 +8,8 @@
 artifacts/
 server/dist/
 server/worker-configuration.d.ts
+Releases/
+**/streamroom-network-test.json
 .tools/
 *.user
 *.log
