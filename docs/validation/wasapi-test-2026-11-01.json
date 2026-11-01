@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "sampleRate": 48000,
+  "channels": 2,
+  "capturedFrames": 3360,
+  "limitation": "Real WASAPI loopback device/PCM test; no recording or transmission, no auditory or A/V sync validation."
+}

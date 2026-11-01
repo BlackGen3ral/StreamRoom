@@ -26,6 +26,8 @@ Se não houver áudio de janela, pare a captura e escolha WASAPI conscientemente
 
 Para avaliar sincronismo, use uma ação do próprio jogo com imagem e som identificáveis, como um disparo ou menu. Não interprete RTT como atraso audiovisual. Registre deriva após 10–30 minutos. Não foi implementado ajuste manual de atraso do áudio.
 
+Para testar apenas o dispositivo WASAPI local, execute `dotnet run --project tests/StreamRoom.AudioSmoke -c Release`. Ele abre o loopback da saída padrão, confere amostras PCM em memória e retorna contagem/taxa; não grava, reproduz nem transmite o áudio. Um dispositivo inativo ou silêncio pode não produzir pacotes. Esse teste exige hardware local e não é executado no GitHub Actions.
+
 ## Quatro espectadores e qualidade
 
 Adicione espectadores um a um, até quatro. Observe upload, FPS, uso de CPU/GPU e temperatura do transmissor. A sala deve recusar um sexto participante.
