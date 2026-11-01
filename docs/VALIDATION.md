@@ -21,21 +21,20 @@ Os 14 resultados Node incluem o teste agregador e 13 cenários: rotas/health; co
 
 - Os clientes dos testes foram processos/sockets no mesmo computador, conectados ao serviço remoto pela internet. Não houve teste em dois computadores físicos ou em redes/NATs diferentes.
 - Não houve inspeção visual nem operação manual da janela WPF: a automação da interface foi interrompida por não conseguir verificar a URL do navegador com segurança.
-- O workflow GitHub Actions foi escrito, mas não executado no GitHub. A criação do repositório público ficou bloqueada: o conector disponível não oferece criação e o navegador não pôde ser usado. Não existe URL de repositório remoto confirmada.
+- O código está publicado em [BlackGen3ral/StreamRoom](https://github.com/BlackGen3ral/StreamRoom). O envio iniciou a [execução do GitHub Actions](https://github.com/BlackGen3ral/StreamRoom/actions/runs/41340628021); consulte seu resultado no GitHub. A evidência local e remota acima permanece separada da execução de CI.
 - Testes não abrangem expiração de seis horas em tempo real, hibernação/evicção forçada, interrupção de rede longa, quota distribuída ou carga prolongada. Os caminhos correspondentes foram implementados, mas não constituem validação operacional completa.
 - Não existem captura, áudio, NVENC, engine WebRTC, STUN/TURN, player, atualizador ou instalador. Nenhuma métrica de FPS, latência audiovisual, uso de CPU/GPU ou qualidade foi medida.
 - Não foi publicada Release oficial. O serviço Cloudflare é de desenvolvimento. O ZIP portátil serve para experimentar o gerenciamento de salas.
 
-## Retomar no GitHub
+## Continuar pelo GitHub
 
-O pacote de código inclui um `StreamRoom-stage1.git.bundle` com commits locais. Para preservar esse histórico, crie um repositório público vazio chamado `StreamRoom` e execute:
+O código da etapa 1 foi importado em commits separados para cliente Windows, serviço Cloudflare e testes/documentação. Para obter a versão atual:
 
 ```powershell
-git clone StreamRoom-stage1.git.bundle StreamRoom
+git clone https://github.com/BlackGen3ral/StreamRoom.git
 cd StreamRoom
-git remote rename origin backup
-git remote add origin https://github.com/SEU_USUARIO/StreamRoom.git
-git push -u origin main
+git log --oneline
 ```
 
-O push requer autenticação do proprietário. Não coloque tokens no comando, no código ou nos arquivos versionados. O bundle contém somente o histórico do código do StreamRoom, sem o SDK, dependências instaladas ou credenciais. Alternativamente, use os arquivos extraídos, mas o bundle é o caminho para preservar os commits.
+O pacote inicial também contém `StreamRoom-stage1.git.bundle` com os hashes dos commits locais originais, anteriores à importação. Na cópia de trabalho original, esse histórico foi mantido na branch local `stage1-local-original`; `main` acompanha o repositório remoto. Nenhum histórico remoto foi substituído à força. Não coloque tokens em comandos, no código ou nos arquivos versionados.
+

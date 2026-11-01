@@ -2,6 +2,8 @@
 
 Aplicativo Windows em C#/.NET 10 + WPF, com salas e sinalização reais em Cloudflare Workers e Durable Objects. **Versão de desenvolvimento: não captura nem transmite vídeo ou áudio.** Não há player simulado, estatísticas fictícias ou botões que fingem transmitir.
 
+Código público: [BlackGen3ral/StreamRoom](https://github.com/BlackGen3ral/StreamRoom). Builds e testes: [GitHub Actions](https://github.com/BlackGen3ral/StreamRoom/actions). Após uma execução bem-sucedida, o aplicativo portátil de desenvolvimento fica em **Artifacts → StreamRoom-stage1-win-x64-development** na página da execução. Extraia todos os arquivos do artefato na mesma pasta antes de abrir `StreamRoom.exe`, incluindo as bibliotecas nativas do WPF. Esses artefatos não são Releases oficiais.
+
 ## O que funciona
 
 - Criar uma sala e entrar por convite no mesmo aplicativo.
@@ -120,3 +122,4 @@ Nenhum token administrativo da Cloudflare ou do GitHub é necessário no aplicat
 O limite de cinco pessoas da etapa 1 é controle de sala; não comprova desempenho com quatro espectadores de vídeo. TURN retransmite mídia quando conexão direta falha. Workers e Durable Objects continuam somente com sinalização. Largura de banda, disponibilidade e custos de TURN precisam ser resolvidos na etapa 3.
 
 Não há fluxo que publique versões oficiais automaticamente. O workflow entrega somente artefatos de desenvolvimento. Releases oficiais dependem de aprovação explícita do proprietário.
+
