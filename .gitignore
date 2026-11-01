@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/.wrangler/
+**/.dev.vars*
+**/.env*
+!**/.env.example
+artifacts/
+server/dist/
+server/worker-configuration.d.ts
+.tools/
+*.user
+*.log
+*.zip
+*.git.bundle
