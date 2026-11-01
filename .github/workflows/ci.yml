@@ -50,9 +50,21 @@ jobs:
             $global:LASTEXITCODE = 0
           }
       - name: Build portable development app
-        run: dotnet publish src/StreamRoom.App/StreamRoom.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/win-x64
+        run: dotnet publish src/StreamRoom.App/StreamRoom.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/publish
       - uses: actions/upload-artifact@v4
         with:
-          name: StreamRoom-stage1-win-x64-development
-          path: artifacts/win-x64/
+          name: StreamRoom-win-x64-development
+          path: artifacts/publish/
+          retention-days: 14
+      - name: Create development installer and update feed
+        shell: pwsh
+        run: |
+          dotnet tool restore
+          if ($LASTEXITCODE -ne 0) { throw 'Velopack CLI restore failed.' }
+          dotnet tool run vpk pack --packId StreamRoom --packVersion 0.2.0-beta.1 --packDir artifacts/publish --mainExe StreamRoom.exe --packTitle StreamRoom --framework webview2 --runtime win-x64 --outputDir artifacts/installer --channel win
+          if ($LASTEXITCODE -ne 0) { throw 'Installer packaging failed.' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StreamRoom-installer-development
+          path: artifacts/installer/
           retention-days: 14

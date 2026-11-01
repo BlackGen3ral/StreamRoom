@@ -36,6 +36,16 @@ Mensagens UTF-8 JSON até 64 KiB, SDP até 48.000 unidades, candidate até 4.096
 
 Tokens gerados por CSPRNG de 256 bits, armazenados como SHA-256 no Durable Object. O hostToken nunca entra no convite. O link de convite usa o fragmento `#inviteToken`; o aplicativo o interpreta localmente. Não registrar URLs de convite nem frames, inclusive SDP/ICE, em logs.
 
+## Extensões de mídia 0.2 (protocol 1 compatível)
+
+O host envia `{"type":"stream","active":true}` ao iniciar e false ao parar. Snapshots de sala incluem `streaming`; somente o host pode alterar esse estado.
+
+Após autenticação, `{"type":"ice_config"}` retorna `{"type":"ice_servers","iceServers":[...],"turnAvailable":true}`. A resposta usa credenciais temporárias de TURN geradas pelo backend. O segredo administrativo não é enviado. A geração é mantida em cache por sessão durante cinco minutos; credenciais têm TTL de seis horas. Falha ou ausência de configuração retorna STUN e status falso explícito. Não registrar essa resposta. O cliente renova a configuração antes de novas negociações quando o cache vence.
+
+Offers/answers/ICE podem incluir `session`, UUID da negociação de mídia, preservado no encaminhamento. A versão atual usa esse campo para rejeitar sinais de conexões antigas após uma recuperação. Os testes antigos sem o campo continuam aceitos.
+
+Um viewer pode enviar payload `{"kind":"restart"}` ao host para solicitar uma nova negociação, ou `{"kind":"quality","height":720,"fps":30}` para limitar sua própria recepção. As alturas válidas são 480, 720 e 1080; FPS 30 ou 60. O backend valida direção e valores antes de encaminhar. Pedidos não aumentam a resolução/FPS da captura global do transmissor.
+
 ## Persistência e rede
 
 Um Durable Object por sala, SQLite/KV para metadados; anexos de WebSocket preservam identidade e contadores durante hibernação. Salas vazias aguardam a expiração sem wakeup periódico. Não há descoberta pública de salas.
