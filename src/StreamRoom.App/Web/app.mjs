@@ -13,7 +13,7 @@ const rtc = new RtcRoom(native);
 const state = { connected: false, connecting: false, role: null, invitation: '', participants: [], streaming: false, busy: false, shuttingDown: false };
 const player = $('player');
 function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
-function options() { return { quality: Number($('quality').value), fps: Number($('fps').value), audio: $('audio').value, autoQuality: $('autoQuality').checked, upload: Number($('upload').value), relay: $('relay').checked }; }
+function options() { return { quality: Number($('quality').value), fps: Number($('fps').value), audio: $('audio').value, autoQuality: $('autoQuality').checked, upload: Number($('upload').value) }; }
 function render() {
   $('entryControls').hidden = state.connected; $('roomControls').hidden = !state.connected;
   $('create').disabled = $('join').disabled = $('paste').disabled = state.busy;
@@ -23,7 +23,7 @@ function render() {
   $('start').disabled = !host || state.busy || Boolean(rtc.localStream);
   $('start').hidden = Boolean(rtc.localStream); $('stop').hidden = !rtc.localStream; $('stop').disabled = state.busy;
   for (const id of ['quality', 'fps']) $(id).disabled = Boolean(rtc.localStream);
-  for (const id of ['audio', 'relay']) $(id).disabled = Boolean(rtc.localStream) || (state.connected && !host);
+  for (const id of ['audio']) $(id).disabled = Boolean(rtc.localStream) || (state.connected && !host);
   $('networkBadge').textContent = state.connected ? '● Sala conectada' : 'Desconectado'; $('networkBadge').classList.toggle('connected', state.connected);
   $('participantCount').textContent = state.participants.length + '/5'; $('emptyPeers').hidden = state.participants.length > 0;
   $('leave').textContent = host ? 'Encerrar sala para todos' : 'Sair da sala';
@@ -59,10 +59,10 @@ async function connect(mode) {
     const response = await native('connect', { mode, server: $('server').value.trim(), name: $('name').value.trim(), invite: $('invite').value.trim() });
     state.connected = true; state.role = response.welcome.role; state.invitation = response.invitation;
     rtc.setOptions(options()); rtc.enter(response.welcome); rtc.updateRoom(state.participants, state.streaming);
-    $('roomCode').textContent = 'Sala ' + response.welcome.roomId.slice(0, 8) + ' · privada por convite';
+    state.roomId = response.welcome.roomId; showExpiry(response.welcome.expiresAt);
     $('invite').value = '';
     status(state.role === 'host' ? 'Sala pronta. Copie o convite para seus amigos e selecione a fonte para transmitir.' : 'Você entrou. A transmissão aparece aqui quando o criador iniciar.');
-    // Resolve TURN now, independently of the user gesture needed by the capture picker.
+    // Resolve STUN now, independently of the user gesture needed by the capture picker.
     rtc.ice().catch(error => status(error.message, true));
     rtc.requestQuality().catch(error => status(error.message, true));
   } finally { state.connecting = false; }
@@ -86,11 +86,13 @@ window.chrome.webview.addEventListener('message', ({ data }) => {
   else if (data.type === 'disconnected') void disconnected(data.message);
   else if (data.type === 'serverError' || data.type === 'audioError') status(data.message, true);
   else if (data.type === 'pcm') rtc.pushPcm(data.data);
+  else if (data.type === 'roomRenewed') showExpiry(data.expiresAt);
   else if (data.type === 'update') showUpdate(data.result);
   else if (data.type === 'updateProgress') status(`Baixando atualização oficial: ${data.progress}%`);
 });
 rtc.addEventListener('notice', e => status(e.detail));
-rtc.addEventListener('ice', e => { $('turnStatus').textContent = e.detail ? 'P2P + TURN disponível' : 'Somente STUN · TURN indisponível'; });
+rtc.addEventListener('ice', () => { $('directStatus').textContent = 'STUN gratuito · aguardando P2P'; });
+rtc.addEventListener('connectionError', ({ detail }) => status(detail.message, true));
 rtc.addEventListener('capture', ({ detail }) => {
   showStream(detail?.stream ?? null, true);
   $('source').textContent = detail ? (detail.settings.displaySurface === 'monitor' ? 'Monitor' : 'Janela') + ' · prévia local sem som' : 'Nenhuma fonte selecionada';
@@ -107,6 +109,7 @@ rtc.addEventListener('peerState', ({ detail }) => {
   if (detail.state === 'failed' || detail.state === 'disconnected') status(`Reconectando mídia com ${name}...`);
 });
 rtc.addEventListener('stats', ({ detail }) => {
+  $('directStatus').textContent = detail.length && detail.every(row => row.direct) ? 'P2P direto confirmado · sem relay' : 'STUN gratuito · P2P não confirmado';
   if (!detail.length) { $('stats').className = 'stats-empty'; $('stats').textContent = 'As estatísticas aparecem quando houver uma conexão WebRTC.'; return; }
   $('stats').className = '';
   $('stats').replaceChildren(...detail.map(row => {
@@ -116,7 +119,7 @@ rtc.addEventListener('stats', ({ detail }) => {
     const entries = [
       ['Taxa', row.bitrate === null ? '—' : row.bitrate.toFixed(2) + ' Mbps'], ['FPS', row.fps === null ? '—' : Math.round(row.fps)],
       ['Resolução', row.width ? `${row.width}×${row.height}` : '—'], ['RTT', row.rtt === null ? '—' : Math.round(row.rtt) + ' ms'],
-      ['Perda', (row.loss * 100).toFixed(1) + '%'], ['Codec', row.codec], ['Rota', row.route], ['Estado', row.state],
+      ['Perda', (row.loss * 100).toFixed(1) + '%'], ['Codec', row.codec], ['Rota', row.route], ['ICE local/remoto', row.localCandidate + ' / ' + row.remoteCandidate], ['Transporte', row.transport], ['Estado', row.state],
       ['Motor', row.hardware], ['Aceleração eficiente', row.powerEfficient === null ? 'Não informada' : row.powerEfficient ? 'Sim' : 'Não'],
       ['Áudio RTP', row.audioPackets === null ? 'Sem medição' : `${row.audioCodec?.replace('audio/', '') ?? 'Áudio'} · ${row.audioPackets} pacotes`],
       ['Limitação', row.limitation ?? '—']
@@ -125,6 +128,7 @@ rtc.addEventListener('stats', ({ detail }) => {
     div.append(name, values); return div;
   }));
 });
+function showExpiry(expiresAt) { $('roomCode').textContent = 'Sala ' + (state.roomId ?? '').slice(0, 8) + ' · válida até ' + new Date(expiresAt).toLocaleString('pt-BR') + ' · renovação pelo criador'; }
 function showUpdate(result) {
   if (result.available) { $('updateText').textContent = `Nova versão oficial disponível: ${result.version}`; $('updateNotice').hidden = false; }
   else if (result.message) status(result.message);

@@ -21,10 +21,17 @@ var peersSeen = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuati
 host.ParticipantsChanged += peers => { if (peers.Count == 2) peersSeen.TrySetResult(true); };
 var welcome = await host.ConnectAsync(server, credentials.RoomId, credentials.HostToken, "Criador C#");
 Check(welcome.Role == "host", "Autenticação do criador via ClientWebSocket");
+Check(welcome.ExpiresAt - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() > 86_300_000, "Sala aceita duração inicial de 24h");
 var guestWelcome = await viewer.ConnectAsync(server, credentials.RoomId, credentials.InviteToken, "Amigo C#");
 Check(guestWelcome.Role == "viewer", "Autenticação do convidado via ClientWebSocket");
 await peersSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
 Check(true, "Lista real de participantes sincronizada");
+var ice = await viewer.GetIceConfigurationAsync();
+Check(ice.GetProperty("turnAvailable").ValueKind == System.Text.Json.JsonValueKind.False
+    && ice.GetProperty("iceServers").EnumerateArray().All(s => !s.TryGetProperty("credential", out _) && s.GetProperty("urls").EnumerateArray().All(url => url.GetString()!.StartsWith("stun:", StringComparison.Ordinal))), "Configuração ICE contém somente STUN sem credenciais");
+// Two application heartbeats must succeed through the runtime auto-response path.
+await Task.Delay(TimeSpan.FromSeconds(42));
+Check(host.IsConnected && viewer.IsConnected, "Dois ciclos de heartbeat mantêm os clientes conectados");
 var received = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 viewer.SignalReceived += (from, payload) => received.TrySetResult(from == welcome.ParticipantId && payload.GetProperty("sdp").GetString() == "contract-test");
 await host.SendSignalAsync(guestWelcome.ParticipantId, new { kind = "offer", sdp = "contract-test" });

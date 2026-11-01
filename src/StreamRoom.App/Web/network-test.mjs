@@ -1,3 +1,4 @@
+import { directConfiguration, directRoute } from './direct-ice.mjs';
 const pending = new Map(); let sequence = 0; let queue = Promise.resolve();
 const endpoints = new Map();
 const checks = []; const peers = [];
@@ -39,8 +40,8 @@ function endpoint(side, to, session, configuration) {
   };
   return e;
 }
-async function channelPair(host, viewer, iceServers, relay) {
-  const session = crypto.randomUUID(); const config = { iceServers, iceTransportPolicy: relay ? 'relay' : 'all' };
+async function channelPair(host, viewer, iceServers) {
+  const session = crypto.randomUUID(); const config = directConfiguration({ iceServers });
   const a = endpoint('host', viewer.id, session, config); const b = endpoint(viewer.side, host.id, session, config);
   const received = new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(Error('WebRTC timeout')), 25000);
@@ -54,12 +55,9 @@ async function channelPair(host, viewer, iceServers, relay) {
   await a.send({ kind: 'offer', sdp: a.pc.localDescription.sdp, session }); a.sent = true;
   for (const p of a.local.splice(0)) await a.send(p);
   await received;
-  const stats = await a.pc.getStats(); let route = 'unknown';
-  for (const stat of stats.values()) if (stat.type === 'transport' && stat.selectedCandidatePairId) {
-    const pair = stats.get(stat.selectedCandidatePairId); const local = stats.get(pair.localCandidateId); route = local.candidateType;
-  }
-  if (relay && route !== 'relay') throw Error('TURN forced but selected candidate was not relay');
-  return { test: relay ? 'TURN data channel' : 'P2P data channel', viewer: viewer.side, passed: true, candidateType: route };
+  const route = directRoute(await a.pc.getStats());
+  if (!route.confirmed) throw Error('Direct route not confirmed: ' + route.label);
+  return { test: 'P2P direct data channel', viewer: viewer.side, passed: true, localCandidate: route.localType, remoteCandidate: route.remoteType, protocol: route.protocol };
 }
 let runtime;
 try {
@@ -68,10 +66,9 @@ try {
   const setup = await native('testCreate'); runtime = setup.runtime;
   checks.push({ test: 'five authenticated C# sessions via Cloudflare', passed: setup.clients.length === 5 });
   const host = setup.clients.find(c => c.side === 'host'); const viewers = setup.clients.filter(c => c.side !== 'host');
-  checks.push(...await Promise.all(viewers.map(viewer => channelPair(host, viewer, setup.ice.iceServers, false).catch(error => ({ test: 'P2P data channel', viewer: viewer.side, passed: false, error: error.message })))));
+  checks.push(...await Promise.all(viewers.map(viewer => channelPair(host, viewer, setup.ice.iceServers).catch(error => ({ test: 'P2P data channel', viewer: viewer.side, passed: false, error: error.message })))));
   for (const pc of peers.splice(0)) pc.close(); endpoints.clear();
-  if (setup.ice.turnAvailable) checks.push(...await Promise.all(viewers.map(viewer => channelPair(host, viewer, setup.ice.iceServers, true).catch(error => ({ test: 'TURN data channel', viewer: viewer.side, passed: false, error: error.message })))));
-  else checks.push({ test: 'TURN configured', passed: false, error: 'Server returned no TURN credentials' });
+  checks.push({ test: 'STUN only, no relay credentials', passed: setup.ice.turnAvailable === false && setup.ice.iceServers.every(s => !s.credential && !s.username && s.urls.every(url => url.startsWith('stun:'))) });
 } catch (error) { checks.push({ test: 'network runner', passed: false, error: error.message }); }
 finally {
   for (const pc of peers) pc.close();

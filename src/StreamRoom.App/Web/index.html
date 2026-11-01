@@ -18,12 +18,11 @@
     <label class="checkbox"><input id="autoQuality" type="checkbox" checked> Ajustar qualidade à conexão</label>
     <label for="upload">Limite total de envio (Mbps)</label><input id="upload" type="number" min="2" max="80" step="1" value="24">
     <p class="fine">O envio é dividido entre espectadores. Quatro amigos exigem até quatro cópias do vídeo.</p>
-    <label class="checkbox"><input id="relay" type="checkbox"> Forçar TURN para diagnóstico</label>
     <label for="server">Servidor de sinalização</label><input id="server" value="https://streamroom-signaling-dev.arthurgabrielfera.workers.dev" spellcheck="false">
-    <p class="fine">O Worker troca sinalização. TURN, quando necessário, retransmite a mídia criptografada.</p>
+    <p class="fine">Apenas P2P direto com STUN gratuito. Redes incompatíveis não conectam; nenhum relay é ativado. Salas de 24h com renovação pelo criador.</p>
   </details>
 </aside><main>
-  <div class="stage-title"><div><span class="eyebrow" id="roomState">SEU PONTO DE ENCONTRO</span><h1 id="title">O jogo fica melhor junto.</h1></div><span id="turnStatus" class="muted">WebRTC P2P</span></div>
+  <div class="stage-title"><div><span class="eyebrow" id="roomState">SEU PONTO DE ENCONTRO</span><h1 id="title">O jogo fica melhor junto.</h1></div><span id="directStatus" class="muted">WebRTC P2P</span></div>
   <section class="player-card" id="playerCard"><video id="player" playsinline autoplay></video><div class="empty-player" id="playerEmpty"><span class="play-mark">▷</span><h2 id="emptyTitle">A próxima partida começa aqui.</h2><p id="emptyDescription">Crie uma sala e compartilhe seu jogo, uma janela ou um monitor.</p></div><button id="play" class="overlay-play" hidden>▶ Assistir com som</button><span class="live" id="liveBadge" hidden>● AO VIVO</span></section>
   <div class="toolbar"><div class="row"><button id="start" class="primary" disabled>▣ Selecionar fonte e transmitir</button><button id="stop" class="danger" hidden>■ Parar transmissão</button><span id="source" class="muted">Nenhuma fonte selecionada</span></div><div class="row"><label for="volume" class="volume-label">Volume</label><input id="volume" type="range" min="0" max="1" step="0.01" value="0.8"><button id="fullscreen" class="quiet">⛶ Tela cheia</button></div></div>
   <div id="captureInfo" class="info-card"><strong>Compartilhe com intenção.</strong><p>Você escolhe o que capturar no seletor do Windows. Jogos em tela cheia exclusiva podem exigir modo janela sem bordas. Nenhum microfone é capturado.</p></div>

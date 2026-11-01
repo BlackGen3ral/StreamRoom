@@ -14,6 +14,10 @@ public sealed class SignalingClient : IAsyncDisposable
     private readonly TaskCompletionSource<Welcome> _welcome = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _receiver;
     private Task? _heartbeat;
+    private string? _role;
+    private long _expiresAt;
+    private volatile bool _pongPending;
+    public event Action<long>? RoomRenewed;
     private bool _disposed;
     private TaskCompletionSource<JsonElement>? _iceReply;
     public event Action<IReadOnlyList<Participant>>? ParticipantsChanged;
@@ -61,6 +65,7 @@ public sealed class SignalingClient : IAsyncDisposable
             _receiver = ReceiveAsync();
             await SendAsync(new { type = "join", token, displayName }, timeout.Token);
             var welcome = await _welcome.Task.WaitAsync(timeout.Token);
+            _role = welcome.Role; _expiresAt = welcome.ExpiresAt;
             _heartbeat = HeartbeatAsync();
             return welcome;
         }
@@ -95,7 +100,13 @@ public sealed class SignalingClient : IAsyncDisposable
         try
         {
             while (await timer.WaitForNextTickAsync(_lifetime.Token))
+            {
+                if (_pongPending) throw new WebSocketException("Servidor não respondeu ao ping.");
+                _pongPending = true;
                 await SendAsync(new { type = "ping" }, _lifetime.Token);
+                if (_role == "host" && _expiresAt - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() <= 3_600_000)
+                    await SendAsync(new { type = "renew" }, _lifetime.Token);
+            }
         }
         catch (OperationCanceledException) { }
         catch (WebSocketException) { _socket.Abort(); _lifetime.Cancel(); }
@@ -130,6 +141,11 @@ public sealed class SignalingClient : IAsyncDisposable
                     case "room":
                         ParticipantsChanged?.Invoke(item.GetProperty("participants").Deserialize<Participant[]>(Json) ?? []);
                         StreamStateChanged?.Invoke(item.TryGetProperty("streaming", out var active) && active.ValueKind == JsonValueKind.True);
+                        break;
+                    case "pong": _pongPending = false; break;
+                    case "room_renewed":
+                        _expiresAt = item.GetProperty("expiresAt").GetInt64();
+                        RoomRenewed?.Invoke(_expiresAt);
                         break;
                     case "ice_servers":
                         _iceReply?.TrySetResult(item.Clone());

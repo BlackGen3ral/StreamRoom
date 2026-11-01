@@ -5,7 +5,7 @@
 Use o workflow manual **Build an approved release candidate (no publication)** ou execute na raiz:
 
 ```powershell
-./scripts/build-installer.ps1 -Version 0.2.0-beta.1
+./scripts/build-installer.ps1 -Version 0.3.0-beta.1
 ```
 
 A ferramenta usa o SDK/CLI Velopack 1.2.161 fixado no manifesto local. A publicação é self-contained win-x64; o instalador declara WebView2 como requisito. O destino é artifacts/installer. Para reempacotar a mesma versão em um diretório que já contém essa versão, use uma pasta nova ou uma versão de candidato nova; o empacotador pode recusar sobrescrever versões.
@@ -32,4 +32,4 @@ Candidatos beta devem ficar em draft/prerelease quando compartilhados por Releas
 
 Antes da primeira publicação oficial, valide instalação da versão A e atualização para versão B em ambiente controlado, preservação de configurações, desinstalação e ausência de captura após fechar. Ainda não foi feito esse ensaio A → B nesta sessão. Use um feed local ou repositório de teste separado para não distribuir uma versão de teste aos amigos por engano.
 
-A configuração local contém somente preferências; tokens de sala e credenciais temporárias de TURN não são persistidos pelo aplicativo. O perfil WebView2 fica no diretório de dados do StreamRoom.
+A configuração local contém somente preferências; tokens de sala não são persistidos pelo aplicativo. O perfil WebView2 fica no diretório de dados do StreamRoom.

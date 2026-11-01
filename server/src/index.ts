@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 
-const TTL = 6 * 60 * 60 * 1000;
+import { ROOM_TTL, SWEEP_INTERVAL, renewalExpiry, stale } from './policy';
 const MAX_MESSAGE = 64 * 1024;
 const json = (body: unknown, status = 200) => Response.json(body, {
   status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
@@ -11,7 +11,7 @@ async function hash(value: string) {
   return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
 }
 type Metadata = { roomId: string; inviteHash: string; hostHash: string; expiresAt: number };
-type Session = { id: string; name?: string; role?: 'host' | 'viewer'; lastSeen: number; window: number; count: number; streaming?: boolean; iceAt?: number; iceServers?: unknown[] };
+type Session = { id: string; name?: string; role?: 'host' | 'viewer'; lastSeen: number; window: number; count: number; streaming?: boolean };
 type Peer = { id: string; name: string; role: 'host' | 'viewer' };
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -21,7 +21,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/health' && request.method === 'GET')
-      return json({ service: 'StreamRoom signaling', protocol: 1, version: '0.2.0' });
+      return json({ service: 'StreamRoom signaling', protocol: 1, version: '0.3.0', mediaPolicy: 'direct-only' });
     if (url.pathname === '/v1/rooms' && request.method === 'POST') {
       if (request.body) await request.body.cancel();
       const key = request.headers.get('CF-Connecting-IP') ?? 'local';
@@ -30,7 +30,7 @@ export default {
       const roomId = crypto.randomUUID();
       const inviteToken = token();
       const hostToken = token();
-      const expiresAt = Date.now() + TTL;
+      const expiresAt = Date.now() + ROOM_TTL;
       await env.ROOMS.getByName(roomId).initialize({ roomId, inviteHash: await hash(inviteToken), hostHash: await hash(hostToken), expiresAt });
       return json({ roomId, inviteToken, hostToken, expiresAt, protocol: 1 }, 201);
     }
@@ -49,6 +49,8 @@ export class Room extends DurableObject<Env> {
   private metadata: Metadata | undefined;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    // Exact JSON matches are answered by the runtime without waking the object.
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"type":"ping"}', '{"type":"pong"}'));
     ctx.blockConcurrencyWhile(async () => { this.metadata = await ctx.storage.get<Metadata>('room'); });
   }
   async initialize(metadata: Metadata) {
@@ -66,7 +68,8 @@ export class Room extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server);
     const now = Date.now();
     server.serializeAttachment({ id: crypto.randomUUID(), lastSeen: now, window: now, count: 0 } satisfies Session);
-    await this.ctx.storage.setAlarm(Math.min(now + 15_000, this.metadata.expiresAt));
+    const alarm = await this.ctx.storage.getAlarm();
+    await this.ctx.storage.setAlarm(Math.min(alarm ?? Infinity, now + 15_000, this.metadata.expiresAt));
     return new Response(null, { status: 101, webSocket: client });
   }
   private sessions(): { ws: WebSocket; session: Session }[] {
@@ -125,7 +128,22 @@ export class Room extends DurableObject<Env> {
       if (s.role !== 'host' || typeof message.active !== 'boolean') { this.reject(ws, 'forbidden', 'Somente o criador pode transmitir.'); return; }
       s.streaming = message.active; ws.serializeAttachment(s); this.broadcast(); return;
     }
-    if (message.type === 'ice_config') { await this.iceConfiguration(ws, s); return; }
+    if (message.type === 'ice_config') {
+      this.send(ws, { type: 'ice_servers', iceServers: [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }], turnAvailable: false, policy: 'direct-only' }); return;
+    }
+    if (message.type === 'renew') {
+      if (s.role !== 'host') { this.reject(ws, 'forbidden', 'Somente o criador pode renovar a sala.'); return; }
+      const expiresAt = renewalExpiry(this.metadata.expiresAt, now);
+      if (expiresAt !== this.metadata.expiresAt) {
+        const updated = { ...this.metadata, expiresAt };
+        await this.ctx.storage.put('room', updated);
+        // A close event can run across storage awaits; never revive a closed room.
+        if (!this.metadata) { await this.ctx.storage.deleteAll(); return; }
+        this.metadata = updated;
+      }
+      for (const { ws: client } of this.sessions()) this.send(client, { type: 'room_renewed', expiresAt });
+      return;
+    }
     if (message.type === 'leave') { await this.depart(ws); ws.close(1000, 'left'); return; }
     if (message.type !== 'signal' || typeof message.to !== 'string' || !record(message.payload)) {
       this.reject(ws, 'invalid_message', 'Tipo de mensagem desconhecido.'); return;
@@ -148,40 +166,13 @@ export class Room extends DurableObject<Env> {
         && (p.sdpMid === null || typeof p.sdpMid === 'string' && p.sdpMid.length <= 256)
         && (p.sdpMLineIndex === null || Number.isInteger(p.sdpMLineIndex) && Number(p.sdpMLineIndex) >= 0 && Number(p.sdpMLineIndex) <= 255);
     if (!valid) { this.reject(ws, 'invalid_signal', 'Sinalização inválida.'); return; }
+    if (p.kind === 'ice' && / typ relay(?: |$)/.test(String(p.candidate)) || typeof p.sdp === 'string' && /a=candidate:[^\r\n]* typ relay(?: |[\r\n]|$)/.test(p.sdp)) {
+      this.reject(ws, 'relay_disabled', 'Somente P2P direto é permitido. Relay/TURN está desativado.'); return;
+    }
     const payload = p.kind === 'ice'
       ? { kind: p.kind, candidate: p.candidate, sdpMid: p.sdpMid, sdpMLineIndex: p.sdpMLineIndex }
       : { kind: p.kind, sdp: p.sdp };
     this.send(target.ws, { type: 'signal', from: s.id, payload: p.session ? { ...payload, session: p.session } : payload });
-  }
-  private async iceConfiguration(ws: WebSocket, s: Session) {
-    if (s.iceServers && s.iceAt && Date.now() - s.iceAt < 300_000) {
-      this.send(ws, { type: 'ice_servers', iceServers: s.iceServers, turnAvailable: s.iceServers.length > 1 }); return;
-    }
-    const servers: unknown[] = [{ urls: ['stun:stun.cloudflare.com:3478'] }];
-    s.iceAt = Date.now(); s.iceServers = servers; ws.serializeAttachment(s);
-    let turnAvailable = false;
-    let turnError: string | undefined;
-    if (this.env.TURN_KEY_ID && this.env.TURN_API_TOKEN) {
-      try {
-        const response = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${this.env.TURN_KEY_ID}/credentials/generate-ice-servers`, {
-          method: 'POST', headers: { Authorization: `Bearer ${this.env.TURN_API_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ttl: 21600, customIdentifier: s.id }), signal: AbortSignal.timeout(10_000)
-        });
-        if (!response.ok) throw new Error(`TURN provider HTTP ${response.status}`);
-        const value: unknown = await response.json();
-        if (!record(value) || !Array.isArray(value.iceServers)) throw new Error('Invalid TURN response');
-        const relays = value.iceServers.filter((entry: unknown) => record(entry) && Array.isArray(entry.urls)
-          && entry.urls.some((url: unknown) => typeof url === 'string' && /^turns?:/.test(url))
-          && typeof entry.username === 'string' && typeof entry.credential === 'string');
-        servers.push(...relays); turnAvailable = relays.length > 0;
-      } catch (error) { turnError = error instanceof Error ? error.message : 'TURN unavailable'; }
-    } else {
-      turnError = 'TURN não configurado no servidor';
-    }
-    const latest = ws.deserializeAttachment() as Session;
-    if (!latest.role || !this.metadata) return;
-    latest.iceServers = servers; latest.iceAt = Date.now(); ws.serializeAttachment(latest);
-    this.send(ws, { type: 'ice_servers', iceServers: servers, turnAvailable, turnError });
   }
   private async depart(ws: WebSocket) {
     const s = ws.deserializeAttachment() as Session;
@@ -201,17 +192,18 @@ export class Room extends DurableObject<Env> {
       ws.serializeAttachment({ ...ws.deserializeAttachment(), role: undefined });
       ws.close(1000, 'room_closed');
     }
+    await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
   }
   async alarm() {
     if (!this.metadata || Date.now() >= this.metadata.expiresAt) { await this.end('Sala expirada.'); return; }
     for (const ws of this.ctx.getWebSockets()) {
       const s = ws.deserializeAttachment() as Session;
-      if (Date.now() - s.lastSeen > (s.role ? 90_000 : 15_000)) {
+      if (stale(s.lastSeen, this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime(), Boolean(s.role), Date.now())) {
         await this.depart(ws); ws.close(1008, 'timeout');
       }
     }
     if (this.metadata) await this.ctx.storage.setAlarm(this.ctx.getWebSockets().length
-      ? Math.min(Date.now() + 15_000, this.metadata.expiresAt) : this.metadata.expiresAt);
+      ? Math.min(Date.now() + SWEEP_INTERVAL, this.metadata.expiresAt) : this.metadata.expiresAt);
   }
 }

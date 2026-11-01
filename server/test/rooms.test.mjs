@@ -39,6 +39,12 @@ test('salas reais no runtime Cloudflare', async t => {
   const host = connect(room.roomId);
   const hostWelcome = await host.join(room.hostToken, 'Criador');
   assert.equal(hostWelcome.role, 'host');
+  await t.test('sala de 24h, renovação autorizada e idempotente fora da janela', async () => {
+    assert.ok(room.expiresAt - Date.now() > 86_300_000);
+    assert.ok(room.expiresAt - Date.now() <= 86_400_000);
+    host.send({ type: 'renew' });
+    assert.equal((await host.wait('room_renewed')).expiresAt, room.expiresAt);
+  });
   await t.test('health e rotas inválidas', async () => {
     assert.equal((await fetch(base + '/health')).status, 200);
     assert.equal((await fetch(base + '/v1/rooms')).status, 404);
@@ -93,12 +99,13 @@ test('salas reais no runtime Cloudflare', async t => {
     host.send({ type: 'stream', active: false });
     assert.equal((await guests[0].wait('room', m => m.streaming === false)).streaming, false);
   });
-  await t.test('ICE autenticado fornece STUN e status explícito de TURN', async () => {
+  await t.test('ICE fornece somente STUN, sem credenciais ou relay', async () => {
     guests[0].send({ type: 'ice_config' });
     const config = await guests[0].wait('ice_servers');
     assert.ok(config.iceServers.some(s => s.urls.some(url => url.startsWith('stun:'))));
-    assert.equal(typeof config.turnAvailable, 'boolean');
-    if (process.env.STREAMROOM_REQUIRE_TURN === '1') assert.equal(config.turnAvailable, true, config.turnError ?? 'TURN unavailable');
+    assert.equal(config.turnAvailable, false);
+    assert.equal(config.policy, 'direct-only');
+    assert.ok(config.iceServers.every(s => !s.username && !s.credential && s.urls.every(url => url.startsWith('stun:'))));
   });
   await t.test('sessão de mídia e pedido de recuperação são preservados', async () => {
     const session = crypto.randomUUID();
@@ -108,6 +115,14 @@ test('salas reais no runtime Cloudflare', async t => {
     assert.equal((await host.wait('signal')).payload.kind, 'restart');
     guests[0].send({ type: 'signal', to: hostWelcome.participantId, payload: { kind: 'quality', height: 720, fps: 30 } });
     assert.deepEqual((await host.wait('signal')).payload, { kind: 'quality', height: 720, fps: 30 });
+  });
+  await t.test('convidado não pode renovar e candidatos relay são recusados', async () => {
+    guests[0].send({ type: 'renew' });
+    assert.equal((await guests[0].wait('error')).code, 'forbidden');
+    host.send({ type: 'signal', to: welcomes[0].participantId, payload: { kind: 'ice', candidate: 'candidate:1 1 UDP 1 192.0.2.1 10000 typ relay', sdpMid: '0', sdpMLineIndex: 0 } });
+    assert.equal((await host.wait('error')).code, 'relay_disabled');
+    host.send({ type: 'signal', to: welcomes[0].participantId, payload: { kind: 'offer', sdp: 'v=0\r\na=candidate:1 1 UDP 1 192.0.2.1 10000 typ relay\r\n' } });
+    assert.equal((await host.wait('error')).code, 'relay_disabled');
   });
   await t.test('convidados não sinalizam entre si', async () => {
     guests[0].send({ type: 'signal', to: welcomes[1].participantId, payload: { kind: 'offer', sdp: 'bad' } });

@@ -1,6 +1,6 @@
 # StreamRoom
 
-Aplicativo Windows em C#/.NET 10 para compartilhar uma janela, um monitor ou um jogo em modo de janela com até quatro amigos, usando WebRTC P2P. Build atual: **0.2.0-beta.1, desenvolvimento**.
+Aplicativo Windows em C#/.NET 10 para compartilhar uma janela, um monitor ou um jogo em modo de janela com até quatro amigos, usando WebRTC P2P. Build atual: **0.3.0-beta.1, desenvolvimento**.
 
 Código: [BlackGen3ral/StreamRoom](https://github.com/BlackGen3ral/StreamRoom). Pacotes: [GitHub Actions](https://github.com/BlackGen3ral/StreamRoom/actions). **Nenhuma Release oficial foi publicada.**
 
@@ -31,11 +31,11 @@ Recomendado: **Windows 11 x64 com WebView2 Evergreen atualizado**. Windows 10 e 
 | Áudio do aplicativo | Faixa retornada pelo seletor de captura; modo padrão, quando disponível |
 | Áudio do sistema | WASAPI loopback nativo via NAudio, PCM estéreo para AudioWorklet e Opus/WebRTC |
 | Mídia | Um RTCPeerConnection por espectador; preferência por H.264; áudio negociado pelo motor |
-| Conexões | STUN e TURN com credenciais temporárias geradas no backend autenticado da sala |
+| Conexões | Somente P2P direto com STUN público gratuito; sem TURN, relay ou credenciais de mídia |
 | Qualidade | Até 1080p60 configuráveis; 720p30 padrão; teto de upload total dividido entre espectadores |
 | Adaptação | Controle de bitrate/FPS/escala por perda, RTT e limitação de banda; controle nativo de congestionamento do WebRTC |
 | Qualidade do espectador | Pedido individual de resolução/FPS máxima ao transmissor |
-| Estatísticas | FPS, resolução, bitrate, perda, RTT, codec, rota P2P/TURN e motor de codec quando informados por getStats |
+| Estatísticas | FPS, resolução, bitrate, perda, RTT, codec, rota direta e tipos ICE dos dois lados e motor de codec quando informados por getStats |
 | Recuperação | Reconstrução da conexão de mídia após falhas, com até três tentativas por episódio |
 | Atualizações | Velopack com consulta automática de Releases oficiais estáveis, aviso, download e aplicação por ação do usuário |
 | Distribuição | Instalador EXE, pacote portátil e feed Velopack; Actions gera artefatos, sem publicar Releases |
@@ -54,13 +54,13 @@ O microfone não é capturado diretamente. A prévia do transmissor fica muda pa
 
 ## Rede, privacidade e custos
 
-Workers + Durable Objects gerenciam apenas salas e sinalização. A mídia viaja diretamente entre os participantes quando possível. **TURN retransmite mídia criptografada quando P2P direto não funciona**; portanto TURN não é um serviço “sem tráfego de vídeo”.
+Somente P2P direto, sem retransmissão. Redes com CGNAT/NAT restritivo, firewall, VPN ou UDP bloqueado podem não conectar; o app mostra erro e não ativa fallback pago.
 
-A chave administrativa de TURN fica em secrets no Worker. Clientes recebem somente credenciais temporárias em memória, válidas pelo período máximo da sala. Não existem tokens administrativos no aplicativo, fonte ou workflow. Convites são segredos de acesso: não os publique.
+Salas começam com 24 horas e o criador autenticado renova na última hora, por mais 24h. Expiradas/encerradas não reabrem. O backend usa SQLite, WebSocket Hibernation, ping respondido pelo runtime e limpeza a cada cinco minutos.
 
-Quem hospeda o Worker/TURN mantém a infraestrutura e responde pelo consumo e eventuais cobranças. O serviço de desenvolvimento usa a conta Cloudflare configurada para este projeto; usuários não dependem do desenvolvedor ficar online. Outra pessoa pode hospedar uma instância própria. Não há contas de usuário, cobrança por participante, auditoria de produção nem garantia de disponibilidade. Há rate limiting, mas ele não equivale a proteção completa contra abuso de um serviço público.
+**Use Workers Free para proteção contra cobranças de excedente.** Nesse plano operações excedentes falham. Franquias são compartilhadas com outros projetos; abuso pode esgotá-las. Em Workers Paid pode haver cobrança por excedente. A API OAuth não permitiu consultar faturamento (HTTP 403); o plano não foi confirmado. O app não altera assinaturas nem configura serviços pagos. Veja [gratuidade, franquias e sessões longas](docs/FREE-AND-LONG-SESSIONS.md).
 
-P2P com quatro espectadores exige até quatro envios do transmissor. Configure o limite de upload com folga em relação à sua internet. Resolução/FPS não aumentam a largura de banda disponível.
+Vídeo/áudio não passam pelo Worker. Quatro espectadores exigem até quatro envios pelo host. P2P expõe os endereços entre participantes. Convites são segredos; não os publique. Estabilidade por 10–24h e 1080p60 precisam de teste real.
 
 ## Compilar e testar
 
@@ -70,6 +70,7 @@ Requisitos: SDK .NET 10, Node.js 24 e Windows para o aplicativo.
 cd server
 npm ci
 npm run check
+npm run build
 npm run dev
 ```
 
@@ -86,10 +87,10 @@ dotnet run --project tests/StreamRoom.Smoke -c Release
 dotnet run --project src/StreamRoom.App -c Release
 
 # Gerar instalador e feed de desenvolvimento
-./scripts/build-installer.ps1 -Version 0.2.0-beta.1
+./scripts/build-installer.ps1 -Version 0.3.0-beta.1
 ```
 
-O Worker local usa `http://127.0.0.1:8787` e retorna STUN com status explícito de TURN indisponível se você não configurou secrets. HTTP remoto não é permitido. Não exponha o servidor de desenvolvimento local sem TLS.
+O Worker local retorna exclusivamente STUN. HTTP remoto não é permitido. Não exponha o servidor de desenvolvimento local sem TLS.
 
 Teste nativo de rede, sem capturar tela ou gerar mídia de teste:
 
@@ -97,7 +98,7 @@ Teste nativo de rede, sem capturar tela ou gerar mídia de teste:
 dotnet run --project src/StreamRoom.App -c Release -- --network-test ./streamroom-network-test.json
 ```
 
-Esse modo cria cinco sessões no servidor de desenvolvimento e transmite dados reais por oito pares de canais DTLS/SCTP: quatro diretos e quatro forçados por TURN. O relatório contém somente resultados e tipos de candidato, sem IPs, convites ou credenciais. **Ele não substitui teste audiovisual**. Há instruções de teste entre PCs em [docs/TESTING.md](docs/TESTING.md).
+Esse modo cria cinco sessões no servidor de desenvolvimento e transmite dados reais por quatro pares diretos de canais DTLS/SCTP. O relatório contém somente resultados e tipos de candidato, sem IPs, convites ou credenciais. **Ele não substitui teste audiovisual**. Há instruções de teste entre PCs em [docs/TESTING.md](docs/TESTING.md).
 
 ## Hospedar o próprio backend
 
@@ -106,12 +107,12 @@ cd server
 npm ci
 npx wrangler login
 npm run check
+npm run build
+# Teste e confirme Workers Free no painel antes do deploy.
 npm run deploy
-npx wrangler secret put TURN_KEY_ID
-npx wrangler secret put TURN_API_TOKEN
 ```
 
-Crie uma chave TURN no Cloudflare Realtime e informe seu ID e segredo nas duas operações interativas. A resposta de criação pode usar o campo `secret` para o segredo; não suponha que o nome do campo seja `key`. Não imprima ou versione essa resposta. O backend chama o endpoint de geração de ICE temporário. Confira `turnAvailable` no cliente e teste o modo TURN forçado antes de distribuir.
+Não configure TURN/Realtime, Stream ou SFU. Nenhuma chave de mídia é necessária. O deploy não altera o plano da conta.
 
 ## Releases e atualizações
 
@@ -126,7 +127,7 @@ Ainda não houve teste ponta a ponta de atualização instalada A → B, porque 
 - `src/StreamRoom.Core`: convites, HTTP e sinalização WebSocket C#.
 - `src/StreamRoom.App`: host WPF, ponte restrita, WASAPI e atualizador.
 - `src/StreamRoom.App/Web`: interface e motor WebRTC, adaptação e AudioWorklet.
-- `server`: Worker/Durable Objects, credenciais ICE e testes no workerd.
+- `server`: Worker/Durable Objects, política STUN, renovação e testes no workerd.
 - `scripts`: empacotamento reproduzível.
 - `docs`: protocolo, testes, distribuição e evidência de validação.
 

@@ -114,7 +114,7 @@ public partial class ShellWindow : Window
                         try { using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(file)); settings = doc.RootElement.Clone(); }
                         catch (JsonException) { }
                     }
-                    result = new { settings, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.2.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = _updates.IsInstalled };
+                    result = new { settings, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.3.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = _updates.IsInstalled };
                     break;
                 case "settings":
                     Invitations.ValidateServer(p.GetProperty("server").GetString()!);
@@ -182,6 +182,7 @@ public partial class ShellWindow : Window
         }
         var client = new SignalingClient(); _connection = client;
         client.ParticipantsChanged += participants => { if (_connection == client) Emit(new { type = "participants", participants }); };
+        client.RoomRenewed += expiresAt => { if (_connection == client) Emit(new { type = "roomRenewed", expiresAt }); };
         client.StreamStateChanged += active => { if (_connection == client) Emit(new { type = "streamState", active }); };
         client.SignalReceived += (from, payload) => { if (_connection == client) Emit(new { type = "signal", from, payload }); };
         client.ServerError += message => { if (_connection == client) Emit(new { type = "serverError", message }); };

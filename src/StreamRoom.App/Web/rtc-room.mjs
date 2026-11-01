@@ -1,10 +1,11 @@
+import { directConfiguration, directRoute, DIRECT_FAILURE } from './direct-ice.mjs';
 import { profile, perPeerCap, adapt } from './quality.mjs';
 
 export class RtcRoom extends EventTarget {
   constructor(native) {
     super(); this.native = native; this.peers = new Map(); this.creating = new Set(); this.attempts = new Map();
     this.participants = []; this.pending = []; this.identity = null; this.localStream = null; this.run = 0; this.requests = new Map();
-    this.config = profile(); this.automatic = true; this.relay = false; this.statsBusy = false;
+    this.config = profile(); this.automatic = true; this.statsBusy = false;
     this.timer = setInterval(() => this.measure().catch(error => this.notice(error.message)), 2000);
   }
   event(type, detail) { this.dispatchEvent(new CustomEvent(type, { detail })); }
@@ -17,10 +18,9 @@ export class RtcRoom extends EventTarget {
   async ice() {
     if (!this.iceCache || Date.now() - this.iceAt > 300_000) {
       this.iceCache = await this.native('ice'); this.iceAt = Date.now();
-      this.event('ice', this.iceCache.turnAvailable);
+      this.event('ice', 'direct-only');
     }
-    if (this.relay && !this.iceCache.turnAvailable) throw Error('TURN não está disponível no servidor. Desative o modo forçado ou configure TURN.');
-    return { iceServers: this.iceCache.iceServers, iceTransportPolicy: this.relay ? 'relay' : 'all', bundlePolicy: 'max-bundle' };
+    return directConfiguration(this.iceCache);
   }
   updateRoom(participants, streaming) {
     if (participants) this.participants = participants;
@@ -34,7 +34,7 @@ export class RtcRoom extends EventTarget {
   }
   setOptions(options) {
     this.config = profile(options.quality, options.fps, options.upload);
-    this.automatic = options.autoQuality; this.relay = options.relay;
+    this.automatic = options.autoQuality;
   }
   async startCapture(options) {
     if (this.identity?.role !== 'host') throw Error('Crie uma sala para transmitir.');
@@ -108,8 +108,12 @@ export class RtcRoom extends EventTarget {
     const pc = new RTCPeerConnection(config);
     const peer = { id, session, pc, sent: false, localIce: [], remoteIce: [], last: null, budget: perPeerCap(this.config, this.participants.filter(p => p.role === 'viewer').length), healthy: 0, recovery: null };
     this.peers.set(id, peer);
+    peer.connectDeadline = setTimeout(() => {
+      if (this.peers.get(id) === peer && pc.connectionState !== 'connected') void this.recover(id).catch(error => this.notice(error.message));
+    }, 30_000);
     pc.onicecandidate = ({ candidate }) => {
       if (this.peers.get(id) !== peer) return;
+      if (candidate?.type === 'relay') return;
       const ice = candidate?.toJSON() ?? { candidate: '', sdpMid: null, sdpMLineIndex: null };
       const payload = { kind: 'ice', candidate: ice.candidate ?? '', sdpMid: ice.sdpMid ?? null, sdpMLineIndex: ice.sdpMLineIndex ?? null, session };
       if (!peer.sent) peer.localIce.push(payload);
@@ -119,7 +123,7 @@ export class RtcRoom extends EventTarget {
     pc.onconnectionstatechange = () => {
       if (this.peers.get(id) !== peer) return;
       this.event('peerState', { id, state: pc.connectionState });
-      if (pc.connectionState === 'connected') { clearTimeout(peer.recovery); peer.recovery = null; this.attempts.delete(id); }
+      if (pc.connectionState === 'connected') { clearTimeout(peer.recovery); clearTimeout(peer.connectDeadline); peer.recovery = null; this.attempts.delete(id); }
       if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
         if (!peer.recovery) peer.recovery = setTimeout(() => this.recover(id).catch(error => this.notice(error.message)), pc.connectionState === 'failed' ? 1000 : 6000);
       }
@@ -128,8 +132,9 @@ export class RtcRoom extends EventTarget {
   }
   async flushLocal(peer) { for (const payload of peer.localIce.splice(0)) await this.signal(peer.id, payload); }
   async recover(id) {
+    const current = this.peers.get(id); if (current) { clearTimeout(current.connectDeadline); clearTimeout(current.recovery); current.recovery = null; }
     const attempts = (this.attempts.get(id) ?? 0) + 1; this.attempts.set(id, attempts);
-    if (attempts > 3) { this.notice('A conexão de mídia não se recuperou. Verifique TURN e entre novamente na sala.'); return; }
+    if (attempts > 3) { this.closePeer(id); this.event('connectionError', { id, message: DIRECT_FAILURE }); return; }
     if (this.identity?.role === 'host') await this.offer(id, true);
     else await this.signal(id, { kind: 'restart' });
   }
@@ -152,6 +157,7 @@ export class RtcRoom extends EventTarget {
       }
       return;
     }
+    if (payload.kind === 'ice' && / typ relay(?: |$)/.test(payload.candidate)) return;
     let peer = this.peers.get(from);
     if (payload.kind === 'offer' && this.identity.role === 'viewer') {
       if (peer) this.closePeer(from);
@@ -201,7 +207,8 @@ export class RtcRoom extends EventTarget {
           if (r.type === 'transport' && r.selectedCandidatePairId) pair = reports.get(r.selectedCandidatePairId);
         }
         if (video?.codecId) codec = reports.get(video.codecId);
-        const candidate = pair && reports.get(pair.localCandidateId);
+        const route = directRoute(reports);
+        if (route.relayed) { this.closePeer(peer.id); this.event('connectionError', { id: peer.id, message: 'Rota relay detectada e bloqueada. ' + DIRECT_FAILURE }); continue; }
         const bytes = video?.bytesSent ?? video?.bytesReceived ?? 0;
         const packets = video?.packetsSent ?? video?.packetsReceived ?? 0;
         const lost = remote?.packetsLost ?? video?.packetsLost ?? 0;
@@ -213,7 +220,7 @@ export class RtcRoom extends EventTarget {
         const hardware = video?.encoderImplementation ?? video?.decoderImplementation ?? 'Não informado';
         rows.push({ id: peer.id, state: peer.pc.connectionState, bitrate, fps: video?.framesPerSecond ?? null,
           width: video?.frameWidth ?? null, height: video?.frameHeight ?? null, loss, rtt: rtt || null,
-          codec: codec?.mimeType?.replace('video/', '') ?? 'Negociando', route: candidate?.candidateType === 'relay' ? 'TURN' : candidate ? 'P2P' : 'ICE',
+          codec: codec?.mimeType?.replace('video/', '') ?? 'Negociando', route: route.label, localCandidate: route.localType, remoteCandidate: route.remoteType, transport: route.protocol, direct: route.confirmed,
           hardware, powerEfficient: video?.powerEfficientEncoder ?? null, limitation: video?.qualityLimitationReason ?? null,
           audioPackets: audio?.packetsSent ?? audio?.packetsReceived ?? null, audioCodec: audio?.codecId ? reports.get(audio.codecId)?.mimeType : null });
         if (this.identity?.role === 'host' && video) {
@@ -229,7 +236,7 @@ export class RtcRoom extends EventTarget {
   }
   closePeer(id) {
     const peer = this.peers.get(id); if (!peer) return;
-    this.peers.delete(id); clearTimeout(peer.recovery); peer.pc.ontrack = null; peer.pc.onicecandidate = null; peer.pc.onconnectionstatechange = null; peer.pc.close();
+    this.peers.delete(id); clearTimeout(peer.recovery); clearTimeout(peer.connectDeadline); peer.pc.ontrack = null; peer.pc.onicecandidate = null; peer.pc.onconnectionstatechange = null; peer.pc.close();
   }
   async stopCapture() {
     this.run++; const stream = this.localStream; this.localStream = null;

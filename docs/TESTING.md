@@ -12,11 +12,15 @@
 8. Pare a transmissão e escolha outra fonte. Confirme que a anterior não continua capturada.
 9. Feche/saia no PC B e entre novamente. Confirme uma nova negociação sem reiniciar o PC A.
 
-## TURN e redes restritas
+## P2P direto e redes restritas
 
-Saia e crie nova sala com “Forçar TURN para diagnóstico” marcado no transmissor antes de iniciar. A rota deve indicar TURN em getStats. Se o servidor indicar TURN indisponível, a opção forçada deve falhar com mensagem; não deve fingir conexão.
+O painel só confirma P2P quando getStats mostra um par selecionado bem-sucedido com ambos os candidatos host/srflx/prflx. Confira tipos local/remoto e transporte; antes disso deve mostrar não confirmado. Não são exibidos IPs.
 
-Teste em redes diferentes, incluindo CGNAT se disponível. TURN envolve tráfego no provedor e pode gerar cobrança ao proprietário da infraestrutura.
+Teste em redes diferentes, com CGNAT, VPN e UDP bloqueado se disponíveis. Redes restritivas podem falhar: após tentativas limitadas deve aparecer erro claro, sem fallback pago. Não existe opção de TURN. O cliente também descarta TURN de backends antigos/customizados.
+
+## Sessões de 10–24 horas
+
+Confirme Workers Free no painel. Use o build novo em todos os PCs. Teste inicialmente 720p30, depois 1080p60 com jogo em movimento e até quatro espectadores. Registre FPS, perda, bitrate, memória, CPU/GPU, temperatura e deriva de áudio aos 10min, 1h, 10h e 24h. Confira renovação na última hora e continuidade da mídia. Teste quedas/saídas e franquia esgotada sem fallback. Esse ensaio real de 24h ainda está pendente; relógio simulado testa somente lógica de estado.
 
 ## Áudio
 
@@ -40,4 +44,4 @@ Teste captura de monitor, jogo em janela sem bordas e troca de fonte. Não compa
 
 Teste uma interrupção breve de rede no espectador. O motor tenta reconstruir a conexão até três vezes por episódio. Perda da sinalização do criador encerra a sala; crie um novo convite. Não há retomada silenciosa de captura depois de reiniciar o aplicativo.
 
-Ao relatar problema, informe versão do app/WebView2, Windows, GPU, modo de captura e valores do painel. Não envie convites, credenciais TURN, SDP completo ou IPs de amigos em issues públicas. Diga o que foi observado, sem marcar como validado algo que não testou.
+Ao relatar problema, informe versão do app/WebView2, Windows, GPU, modo de captura e valores do painel. Não envie convites, SDP completo ou IPs de amigos em issues públicas. Diga o que foi observado, sem marcar como validado algo que não testou.

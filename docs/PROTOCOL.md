@@ -18,9 +18,9 @@ O papel deriva exclusivamente do token. Nome de 1–32 unidades UTF-16, sem cara
 
 Depois, todo participante autenticado recebe `{"type":"room","participants":[{"id":"...","name":"...","role":"host"}]}` após entradas e saídas. Identidade por conexão; a etapa 1 não possui retomada automática de sessão.
 
-`{"type":"ping"}` recebe `{"type":"pong"}`. O cliente envia ping a cada 20 segundos. Sessões sem atividade por mais de 90 segundos são removidas no próximo alarme (até cerca de 15 segundos adicionais). Sockets sem autenticação são removidos após 15 segundos no próximo alarme. Máximo de dez sockets simultâneos incluindo pendentes; máximo autenticado de um host e quatro viewers.
+`{"type":"ping"}` recebe `{"type":"pong"}`. O cliente envia ping JSON exato a cada 20 segundos. O runtime responde sem acordar o DO (setWebSocketAutoResponse). O alarme consulta getWebSocketAutoResponseTimestamp para manter sockets autenticados vivos; ping não prolonga sockets não autenticados. Sessões sem atividade por mais de 90 segundos são removidas no próximo alarme (até cerca de cinco minutos adicionais). Sockets sem autenticação são removidos após 15 segundos no próximo alarme. Máximo de dez sockets simultâneos incluindo pendentes; máximo autenticado de um host e quatro viewers.
 
-`{"type":"leave"}` sai. Se for o host, invalida a sala e envia `{"type":"room_closed","message":"..."}` aos demais. Uma queda do host também encerra a sala quando detectada; até essa detecção pode haver atraso. A expiração absoluta é de seis horas.
+`{"type":"leave"}` sai. Se for o host, invalida a sala e envia `{"type":"room_closed","message":"..."}` aos demais. Uma queda do host também encerra a sala quando detectada; até essa detecção pode haver atraso. TTL inicial de 24h; na última hora o host pode renovar para agora +24h. Expiradas e encerradas não reabrem.
 
 ## Sinais reservados para etapa 3
 
@@ -30,7 +30,7 @@ Depois, todo participante autenticado recebe `{"type":"room","participants":[{"i
 
 Resposta encaminhada: `{"type":"signal","from":"<identidade autenticada>","payload":{...}}`. Somente host envia offer; somente viewer envia answer; ICE é permitido entre host e viewer nos dois sentidos. Viewers não trocam sinais entre si. Não há broadcast de SDP/ICE.
 
-ICE usa `{"kind":"ice","candidate":"...","sdpMid":"0","sdpMLineIndex":0}`. `sdpMid` e `sdpMLineIndex` podem ser nulos. `candidate` vazio representa fim de candidatos. Ainda não são emitidas credenciais STUN/TURN.
+ICE usa `{"kind":"ice","candidate":"...","sdpMid":"0","sdpMLineIndex":0}`. `sdpMid` e `sdpMLineIndex` podem ser nulos. `candidate` vazio representa fim de candidatos. Relay é rejeitado em ICE/SDP (relay_disabled).
 
 Mensagens UTF-8 JSON até 64 KiB, SDP até 48.000 unidades, candidate até 4.096. Binário é rejeitado. Limite de 120 mensagens por janela de dez segundos por conexão, incluindo heartbeat. Erros: `{"type":"error","code":"...","message":"..."}`. Falhas de autenticação, excesso de tamanho e de taxa encerram a conexão.
 
@@ -40,11 +40,15 @@ Tokens gerados por CSPRNG de 256 bits, armazenados como SHA-256 no Durable Objec
 
 O host envia `{"type":"stream","active":true}` ao iniciar e false ao parar. Snapshots de sala incluem `streaming`; somente o host pode alterar esse estado.
 
-Após autenticação, `{"type":"ice_config"}` retorna `{"type":"ice_servers","iceServers":[...],"turnAvailable":true}`. A resposta usa credenciais temporárias de TURN geradas pelo backend. O segredo administrativo não é enviado. A geração é mantida em cache por sessão durante cinco minutos; credenciais têm TTL de seis horas. Falha ou ausência de configuração retorna STUN e status falso explícito. Não registrar essa resposta. O cliente renova a configuração antes de novas negociações quando o cache vence.
+Após autenticação, ice_config retorna ice_servers com iceServers contendo somente stun:stun.cloudflare.com:3478 e stun:stun.l.google.com:19302, turnAvailable:false e policy:direct-only. Não há fetch externo de credenciais ou segredo TURN. O cliente também filtra a configuração para aceitar apenas STUN.
 
 Offers/answers/ICE podem incluir `session`, UUID da negociação de mídia, preservado no encaminhamento. A versão atual usa esse campo para rejeitar sinais de conexões antigas após uma recuperação. Os testes antigos sem o campo continuam aceitos.
 
 Um viewer pode enviar payload `{"kind":"restart"}` ao host para solicitar uma nova negociação, ou `{"kind":"quality","height":720,"fps":30}` para limitar sua própria recepção. As alturas válidas são 480, 720 e 1080; FPS 30 ou 60. O backend valida direção e valores antes de encaminhar. Pedidos não aumentam a resolução/FPS da captura global do transmissor.
+
+## Renovação 0.3
+
+O host autenticado envia {"type":"renew"}. Fora da última hora, validade não muda. Na última hora, o servidor persiste agora +24h e todos recebem {"type":"room_renewed","expiresAt":...}. Viewer recebe forbidden. Expirada/encerrada não revive. Cliente C# solicita no heartbeat somente perto de vencer. Sem cron global. Alarme inicial em até 15s; depois limpeza a cada 5min. Novos sockets preservam o menor alarme existente. Encerrar apaga metadados e cancela o alarme.
 
 ## Persistência e rede
 

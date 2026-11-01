@@ -1,5 +1,25 @@
 # Validação — 0.2.0-beta.1
 
+## Atualização 0.3.0-beta.1 — P2P direto e sessões longas (2026-11-01)
+
+- TURN removido do cliente/backend. Chave StreamRoom relay revogada; zero chaves TURN restantes na consulta da conta; secrets TURN_KEY_ID e TURN_API_TOKEN removidos do Worker. Nenhum plano foi contratado ou alterado.
+- Backend de desenvolvimento implantado somente após testes locais. Health retorna versão 0.3.0 / direct-only. Testes também passaram contra esse servidor.
+- Build/publish WPF x64: zero warnings/erros. TypeScript estrito, sintaxe JS e bundle Worker passaram.
+- 27 resultados Node passaram localmente e contra o backend remoto (incluem 18 subtestes reais de sala, agregado, testes de qualidade/política e handlers Room com relógio simulado).
+- 11 verificações C# passaram no runtime local, incluindo TTL de 24h, ICE só STUN e dois ciclos reais de heartbeat (42s).
+- O EXE self-contained abriu cinco sessões autenticadas pela Cloudflare e quatro canais WebRTC reais UDP. Sete verificações passaram, todos candidatos host/prflx, sem relay. Relatório: [direct-network-test-2026-11-01.json](validation/direct-network-test-2026-11-01.json). São instâncias na mesma máquina; não é teste entre redes físicas diferentes.
+- UI do novo EXE: criação/encerramento real de sala, data de validade de 24h, opções sem TURN, aviso P2P não confirmado antes de haver peer. Somente o processo de teste foi encerrado; app instalado anterior não foi atualizado.
+- Handlers reais empacotados, com contexto/relógio simulados, atravessaram 23h, renovaram para +24h, foram reconstruídos com storage persistido e continuaram após 25h. Viewer foi recusado ao renovar; expiração posterior apagou estado e cancelou alarme. Não é soak de rede por 24h.
+- Velopack confirmou bootstrap e gerou instalador/portátil x64. Instalador beta sem assinatura: 82.780.111 bytes; SHA-256 `689b892e4b230ba635c351a92b86002a14c696a434ad3165cf47549dbf7fe1b9`.
+- Nenhuma Release oficial/atualização foi publicada. Código é candidato de desenvolvimento.
+
+**Pendências:** ensaio audiovisual novo entre PCs/redes reais por 10–24h, 1080p60 sustentado, quatro viewers de vídeo, áudio/sincronismo/Discord, memória/temperatura, instalação limpa e atualização instalada A→B. O teste audiovisual da 0.2 abaixo é evidência histórica, não nova validação de mídia da 0.3.
+
+**Custo:** a conexão OAuth não tem Billing Read e retornou 403 ao consultar a assinatura. Workers Free não foi confirmado. O modelo standard não comprova plano Free. É necessário conferir o plano no painel para obter proteção contra cobrança de excedente. Remover TURN elimina esse relay, mas não elimina uma assinatura paga existente nem custos anteriores/de outros projetos. [Detalhes de franquias e limites](FREE-AND-LONG-SESSIONS.md).
+
+---
+
+
 Data: 1 de novembro de 2026. Build de desenvolvimento Windows x64. Estes resultados descrevem o ambiente desta sessão; não são benchmark de gameplay.
 
 ## Evidência executada
