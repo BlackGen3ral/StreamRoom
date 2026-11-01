@@ -15,10 +15,12 @@ public sealed class SignalingClient : IAsyncDisposable
     private Task? _receiver;
     private Task? _heartbeat;
     private bool _disposed;
+    private TaskCompletionSource<JsonElement>? _iceReply;
     public event Action<IReadOnlyList<Participant>>? ParticipantsChanged;
     public event Action<string, JsonElement>? SignalReceived;
     public event Action<string>? Disconnected;
     public event Action<string>? ServerError;
+    public event Action<bool>? StreamStateChanged;
     public bool IsConnected => _socket.State == WebSocketState.Open && _welcome.Task.IsCompletedSuccessfully;
 
     public static async Task<RoomCredentials> CreateRoomAsync(Uri server, CancellationToken cancellationToken = default)
@@ -69,6 +71,16 @@ public sealed class SignalingClient : IAsyncDisposable
         if (!IsConnected) throw new InvalidOperationException("Entre em uma sala primeiro.");
         return SendAsync(new { type = "signal", to, payload }, cancellationToken);
     }
+    public Task SetStreamingAsync(bool active, CancellationToken cancellationToken = default) =>
+        SendAsync(new { type = "stream", active }, cancellationToken);
+
+    public async Task<JsonElement> GetIceConfigurationAsync(CancellationToken cancellationToken = default)
+    {
+        if (!IsConnected) throw new InvalidOperationException("Entre em uma sala primeiro.");
+        _iceReply = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        await SendAsync(new { type = "ice_config" }, cancellationToken);
+        return await _iceReply.Task.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken);
+    }
     private async Task SendAsync(object value, CancellationToken cancellationToken)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(value, Json);
@@ -117,6 +129,10 @@ public sealed class SignalingClient : IAsyncDisposable
                         break;
                     case "room":
                         ParticipantsChanged?.Invoke(item.GetProperty("participants").Deserialize<Participant[]>(Json) ?? []);
+                        StreamStateChanged?.Invoke(item.TryGetProperty("streaming", out var active) && active.ValueKind == JsonValueKind.True);
+                        break;
+                    case "ice_servers":
+                        _iceReply?.TrySetResult(item.Clone());
                         break;
                     case "signal":
                         SignalReceived?.Invoke(item.GetProperty("from").GetString()!, item.GetProperty("payload").Clone());
@@ -136,6 +152,7 @@ public sealed class SignalingClient : IAsyncDisposable
         finally
         {
             _welcome.TrySetException(new SignalingException(reason));
+            _iceReply?.TrySetException(new SignalingException(reason));
             _lifetime.Cancel();
             Disconnected?.Invoke(reason);
         }

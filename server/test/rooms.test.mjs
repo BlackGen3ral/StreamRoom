@@ -85,6 +85,30 @@ test('salas reais no runtime Cloudflare', async t => {
     guests[0].send({ type: 'signal', to: hostWelcome.participantId, payload: { kind: 'ice', candidate: 'candidate-test', sdpMid: '0', sdpMLineIndex: 0 } });
     assert.equal((await host.wait('signal')).payload.kind, 'ice');
   });
+  await t.test('estado de transmissão é controlado apenas pelo criador', async () => {
+    guests[0].send({ type: 'stream', active: true });
+    assert.equal((await guests[0].wait('error')).code, 'forbidden');
+    host.send({ type: 'stream', active: true });
+    assert.equal((await guests[0].wait('room', m => m.streaming === true)).streaming, true);
+    host.send({ type: 'stream', active: false });
+    assert.equal((await guests[0].wait('room', m => m.streaming === false)).streaming, false);
+  });
+  await t.test('ICE autenticado fornece STUN e status explícito de TURN', async () => {
+    guests[0].send({ type: 'ice_config' });
+    const config = await guests[0].wait('ice_servers');
+    assert.ok(config.iceServers.some(s => s.urls.some(url => url.startsWith('stun:'))));
+    assert.equal(typeof config.turnAvailable, 'boolean');
+    if (process.env.STREAMROOM_REQUIRE_TURN === '1') assert.equal(config.turnAvailable, true, config.turnError ?? 'TURN unavailable');
+  });
+  await t.test('sessão de mídia e pedido de recuperação são preservados', async () => {
+    const session = crypto.randomUUID();
+    host.send({ type: 'signal', to: welcomes[0].participantId, payload: { kind: 'offer', sdp: 'generation-test', session } });
+    assert.equal((await guests[0].wait('signal')).payload.session, session);
+    guests[0].send({ type: 'signal', to: hostWelcome.participantId, payload: { kind: 'restart' } });
+    assert.equal((await host.wait('signal')).payload.kind, 'restart');
+    guests[0].send({ type: 'signal', to: hostWelcome.participantId, payload: { kind: 'quality', height: 720, fps: 30 } });
+    assert.deepEqual((await host.wait('signal')).payload, { kind: 'quality', height: 720, fps: 30 });
+  });
   await t.test('convidados não sinalizam entre si', async () => {
     guests[0].send({ type: 'signal', to: welcomes[1].participantId, payload: { kind: 'offer', sdp: 'bad' } });
     assert.equal((await guests[0].wait('error')).code, 'invalid_target');
