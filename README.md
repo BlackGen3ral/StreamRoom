@@ -122,4 +122,3 @@ Nenhum token administrativo da Cloudflare ou do GitHub é necessário no aplicat
 O limite de cinco pessoas da etapa 1 é controle de sala; não comprova desempenho com quatro espectadores de vídeo. TURN retransmite mídia quando conexão direta falha. Workers e Durable Objects continuam somente com sinalização. Largura de banda, disponibilidade e custos de TURN precisam ser resolvidos na etapa 3.
 
 Não há fluxo que publique versões oficiais automaticamente. O workflow entrega somente artefatos de desenvolvimento. Releases oficiais dependem de aprovação explícita do proprietário.
-

@@ -37,4 +37,3 @@ git log --oneline
 ```
 
 O pacote inicial também contém `StreamRoom-stage1.git.bundle` com os hashes dos commits locais originais, anteriores à importação. Na cópia de trabalho original, esse histórico foi mantido na branch local `stage1-local-original`; `main` acompanha o repositório remoto. Nenhum histórico remoto foi substituído à força. Não coloque tokens em comandos, no código ou nos arquivos versionados.
-
