@@ -1,4 +1,5 @@
 import { RtcRoom } from './rtc-room.mjs';
+import { createCapturePicker } from './capture-picker.mjs';
 const $ = id => document.getElementById(id);
 const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
@@ -85,6 +86,8 @@ function render() {
   $('create').disabled = $('join').disabled = $('paste').disabled = state.busy;
   $('leave').disabled = state.busy; $('name').disabled = state.connected || state.busy; $('server').disabled = state.connected || state.busy;
   $('start').disabled = !state.connected || state.busy || Boolean(rtc.localStream);
+  $('startCompatible').hidden = Boolean(rtc.localStream);
+  $('startCompatible').disabled = !state.connected || state.busy;
   $('captureSetup').hidden = Boolean(rtc.localStream);
   if (!rtc.localStream) $('source').textContent = state.connected ? 'Você confirma a fonte no seletor.' : 'Entre em uma sala para começar.';
   $('start').hidden = Boolean(rtc.localStream); $('stop').hidden = !rtc.localStream; $('stop').disabled = state.busy;
@@ -129,6 +132,7 @@ window.chrome.webview.addEventListener('message', ({ data }) => {
   else if (data.type === 'signal') rtc.enqueueSignal(data.from, data.payload);
   else if (data.type === 'disconnected') void disconnected(data.message);
   else if (data.type === 'serverError' || data.type === 'audioError') status(data.message, true);
+  else if (data.type === 'nativeCaptureEnded') { if (rtc.nativeBridge?.session === data.session) { status(data.message, true); void rtc.stopCapture(); } }
   else if (data.type === 'pcm') rtc.pushPcm(data.data);
   else if (data.type === 'roomRenewed') showExpiry(data.expiresAt);
   else if (data.type === 'update') showUpdate(data.result);
@@ -214,7 +218,9 @@ $('join').addEventListener('click', () => busy(() => connect('join')));
 $('copy').addEventListener('click', () => busy(async () => { await native('copy',{text:state.invitation}); status('Convite copiado.'); }));
 $('paste').addEventListener('click', () => busy(async () => { $('invite').value = await native('paste'); }));
 $('leave').addEventListener('click', () => busy(async () => { await rtc.leave(); await native('leave'); await disconnected('Você saiu da sala.'); }));
-$('start').addEventListener('click', () => busy(() => rtc.startCapture(options())));
+const capturePicker = createCapturePicker(native, rtc, options, status);
+$('start').addEventListener('click', () => capturePicker.open());
+$('startCompatible').addEventListener('click', () => busy(() => rtc.startCapture(options())));
 $('stop').addEventListener('click', () => busy(async () => { await rtc.stopCapture(); status('Sua transmissão parou. As demais continuam.'); }));
 $('updateButton').addEventListener('click', checkUpdates);
 $('installUpdate').addEventListener('click', () => busy(async () => { if (state.connected) throw Error('Saia da sala antes de atualizar.'); await native('installUpdate'); }));
@@ -226,6 +232,7 @@ try {
   for (const [key,value] of Object.entries(r.settings ?? {})) { const input=$(key); if (!input) continue; if(input.type==='checkbox') input.checked=Boolean(value); else input.value=String(value); }
   $('version').textContent=r.version+' · desenvolvimento'; $('runtime').textContent='Motor WebView2 '+r.runtime; $('footerVersion').textContent='StreamRoom '+r.version+' · build de desenvolvimento';
   if (!isSecureContext || !navigator.mediaDevices?.getDisplayMedia || !globalThis.RTCPeerConnection) status('Atualize o Microsoft Edge WebView2 Runtime para captura/WebRTC.',true);
+  if (r.capturePreview) { capturePicker.open(); setTimeout(() => native('capturePreview'), 6000); }
   if(r.installed) setTimeout(checkUpdates,5000);
 } catch(e) {status('Falha ao iniciar: '+e.message,true);}
 render();

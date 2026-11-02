@@ -17,6 +17,15 @@ public partial class ShellWindow : Window
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly SystemAudioCapture _audio = new();
     private readonly UpdateManager _updates = new(new GithubSource("https://github.com/BlackGen3ral/StreamRoom", null, false));
+    private readonly CaptureSources _captureSources = new();
+    private NativeCapture? _nativeCapture;
+    private CoreWebView2SharedBuffer? _nativeBuffer;
+    private string? _nativeSession;
+    private int _nativePending;
+    private readonly object _nativeGate = new();
+    private long _nativeSequence;
+    private readonly System.Windows.Threading.DispatcherTimer _nativeWatchdog = new() { Interval = TimeSpan.FromSeconds(3) };
+    private DateTime _nativeSentAt;
     private UpdateInfo? _availableUpdate;
     private bool _updateDownloaded;
     private readonly SemaphoreSlim _updateCommands = new(1, 1);
@@ -33,6 +42,12 @@ public partial class ShellWindow : Window
     {
         InitializeComponent();
         Loaded += InitializeAsync;
+        _nativeWatchdog.Tick += (_, _) =>
+        {
+            if (_nativePending == 0 || DateTime.UtcNow - _nativeSentAt < TimeSpan.FromSeconds(3)) return;
+            var session = _nativeSession; StopNativeCapture();
+            Emit(new { type = "nativeCaptureEnded", session, message = "A ponte de vídeo parou de responder. Tente novamente ou use o modo compatível." });
+        };
         Closing += CloseAsync;
     }
     private async void InitializeAsync(object sender, RoutedEventArgs e)
@@ -64,7 +79,7 @@ public partial class ShellWindow : Window
                 await DisconnectAsync();
                 MessageBox.Show("O motor de mídia foi interrompido. A sala e a captura de áudio foram encerradas. Feche e reabra o StreamRoom.", "StreamRoom");
             };
-            core.Navigate(Origin + (App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
+            core.Navigate(Origin + (App.CaptureTestOutput is not null ? "/capture-test.html" : App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
             _updateTimer.Tick += async (_, _) =>
             {
                 if (!await _updateCommands.WaitAsync(0)) return;
@@ -127,7 +142,7 @@ public partial class ShellWindow : Window
                         try { using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(file)); settings = doc.RootElement.Clone(); }
                         catch (JsonException) { }
                     }
-                    result = new { settings, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = _updates.IsInstalled };
+                    result = new { settings, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = _updates.IsInstalled, capturePreview = App.PickerPreviewOutput is not null };
                     break;
                 case "settings":
                     Invitations.ValidateServer(p.GetProperty("server").GetString()!);
@@ -145,6 +160,49 @@ public partial class ShellWindow : Window
                 case "ice": result = await (_connection ?? throw new SignalingException("Você está desconectado.")).GetIceConfigurationAsync(); break;
                 case "copy": Clipboard.SetText(p.GetProperty("text").GetString()!); break;
                 case "paste": result = Clipboard.ContainsText() ? Clipboard.GetText() : ""; break;
+                case "captureTestSource" when App.CaptureTestOutput is not null:
+                    result = new { id = _captureSources.AddTestWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle) };
+                    break;
+                case "capturePreview" when App.PickerPreviewOutput is not null:
+                    using (var preview = File.Create(App.PickerPreviewOutput)) await Browser.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, preview);
+                    _ = Dispatcher.BeginInvoke(Close);
+                    break;
+                case "captureTestLog" when App.CaptureTestOutput is not null:
+                    await File.AppendAllTextAsync(App.CaptureTestOutput + ".log", p.GetRawText() + "\n");
+                    break;
+                case "captureTestResult" when App.CaptureTestOutput is not null:
+                    await File.WriteAllTextAsync(App.CaptureTestOutput, p.GetRawText());
+                    _ = Dispatcher.BeginInvoke(Close);
+                    break;
+                case "captureSources":
+                    result = new { supported = NativeCapture.Supported, sources = await Task.Run(() => _captureSources.List()) };
+                    break;
+                case "nativeCaptureStart":
+                    if (_connection?.IsConnected != true && App.CaptureTestOutput is null) throw new InvalidOperationException("Entre em uma sala primeiro.");
+                    StopNativeCapture();
+                    var captureSource = _captureSources.Resolve(p.GetProperty("sourceId").GetString()!);
+                    var nativeSession = Guid.NewGuid().ToString("N");
+                    lock (_nativeGate) _nativeSession = nativeSession;
+                    var capture = new NativeCapture();
+                    _nativeCapture = capture;
+                    capture.CanDeliver = () => Volatile.Read(ref _nativePending) == 0;
+                    capture.Frame += (pixels, width, height) => SendNativeFrame(nativeSession, pixels, width, height);
+                    capture.Ended += reason => Dispatcher.BeginInvoke(() =>
+                    {
+                        if (_nativeSession != nativeSession) return;
+                        StopNativeCapture(); Emit(new { type = "nativeCaptureEnded", session = nativeSession, message = reason });
+                    });
+                    try { capture.Start(captureSource, p.GetProperty("fps").GetInt32()); }
+                    catch { StopNativeCapture(); throw; }
+                    result = new { session = nativeSession, name = captureSource.Name };
+                    break;
+                case "nativeFrameAck":
+                    if (_nativeSession == p.GetProperty("session").GetString() && _nativeSequence == p.GetProperty("frame").GetInt64())
+                    { _nativeBuffer?.Dispose(); _nativeBuffer = null; Volatile.Write(ref _nativePending, 0); }
+                    break;
+                case "nativeCaptureStop":
+                    if (_nativeSession == p.GetProperty("session").GetString()) StopNativeCapture();
+                    break;
                 case "audioStart":
                     if (_connection?.IsConnected != true) throw new SignalingException("Entre em uma sala primeiro.");
                     int rate = _audio.Start(bytes =>
@@ -223,10 +281,39 @@ public partial class ShellWindow : Window
     }
     private async Task DisconnectAsync()
     {
+        StopNativeCapture();
         Title = "StreamRoom";
         _audio.Dispose();
         var previous = _connection; _connection = null;
         if (previous is not null) await previous.DisposeAsync();
+    }
+    private void SendNativeFrame(string session, byte[] pixels, int width, int height)
+    {
+        lock (_nativeGate)
+        { if (_nativeSession != session || _nativePending != 0) return; _nativePending = 1; }
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_nativeSession != session || _closing) return;
+            try
+            {
+                _nativeBuffer = Browser.CoreWebView2.Environment.CreateSharedBuffer((ulong)pixels.Length);
+                using (var stream = _nativeBuffer.OpenStream()) stream.Write(pixels);
+                _nativeSentAt = DateTime.UtcNow;
+                Browser.CoreWebView2.PostSharedBufferToScript(_nativeBuffer, CoreWebView2SharedBufferAccess.ReadOnly,
+                    JsonSerializer.Serialize(new { type = "wgcFrame", session, frame = ++_nativeSequence, width, height }));
+                _nativeWatchdog.Start();
+            }
+            catch (Exception e)
+            { StopNativeCapture(); Emit(new { type = "nativeCaptureEnded", session, message = e.Message }); }
+        });
+    }
+    private void StopNativeCapture()
+    {
+        lock (_nativeGate) { _nativeSession = null; Volatile.Write(ref _nativePending, 0); }
+        _nativeCapture?.Dispose(); _nativeCapture = null;
+        _nativeBuffer?.Dispose(); _nativeBuffer = null;
+        Volatile.Write(ref _nativePending, 0);
+        _nativeWatchdog.Stop();
     }
     private async Task<object> CheckUpdatesAsync()
     {
@@ -262,7 +349,7 @@ public partial class ShellWindow : Window
     {
         if (_closing) return;
         e.Cancel = true;
-        _closing = true; _updateTimer.Stop();
+        _closing = true; _updateTimer.Stop(); StopNativeCapture();
         try { if (_ready) await Browser.ExecuteScriptAsync("window.streamroom?.shutdown()").WaitAsync(TimeSpan.FromSeconds(2)); } catch { }
         await DisconnectAsync();
         foreach (var client in _testClients.Values) await client.DisposeAsync();

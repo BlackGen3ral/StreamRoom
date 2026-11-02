@@ -52,18 +52,25 @@ export class RtcRoom extends EventTarget {
     this.automatic = options.autoQuality;
   }
   async startCapture(options) {
+    if (this.captureStarting) throw Error('Uma seleção de captura já está em andamento.');
+    this.captureStarting = true;
+    try { return await this.startCaptureCore(options); }
+    finally { this.captureStarting = false; }
+  }
+  async startCaptureCore(options) {
     if (!this.identity) throw Error('Entre em uma sala para transmitir.');
     if (this.localStream) throw Error('Pare a fonte atual antes de escolher outra.');
     this.setOptions(options);
     const config = this.config;
     // Called directly from a real click, before any await, preserving transient user activation.
-    const identity = this.identity;
-    const stream = await navigator.mediaDevices.getDisplayMedia({
+    const identity = this.identity, initialRun = this.run;
+    this.nativeBridge = options.nativeSource?.bridge;
+    const stream = options.nativeSource ? await options.nativeSource.bridge.start(options.nativeSource.sourceId, options) : await navigator.mediaDevices.getDisplayMedia({
       video: { width: { ideal: config.width }, height: { ideal: config.height }, frameRate: { ideal: config.fps } },
       audio: options.audio === 'window' ? { suppressLocalAudioPlayback: false } : false,
       systemAudio: 'exclude', windowAudio: options.audio === 'window' ? 'window' : 'exclude', selfBrowserSurface: 'exclude'
     });
-    if (this.identity !== identity) { for (const track of stream.getTracks()) track.stop(); throw Error("A sala foi encerrada durante a seleção."); }
+    if (this.identity !== identity || this.run !== initialRun) { if (this.nativeBridge) { await this.nativeBridge.stop(); this.nativeBridge = null; } for (const track of stream.getTracks()) track.stop(); throw Error("A sala foi encerrada durante a seleção."); }
     this.localId = crypto.randomUUID();
     this.run++; const run = this.run;
     this.localStream = stream;
@@ -82,7 +89,7 @@ export class RtcRoom extends EventTarget {
         for (const track of this.audioDestination.stream.getAudioTracks()) stream.addTrack(track);
       }
       if (this.run !== run || this.localStream !== stream) return;
-      this.event('capture', { stream, streamId: this.localId, source: video.label, settings: video.getSettings(), audio: stream.getAudioTracks().length > 0, audioMode: options.audio });
+      this.event('capture', { stream, streamId: this.localId, source: this.nativeBridge?.name ?? video.label, settings: video.getSettings(), audio: stream.getAudioTracks().length > 0, audioMode: options.audio });
       await this.native('stream', { active: true, streamId: this.localId });
       this.ensureViewers();
       if (!stream.getAudioTracks().length && options.audio !== 'none') this.notice('Vídeo ativo, sem faixa de áudio. O seletor não forneceu áudio da janela. Pare e escolha WASAPI para compartilhar todo o sistema, se desejar.');
@@ -278,6 +285,7 @@ export class RtcRoom extends EventTarget {
   }
   async disposeCapture() {
     this.run++; const stream = this.localStream, streamId = this.localId; this.localStream = null; this.localId = null;
+    if (this.nativeBridge) { const bridge = this.nativeBridge; this.nativeBridge = null; try { await bridge.stop(); } catch { } }
     for (const track of stream?.getTracks() ?? []) { track.onended = null; track.stop(); }
     for (const [key, peer] of this.peers) if (peer.direction === 'send') { this.closePeer(key); this.attempts.delete(key); }
     if (this.audioNode) { this.audioNode.disconnect(); this.audioNode = null; }

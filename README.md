@@ -7,7 +7,7 @@ Aplicativo Windows C#/.NET 10 para compartilhar gameplays por **WebRTC P2P diret
 1. Baixe **StreamRoom-win-Setup.exe** na [versão mais recente](https://github.com/BlackGen3ral/StreamRoom/releases/latest). A primeira instalação é manual; depois, o aplicativo verifica novas versões ao iniciar e a cada 30 minutos. Clique em **Atualizar e reiniciar** para aplicar.
 2. Extraia e execute **StreamRoom-win-Setup.exe**. O pacote x64 inclui .NET e declara WebView2 como requisito. O instalador beta ainda não tem assinatura digital.
 3. Informe um nome, crie uma sala ou cole um convite. Use a mesma versão em todos os participantes da nova sala.
-4. **Qualquer participante** pode clicar em **Compartilhar minha tela** e selecionar janela, monitor ou jogo em janela. Para áudio isolado, habilite áudio da janela no seletor.
+4. **Qualquer participante** pode clicar em **Escolher o que compartilhar** para abrir o seletor próprio do StreamRoom, selecionar uma janela/monitor e confirmar a captura WGC. O modo nativo oferece áudio do sistema (inclui Discord e outras transmissões) ou sem áudio. Para áudio isolado por janela ou problemas de compatibilidade, escolha **Modo compatível**, que mantém o seletor WebView2 anterior. Captura nativa requer Windows 10 build 19041 ou superior. 1080p60 ainda está em validação; veja [integração nativa](docs/NATIVE-CAPTURE-PLAN.md).
 5. As transmissões disponíveis aparecem na grade. Clique em **Assistir** nas que quiser receber. Não há recepção automática.
 6. Cada player remoto possui qualidade, volume, ativar/silenciar áudio, parar de assistir, ampliar e tela cheia. O áudio começa silenciado para evitar reprodução inesperada e retorno.
 7. Você pode compartilhar e assistir ao mesmo tempo. **Parar minha transmissão** encerra apenas sua captura e seus envios; você continua assistindo aos amigos. **Parar de assistir** fecha aquela conexão e libera o decodificador.
@@ -31,7 +31,7 @@ A grade preserva os elementos de vídeo ao atualizar participantes/estatísticas
 
 ## Captura e áudio
 
-Vídeo real pelo Screen Capture do WebView2, como alternativa à integração direta WGC/OBS. Não há hook do OBS, nem captura/áudio/vídeo simulados. Jogos protegidos, com anticheat ou em tela cheia exclusiva podem exigir janela sem bordas ou monitor. Minimizar a janela capturada pode pausar ou reduzir os frames.
+Vídeo real por Windows Graphics Capture no seletor próprio, com fallback explícito para Screen Capture do WebView2. Não há hook do OBS, nem captura/áudio/vídeo simulados. Jogos protegidos, com anticheat ou em tela cheia exclusiva podem exigir janela sem bordas ou monitor. Minimizar a janela capturada pode pausar ou reduzir os frames.
 
 **Aplicativo da janela** usa a faixa fornecida pelo seletor, quando disponível. O Windows pode incluir janelas/processos relacionados; confirme isolamento do Discord no seu PC. **WASAPI** captura toda a saída padrão: inclui Discord, notificações e áudio das outras transmissões que você estiver ouvindo, podendo produzir retorno. Esse modo exige escolha explícita. O microfone não é capturado diretamente. Trocar o dispositivo padrão pode exigir reiniciar a captura.
 

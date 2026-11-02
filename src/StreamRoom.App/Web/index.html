@@ -24,13 +24,22 @@
   <div id="streamGrid" class="stream-grid" hidden></div>
   <div class="empty-player" id="playerEmpty"><span class="play-mark">▷</span><h2 id="emptyTitle">A próxima partida começa aqui.</h2><p id="emptyDescription">Crie uma sala ou entre com um convite.</p></div>
   <section class="capture-launch" aria-label="Compartilhar tela">
-    <div id="captureSetup" class="capture-setup"><div class="capture-heading"><h2>Compartilhe sua partida</h2><p class="muted">Escolha uma janela, um jogo ou a tela inteira no próximo passo.</p></div><div class="capture-audio">    <label for="audio">Áudio da transmissão</label><select id="audio"><option value="window">Da janela ou jogo</option><option value="system">Todo o som do computador</option><option value="none">Sem áudio</option></select>
+    <div id="captureSetup" class="capture-setup"><div class="capture-heading"><h2>Compartilhe sua partida</h2><p class="muted">Escolha uma janela ou monitor no seletor do StreamRoom.</p></div><div class="capture-audio">    <label for="audio">Áudio no modo compatível</label><select id="audio"><option value="window">Da janela ou jogo</option><option value="system">Todo o som do computador</option><option value="none">Sem áudio</option></select>
     <p class="fine" id="audioHint">Habilite o áudio no seletor, quando disponível.</p>
 </div></div>
-    <div class="toolbar"><div class="row"><button id="start" class="primary" disabled>Escolher o que compartilhar</button><button id="stop" class="danger" hidden>Parar transmissão</button><span id="source" class="muted">Entre em uma sala para começar.</span></div></div>
+    <div class="toolbar"><div class="row"><button id="start" class="primary" disabled>Escolher o que compartilhar</button><button id="startCompatible" class="quiet" disabled>Modo compatível</button><button id="stop" class="danger" hidden>Parar transmissão</button><span id="source" class="muted">Entre em uma sala para começar.</span></div></div>
   </section>
   <details id="captureInfo" class="info-card"><summary>Sobre captura e áudio</summary><p>Você escolhe o que capturar no seletor do Windows. Jogos em tela cheia exclusiva podem exigir modo janela sem bordas. Nenhum microfone é capturado.</p></details>
   <details class="card telemetry"><summary>Detalhes da conexão</summary><div id="stats" class="stats-empty">As estatísticas aparecem quando houver uma conexão WebRTC.</div></details>
   <div id="status" role="status" aria-live="polite">Pronto para começar.</div>
 </main></div><footer><span id="runtime"></span><span id="footerVersion">StreamRoom · build de desenvolvimento</span></footer>
+<dialog id="capturePicker" aria-labelledby="pickerTitle">
+  <div class="picker-heading"><div><span class="eyebrow">COMPARTILHAR NO STREAMROOM</span><h2 id="pickerTitle">Escolha o que seus amigos vão ver</h2><p class="muted">A transmissão começa só depois da sua confirmação.</p></div><button id="cancelCapture" class="quiet" aria-label="Fechar seletor">✕</button></div>
+  <div class="picker-navigation"><div class="picker-tabs"><button data-source-kind="window" aria-pressed="true">Janelas e jogos</button><button data-source-kind="monitor" aria-pressed="false">Monitores</button></div><button id="refreshSources" class="quiet">Atualizar lista</button></div>
+  <input id="sourceSearch" type="search" placeholder="Buscar uma janela…" aria-label="Buscar fonte">
+  <p id="pickerStatus" class="fine" role="status" aria-live="polite"></p>
+  <div id="captureSources" class="capture-sources" aria-label="Fontes disponíveis"></div>
+  <div class="picker-audio"><label for="nativeAudio">Áudio da transmissão</label><select id="nativeAudio"><option value="none">Sem áudio</option><option value="system">Todo o som do computador</option></select><p class="fine">Áudio do sistema inclui Discord e outras transmissões. Para áudio isolado da janela, feche este seletor e use Modo compatível.</p></div>
+  <div class="picker-footer"><p class="fine">O Windows mantém o indicador de captura. WGC em validação: desempenho 1080p60 ainda não certificado.</p><button id="confirmCapture" class="primary" disabled>Compartilhar agora</button></div>
+</dialog>
 </body></html>

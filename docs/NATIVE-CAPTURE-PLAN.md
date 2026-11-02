@@ -1,6 +1,11 @@
 # Captura nativa: integração incremental
 
-Status: projeto de implementação. O seletor WGC ainda não está implementado. O compartilhamento atual continua ativo.
+Status: primeiro caminho WGC funcional implementado. O seletor próprio lista janelas e monitores reais, oferece miniaturas, pesquisa, seleção e confirmação. O modo compatível continua disponível explicitamente.
+
+Validação local: compilação sem erros; captura de janela real (185 frames/5 segundos, pixels verificados); teste WGC -> memória compartilhada -> VideoFrame/canvas -> RTCPeerConnection -> vídeo remoto (200 frames decodificados, 49 FPS reportados na recepção adaptada de 311×203, pixels verificados, seletor Chromium não chamado). Isso não certifica 1080p60, vários PCs ou áudio isolado por processo. O modo nativo oferece áudio do sistema/sem áudio; o modo compatível mantém áudio por janela.
+
+Implementação atual: buffers BGRA reutilizados, um frame de IPC em voo com ACK e watchdog, pool WGC de dois frames, descarte sob pressão e ponte canvas. Há readback da GPU e cópias CPU; encoder permanece a cargo do WebRTC/Chromium. Nenhuma garantia de zero-copy ou NVENC forçado.
+
 
 ## Arquitetura
 
@@ -35,3 +40,14 @@ WGC não fornece áudio. O modo Sistema deve reutilizar WASAPI + PCM existente c
 - https://learn.microsoft.com/windows/win32/api/windows.graphics.capture.interop/nf-windows-graphics-capture-interop-igraphicscaptureiteminterop-createformonitor
 - https://learn.microsoft.com/dotnet/api/microsoft.web.webview2.core.corewebview2.postsharedbuffertoscript
 - https://github.com/MicrosoftEdge/WebView2Feedback/blob/main/specs/SharedBuffer.md
+
+## Reproduzir os testes locais
+
+Em uma sessão Windows interativa com GPU, após compilar o app:
+
+```powershell
+dotnet src/StreamRoom.App/bin/Release/net10.0-windows10.0.19041.0/StreamRoom.dll --wgc-self-test wgc-self-test.json
+dotnet src/StreamRoom.App/bin/Release/net10.0-windows10.0.19041.0/StreamRoom.dll --wgc-bridge-test wgc-bridge-test.json
+```
+
+Os testes capturam somente a própria janela de teste. O segundo cria um par WebRTC local e verifica pixels decodificados e que getDisplayMedia não foi chamado. Não substituem testes entre PCs, áudio ou benchmarks em 1080p60. As rotas de teste nativas só ficam disponíveis com o argumento de teste explícito.
