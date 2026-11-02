@@ -212,6 +212,8 @@ public partial class ShellWindow : Window
                     if (p.GetRawText().Length > 4096) throw new ArgumentException("Configurações inválidas.");
                     await File.WriteAllTextAsync(Path.Combine(DataDirectory, "settings-v2.json"), p.GetRawText());
                     break;
+                case "groupRoomStatus": result = new { saved = SavedGroupRoom.Load(DataDirectory) is not null }; break;
+                case "groupRoomForget": SavedGroupRoom.Forget(DataDirectory); break;
                 case "connect": result = await ConnectAsync(p); break;
                 case "leave": await DisconnectAsync(); break;
                 case "signal":
@@ -367,8 +369,10 @@ public partial class ShellWindow : Window
     }
     private async Task<object> ConnectAsync(JsonElement p)
     {
-        bool creating = p.GetProperty("mode").GetString() == "create";
-        var server = creating
+        var mode = p.GetProperty("mode").GetString();
+        bool creating = mode is "create" or "createFixed";
+        var saved = mode == "saved" ? SavedGroupRoom.Load(DataDirectory) ?? throw new IOException("Nenhuma sala do grupo salva.") : null;
+        var server = saved is not null ? Invitations.ValidateServer(saved.Server) : creating
             ? Invitations.ValidateServer(p.GetProperty("server").GetString()!)
             : Invitations.ServerFromInvitation(p.GetProperty("invite").GetString()!);
         var name = p.GetProperty("name").GetString()!.Trim();
@@ -377,10 +381,13 @@ public partial class ShellWindow : Window
         string roomId, token, invitation;
         if (creating)
         {
-            var room = await SignalingClient.CreateRoomAsync(server);
+            var room = await SignalingClient.CreateRoomAsync(server, persistent: mode == "createFixed");
+            if (mode == "createFixed" && !room.Persistent) throw new IOException("O servidor ainda não oferece salas fixas. A atualização do servidor precisa ser concluída.");
             roomId = room.RoomId; token = room.HostToken;
             invitation = Invitations.Create(server, room.RoomId, room.InviteToken);
         }
+        else if (saved is not null)
+        { roomId = saved.RoomId; token = saved.Token; invitation = saved.Invitation; }
         else
         {
             invitation = p.GetProperty("invite").GetString()!;
@@ -398,6 +405,13 @@ public partial class ShellWindow : Window
         try
         {
             var welcome = await client.ConnectAsync(server, roomId, token, name);
+            if (welcome.Persistent)
+            {
+                var existing = SavedGroupRoom.Load(DataDirectory);
+                var sameRoom = existing?.RoomId == roomId && existing.Server == server.AbsoluteUri;
+                if (existing is null || sameRoom && (!existing.Owner || welcome.Role == "host"))
+                    await new SavedGroupRoom(server.AbsoluteUri, roomId, token, invitation, welcome.Role == "host").SaveAsync(DataDirectory);
+            }
             Title = "StreamRoom · " + name;
             return new { welcome, invitation, server = server.AbsoluteUri.TrimEnd('/') };
         }

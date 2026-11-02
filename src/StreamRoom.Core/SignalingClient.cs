@@ -27,13 +27,14 @@ public sealed class SignalingClient : IAsyncDisposable
     public event Action<JsonElement>? RoomStateChanged;
     public bool IsConnected => _socket.State == WebSocketState.Open && _welcome.Task.IsCompletedSuccessfully;
 
-    public static async Task<RoomCredentials> CreateRoomAsync(Uri server, CancellationToken cancellationToken = default)
+    public static async Task<RoomCredentials> CreateRoomAsync(Uri server, CancellationToken cancellationToken = default, bool persistent = false)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
         cancellationToken = timeout.Token;
         using var http = new HttpClient { BaseAddress = server, Timeout = TimeSpan.FromSeconds(15) };
         using var request = new HttpRequestMessage(HttpMethod.Post, "v2/rooms");
+        if (persistent) request.Headers.Add("X-StreamRoom-Persistent", "1");
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw new SignalingException($"Não foi possível criar sala (HTTP {(int)response.StatusCode}).");
