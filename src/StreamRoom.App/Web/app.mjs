@@ -25,13 +25,18 @@ function createCard(id, streamId) {
   card.frame = node('div', 'player-card'); card.video = node('video'); card.video.autoplay = true; card.video.playsInline = true; card.video.muted = true;
   card.empty = node('p', 'stream-placeholder', own ? 'Prévia local sem som' : 'Escolha Assistir para receber esta gameplay.');
   card.play = button('▶ Reproduzir', async () => { try { await card.video.play(); card.play.hidden = true; } catch (e) { status(e.message, true); } }); card.play.className = 'overlay-play'; card.play.hidden = true;
+  card.video.addEventListener('loadeddata', () => { card.empty.hidden = true; });
+  card.video.addEventListener('emptied', () => { card.empty.hidden = false; });
   card.frame.append(card.video, card.empty, card.play);
   const controls = node('div', 'stream-controls');
   card.watch = button(own ? 'Parar minha transmissão' : 'Assistir', () => busy(async () => {
     if (own) { await rtc.stopCapture(); status('Sua transmissão parou. As demais continuam.'); return; }
+    card.failure = null;
     const watching = rtc.subscriptions.some(s => s.publisherId === id);
     await rtc.watch(id, !watching, quality(card).height, quality(card).fps);
   }));
+  card.retry = button('Reconectar', () => busy(async () => { card.failure = null; await rtc.watch(id, true, quality(card).height, quality(card).fps, true); }));
+  card.retry.hidden = true;
   card.quality = node('select'); card.quality.setAttribute('aria-label', 'Qualidade de ' + id);
   for (const [value, label] of [['480:30','480p · 30 FPS'],['720:30','720p · 30 FPS'],['720:60','720p · 60 FPS'],['1080:30','1080p · 30 FPS'],['1080:60','1080p · 60 FPS']]) {
     const option = node('option', '', label); option.value = value; card.quality.append(option);
@@ -60,7 +65,7 @@ function createCard(id, streamId) {
   fit.addEventListener('change', () => { card.video.style.objectFit = fit.value; });
   const more = node('details', 'stream-more'); more.append(node('summary', '', 'Mais opções'));
   const extra = node('div', 'stream-extra'); extra.append(card.pause, fit, enlarge); more.append(extra);
-  controls.append(card.watch, card.quality, card.mute, card.volume, fullscreen, more);
+  controls.append(card.watch, card.retry, card.quality, card.mute, card.volume, fullscreen, more);
   card.metrics = node('p', 'fine', own ? 'Sem espectadores: nenhum vídeo é enviado.' : 'Sem recepção: nenhum vídeo é solicitado.');
   card.root.append(heading, card.frame, controls, card.metrics); cards.set(id, card); $('streamGrid').append(card.root); return card;
 }
@@ -85,9 +90,10 @@ function renderStreams() {
       card.video.srcObject = stream; card.play.hidden = true;
       if (stream) card.video.play().catch(() => { card.play.hidden = false; });
     }
-    card.empty.hidden = Boolean(stream);
-    card.empty.textContent = card.own ? 'Prévia local sem som' : watched ? 'Conectando P2P direto...' : 'Escolha Assistir para receber esta gameplay.';
+    card.empty.hidden = Boolean(stream && card.video.readyState >= 2 && card.video.videoWidth > 0);
+    card.empty.textContent = card.own ? 'Prévia local sem som' : card.failure ? card.failure : watched ? 'Conectando com seu amigo… O vídeo aparece quando a conexão estiver pronta.' : 'Escolha Assistir para receber esta gameplay.';
     card.watch.textContent = card.own ? 'Parar minha transmissão' : watched ? 'Parar de assistir' : 'Assistir';
+    card.retry.hidden = card.own || !watched; card.retry.disabled = state.busy;
     card.watch.disabled = state.busy; card.quality.disabled = state.busy;
     card.mute.disabled = card.volume.disabled = card.pause.disabled = !stream;
     if (!watched && !card.own) card.metrics.textContent = 'Sem recepção: nenhum vídeo é solicitado.';
@@ -167,7 +173,9 @@ window.chrome.webview.addEventListener('message', ({ data }) => {
 rtc.addEventListener('notice', e => status(e.detail));
 rtc.addEventListener('connectionError', ({ detail }) => {
   const name = state.participants.find(p => p.id === detail.id)?.name ?? 'Participante';
-  status(name + ': ' + detail.message + ' Pare de assistir e selecione novamente para tentar outra vez.', true);
+  const card = cards.get(detail.id);
+  if (card && !card.own) { card.failure = detail.message; card.empty.hidden = false; card.empty.textContent = detail.message; card.metrics.textContent = 'Conexão não estabelecida. Use Reconectar para tentar novamente.'; }
+  status(name + ': ' + detail.message + ' Use Reconectar na transmissão para tentar novamente.', true);
 });
 rtc.addEventListener('capture', ({ detail }) => {
   $('source').textContent = detail ? 'Compartilhando: ' + (detail.source || 'fonte selecionada') + ' · prévia sem som' : 'Nenhuma fonte selecionada';
@@ -186,12 +194,24 @@ rtc.addEventListener('stats', ({ detail }) => {
   $('directStatus').textContent = detail.length && detail.every(r => r.direct) ? 'P2P direto confirmado · sem relay' : 'STUN gratuito · aguardando P2P';
   $('stats').replaceChildren(...detail.map(row => {
     const name = state.participants.find(p => p.id === row.id)?.name ?? 'Participante';
-    const text = (row.direction === 'send' ? 'Enviando para ' : 'Recebendo de ') + name + ' · ' + (row.width ? row.width + '×' + row.height : '—') + ' · ' + (row.fps === null ? '—' : Math.round(row.fps)) + ' FPS · ' + (row.bitrate === null ? '—' : row.bitrate.toFixed(2)) + ' Mbps · ' + row.codec + ' · ' + row.route + ' · ICE ' + row.localCandidate + '/' + row.remoteCandidate + ' · ' + row.transport + ' · perda ' + (row.loss * 100).toFixed(1) + '% · RTT ' + (row.rtt === null ? '—' : Math.round(row.rtt) + ' ms') + ' · ' + row.hardware;
+    const text = (row.direction === 'send' ? 'Enviando para ' : 'Recebendo de ') + name + ' · ' + (row.width ? row.width + '×' + row.height : '—') + ' · ' + (row.fps === null ? '—' : Math.round(row.fps)) + ' FPS · ' + (row.bitrate === null ? '—' : row.bitrate.toFixed(2)) + ' Mbps · ' + row.codec + ' · ' + row.route + ' · ICE ' + row.localCandidate + '/' + row.remoteCandidate + ' · ' + row.transport + ' · perda ' + (row.loss * 100).toFixed(1) + '% · RTT ' + (row.rtt === null ? '—' : Math.round(row.rtt) + ' ms') + ' · ' + row.hardware + ' · ICE: ' + (row.iceState ?? row.state) + ' · descoberta: ' + (row.gathering ?? '—') + ' · endereços locais/públicos: ' + (row.candidates?.host ?? 0) + '/' + (row.candidates?.srflx ?? 0) + (row.stunError ? ' · houve falha ao consultar STUN' : '');
     return node('p','fine',text);
   }));
   if (!detail.length) $('stats').textContent = 'Sem conexões de mídia. Escolha uma transmissão para assistir.';
   for (const card of cards.values()) {
     const rows = detail.filter(r => r.publisherId === card.id);
+    if (!card.own && rows.length) {
+      const row = rows[0];
+      if (row.state !== 'connected') {
+        const message = row.elapsed >= 15
+          ? 'A conexão está demorando. Tentando uma rota direta entre as redes…'
+          : 'Conectando com seu amigo…';
+        card.empty.hidden = false; card.empty.textContent = card.failure || message;
+        card.metrics.textContent = message + ' · ' + row.elapsed + ' s';
+        continue;
+      }
+      if (!row.frames) { card.empty.hidden = false; card.empty.textContent = 'Conexão estabelecida. Aguardando o primeiro frame de vídeo…'; }
+    }
     card.metrics.textContent = card.own ? rtc.subscribers.length + ' espectador(es) selecionaram sua transmissão · ' + (rows.length ? rows.reduce((sum,r)=>sum+(r.bitrate??0),0).toFixed(2) + ' Mbps enviados' : 'nenhum vídeo enviado')
       : rows.length ? (rows[0].width ?? '—') + '×' + (rows[0].height ?? '—') + ' · ' + (rows[0].fps === null ? '—' : Math.round(rows[0].fps)) + ' FPS · ' + rows[0].route : 'Sem recepção ativa.';
   }

@@ -87,3 +87,18 @@ test('native tracks keep native size and pacing without unsupported browser cons
  assert.equal(room.localStream,stream);assert.equal(track.contentHint,'motion');
  await room.stopCapture();assert.equal(stopped,true);
 });
+
+test('manual reconnect replaces only the selected subscription and rejects stale offers', async t => {
+ const s=setup();t.after(()=>s.room.shutdown());s.room.updateRoom(s.state);await settle();
+ await s.room.receiveSignal(s.b,{kind:'offer',streamId:s.incomingId,subscriptionId:s.receive,session:id(),sdp:'v=0'});
+ const outgoing=s.room.peers.get(s.send),incoming=s.room.peers.get(s.receive);
+ await s.room.watch(s.b,true,720,60,true);
+ const request=s.calls.findLast(c=>c.type==='watch').payload;
+ assert.notEqual(request.subscriptionId,s.receive);assert.equal(request.height,720);assert.equal(request.fps,60);
+ assert.equal(incoming.pc.connectionState,'closed');assert.equal(s.room.peers.get(s.send),outgoing);assert.equal(s.track.stopped,false);
+ s.room.updateRoom({...s.state,subscriptions:[{...s.state.subscriptions[0],subscriptionId:request.subscriptionId}]});await settle();
+ await s.room.receiveSignal(s.b,{kind:'offer',streamId:s.incomingId,subscriptionId:s.receive,session:id(),sdp:'old'});
+ assert.equal(s.room.peers.has(s.receive),false);
+ await s.room.receiveSignal(s.b,{kind:'offer',streamId:s.incomingId,subscriptionId:request.subscriptionId,session:id(),sdp:'new'});
+ assert.equal(s.room.peers.get(request.subscriptionId).pc.remoteDescription.sdp,'new');
+});

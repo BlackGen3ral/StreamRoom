@@ -38,13 +38,14 @@ export class RtcRoom extends EventTarget {
       ? Boolean(this.localStream && this.localId === peer.streamId && this.subscribers.some(s => s.subscriptionId === peer.key && s.viewerId === peer.id && s.streamId === peer.streamId))
       : this.subscriptions.some(s => s.subscriptionId === peer.key && s.publisherId === peer.id && s.streamId === peer.streamId);
   }
-  async watch(publisherId, active, height = 480, fps = 30) {
+  async watch(publisherId, active, height = 480, fps = 30, restart = false) {
     const publisher = this.participants.find(p => p.id === publisherId);
     if (!this.identity || publisherId === this.identity.participantId || !publisher?.streamId) throw Error('Transmissão indisponível.');
     const previous = this.subscriptions.find(s => s.publisherId === publisherId);
-    const subscriptionId = active ? previous?.subscriptionId ?? crypto.randomUUID() : previous?.subscriptionId;
+    const subscriptionId = active ? (!restart && previous?.subscriptionId) || crypto.randomUUID() : previous?.subscriptionId;
     if (!subscriptionId) return;
     if (!active) this.closePeer(subscriptionId);
+    if (active && restart && previous) this.closePeer(previous.subscriptionId);
     await this.native('watch', { publisherId, streamId: publisher.streamId, subscriptionId, active, height, fps });
   }
   setOptions(options) {
@@ -139,16 +140,18 @@ export class RtcRoom extends EventTarget {
   newPeer(id, sub, direction, session, config) {
     const pc = new RTCPeerConnection(config), key = sub.subscriptionId;
     const peer = { key, id, streamId: sub.streamId, publisherId: direction === 'send' ? this.identity.participantId : id, direction, session, pc,
-      sent: false, localIce: [], remoteIce: [], last: null, budget: perPeerCap(this.config, this.subscribers.length), healthy: 0, recovery: null };
+      startedAt: performance.now(), candidates: { host: 0, srflx: 0, prflx: 0 }, stunError: false, sent: false, localIce: [], remoteIce: [], last: null, budget: perPeerCap(this.config, this.subscribers.length), healthy: 0, recovery: null };
     this.peers.set(key, peer);
     const recover = () => this.recover(key).catch(error => this.notice(error.message));
     peer.connectDeadline = setTimeout(() => { if (this.validPeer(peer) && pc.connectionState !== 'connected') void recover(); }, 30_000);
     pc.onicecandidate = ({ candidate }) => {
       if (!this.validPeer(peer) || candidate?.type === 'relay') return;
+      if (candidate && candidate.type in peer.candidates) peer.candidates[candidate.type]++;
       const ice = candidate?.toJSON() ?? { candidate: '', sdpMid: null, sdpMLineIndex: null };
       const payload = { kind: 'ice', candidate: ice.candidate ?? '', sdpMid: ice.sdpMid ?? null, sdpMLineIndex: ice.sdpMLineIndex ?? null };
       if (!peer.sent) peer.localIce.push(payload); else void this.signal(peer, payload).catch(error => this.notice(error.message));
     };
+    pc.onicecandidateerror = () => { if (this.validPeer(peer)) peer.stunError = true; };
     pc.ontrack = e => {
       if (direction === 'receive' && this.validPeer(peer))
         this.event('remote', { id, streamId: peer.streamId, stream: e.streams[0] ?? new MediaStream([e.track]) });
@@ -262,6 +265,7 @@ export class RtcRoom extends EventTarget {
         rows.push({ id: peer.id, key: peer.key, direction: peer.direction, publisherId: peer.publisherId, state: peer.pc.connectionState, bitrate, fps: video?.framesPerSecond ?? null,
           width: video?.frameWidth ?? null, height: video?.frameHeight ?? null, loss, rtt: rtt || null,
           codec: codec?.mimeType?.replace('video/', '') ?? 'Negociando', route: route.label, localCandidate: route.localType, remoteCandidate: route.remoteType, transport: route.protocol, direct: route.confirmed,
+          elapsed: Math.floor((performance.now() - peer.startedAt) / 1000), iceState: peer.pc.iceConnectionState, gathering: peer.pc.iceGatheringState, candidates: { ...peer.candidates }, stunError: peer.stunError, frames: video?.framesDecoded ?? video?.framesEncoded ?? 0,
           hardware, powerEfficient: video?.powerEfficientEncoder ?? null, limitation: video?.qualityLimitationReason ?? null,
           audioPackets: audio?.packetsSent ?? audio?.packetsReceived ?? null, audioCodec: audio?.codecId ? reports.get(audio.codecId)?.mimeType : null });
         if (peer.direction === 'send' && video) {
@@ -278,7 +282,7 @@ export class RtcRoom extends EventTarget {
   closePeer(key) {
     const peer = this.peers.get(key); if (!peer) return;
     this.peers.delete(key); clearTimeout(peer.recovery); clearTimeout(peer.connectDeadline);
-    peer.pc.ontrack = null; peer.pc.onicecandidate = null; peer.pc.onconnectionstatechange = null;
+    peer.pc.ontrack = null; peer.pc.onicecandidateerror = null; peer.pc.onicecandidate = null; peer.pc.onconnectionstatechange = null;
     if (peer.direction === "receive") for (const receiver of peer.pc.getReceivers?.() ?? []) receiver.track?.stop();
     peer.pc.close();
     if (peer.direction === 'receive') this.event('remote', { id: peer.id, streamId: peer.streamId, stream: null });
