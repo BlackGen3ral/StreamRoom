@@ -12,7 +12,7 @@ export class WgcStream {
     this.canvas = document.createElement('canvas');
     this.canvas.width = options.quality * 16 / 9; this.canvas.height = options.quality;
     this.context = this.canvas.getContext('2d', { alpha: false, desynchronized: true });
-    this.options = options; this.active = true;
+    this.options = options; this.active = true; this.transport = 'canvas';
     this.first = new Promise((resolve, reject) => { this.resolveFirst = resolve; this.rejectFirst = reject; });
     // Attach a rejection handler before requesting the source to avoid unhandled startup failures.
     this.first.catch(() => {});
@@ -45,7 +45,7 @@ export class WgcStream {
     } catch (error) { this.rejectFirst(error); this.ended(error.message); }
     finally {
       frame?.close(); window.chrome.webview.releaseBuffer(buffer);
-      void this.native('nativeFrameAck', { session: meta.session, frame: meta.frame }).catch(() => {});
+      window.chrome.webview.postMessage({ type: 'nativeFrameAck', payload: { session: meta.session, frame: meta.frame } });
     }
   }
   async stop() {

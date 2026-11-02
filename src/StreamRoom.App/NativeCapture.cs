@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
@@ -14,7 +15,7 @@ internal sealed class NativeCapture : IDisposable
     private GraphicsCaptureSession? _session;
     private GraphicsCaptureItem? _item;
     private int _processing;
-    private long _lastFrame;
+    private long _nextFrame;
     private long _interval;
     private bool _disposed;
     private Windows.Storage.Streams.Buffer? _readback;
@@ -26,7 +27,7 @@ internal sealed class NativeCapture : IDisposable
     public void Start(CaptureSource source, int fps)
     {
         if (!Supported) throw new NotSupportedException("O Windows não oferece captura WGC neste dispositivo.");
-        _interval = TimeSpan.TicksPerSecond / Math.Clamp(fps, 15, 60);
+        _interval = Stopwatch.Frequency / Math.Clamp(fps, 15, 60);
         _item = CreateItem(source);
         _device = CreateDevice();
         _pool = Direct3D11CaptureFramePool.CreateFreeThreaded(_device, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, _item.Size);
@@ -44,9 +45,10 @@ internal sealed class NativeCapture : IDisposable
         {
             using var frame = pool.TryGetNextFrame();
             if (frame is null) return;
-            long now = DateTime.UtcNow.Ticks;
-            if (now - _lastFrame < _interval || CanDeliver?.Invoke() == false) return;
-            _lastFrame = now;
+            long now = Stopwatch.GetTimestamp();
+            // A monotonic deadline tolerates frame-arrival jitter without halving 60 FPS capture.
+            if (now + Stopwatch.Frequency / 500 < _nextFrame || CanDeliver?.Invoke() == false) return;
+            _nextFrame = Math.Max(_nextFrame + _interval, now);
             int width = frame.ContentSize.Width, height = frame.ContentSize.Height;
             if (width < 1 || height < 1 || (long)width * height > 34_000_000) return;
             using var bitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(frame.Surface);

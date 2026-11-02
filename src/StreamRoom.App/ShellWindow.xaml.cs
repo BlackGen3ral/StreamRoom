@@ -109,8 +109,15 @@ public partial class ShellWindow : Window
         {
             using var document = JsonDocument.Parse(e.WebMessageAsJson);
             var message = document.RootElement;
-            id = message.GetProperty("id").GetString();
             var type = message.GetProperty("type").GetString();
+            if (type == "nativeFrameAck" && !message.TryGetProperty("id", out _))
+            {
+                var ack = message.GetProperty("payload");
+                if (_nativeSession == ack.GetProperty("session").GetString() && _nativeSequence == ack.GetProperty("frame").GetInt64())
+                    Volatile.Write(ref _nativePending, 0);
+                return;
+            }
+            id = message.GetProperty("id").GetString();
             commandGate = type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
@@ -198,7 +205,7 @@ public partial class ShellWindow : Window
                     break;
                 case "nativeFrameAck":
                     if (_nativeSession == p.GetProperty("session").GetString() && _nativeSequence == p.GetProperty("frame").GetInt64())
-                    { _nativeBuffer?.Dispose(); _nativeBuffer = null; Volatile.Write(ref _nativePending, 0); }
+                    { Volatile.Write(ref _nativePending, 0); }
                     break;
                 case "nativeCaptureStop":
                     if (_nativeSession == p.GetProperty("session").GetString()) StopNativeCapture();
@@ -296,7 +303,8 @@ public partial class ShellWindow : Window
             if (_nativeSession != session || _closing) return;
             try
             {
-                _nativeBuffer = Browser.CoreWebView2.Environment.CreateSharedBuffer((ulong)pixels.Length);
+                if (_nativeBuffer is null || _nativeBuffer.Size != (ulong)pixels.Length)
+                { _nativeBuffer?.Dispose(); _nativeBuffer = Browser.CoreWebView2.Environment.CreateSharedBuffer((ulong)pixels.Length); }
                 using (var stream = _nativeBuffer.OpenStream()) stream.Write(pixels);
                 _nativeSentAt = DateTime.UtcNow;
                 Browser.CoreWebView2.PostSharedBufferToScript(_nativeBuffer, CoreWebView2SharedBufferAccess.ReadOnly,
@@ -329,7 +337,7 @@ public partial class ShellWindow : Window
     }
     private async Task<object> CreateNetworkTestAsync()
     {
-        var server = Invitations.ValidateServer(Environment.GetEnvironmentVariable("STREAMROOM_TEST_URL") ?? "https://streamroom-signaling-dev.arthurgabrielfera.workers.dev");
+        var server = Invitations.ValidateServer(Environment.GetEnvironmentVariable("STREAMROOM_TEST_URL") ?? "https://streamroom.arthostudio.com");
         var room = await SignalingClient.CreateRoomAsync(server);
         var clients = new List<object>();
         for (int i = 0; i < 5; i++)

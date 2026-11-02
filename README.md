@@ -13,7 +13,7 @@ Aplicativo Windows C#/.NET 10 para compartilhar gameplays por **WebRTC P2P diret
 7. Você pode compartilhar e assistir ao mesmo tempo. **Parar minha transmissão** encerra apenas sua captura e seus envios; você continua assistindo aos amigos. **Parar de assistir** fecha aquela conexão e libera o decodificador.
 8. O criador continua responsável por renovar/encerrar a sala. **Encerrar sala para todos**, fechar ou perder a conexão do criador encerra a sala inteira.
 
-Servidor de desenvolvimento: https://streamroom-signaling-dev.arthurgabrielfera.workers.dev.
+Servidor de desenvolvimento: https://streamroom.arthostudio.com.
 A rota antiga v1 permanece disponível para os betas anteriores; as salas v1 e v2 são separadas. Convites de uma sala nova exigem clientes novos. Não há migração silenciosa de uma sala ativa.
 
 A alternativa portátil está no artefato **StreamRoom-win-x64-development**. Extraia todos os arquivos juntos; WebView2 precisa estar instalado. Atualizações Velopack exigem a versão instalada.

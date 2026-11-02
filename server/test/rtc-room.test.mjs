@@ -60,3 +60,19 @@ test('old stream/session ICE is ignored without affecting the other direction',a
  await s.room.receiveSignal(s.b,{...candidate,streamId:s.incomingId});assert.equal(peer.pc.addedIce.length,1);
  assert.ok(s.room.peers.has(s.send));await s.room.shutdown();
 });
+
+test('stable sender settings avoid encoder reconfiguration and failed changes are retried', async t => {
+ const room=new RtcRoom(async()=>{});t.after(()=>room.shutdown());
+ room.setOptions({quality:720,fps:60,upload:24,autoQuality:true});
+ room.subscribers=[{subscriptionId:'stream',height:720,fps:60}];
+ let calls=0,fail=false,last;
+ const sender={track:{kind:'video'},getParameters:()=>({encodings:[{}]}),async setParameters(p){calls++;if(fail)throw Error('temporarily unavailable');last=p;}};
+ const peer={key:'stream',budget:4_000_000,pc:{getSenders:()=>[sender]}};
+ await room.configureSender(peer);await room.configureSender(peer);
+ assert.equal(calls,1);
+ await room.configureSender(peer,{bitrate:1_000_000,fps:30,scale:2});
+ assert.equal(calls,2);assert.equal(last.encodings[0].maxFramerate,30);assert.equal(last.encodings[0].scaleResolutionDownBy,2);
+ fail=true;await assert.rejects(room.configureSender(peer),/temporarily unavailable/);
+ fail=false;await room.configureSender(peer);
+ assert.equal(calls,4);assert.equal(last.encodings[0].maxFramerate,60);
+});

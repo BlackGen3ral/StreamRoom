@@ -51,3 +51,9 @@ dotnet src/StreamRoom.App/bin/Release/net10.0-windows10.0.19041.0/StreamRoom.dll
 ```
 
 Os testes capturam somente a própria janela de teste. O segundo cria um par WebRTC local e verifica pixels decodificados e que getDisplayMedia não foi chamado. Não substituem testes entre PCs, áudio ou benchmarks em 1080p60. As rotas de teste nativas só ficam disponíveis com o argumento de teste explícito.
+
+## Ajustes de fluidez
+
+A captura usa relógio monotônico e prazo acumulado com tolerância de 2 ms, evitando descartar frames de 60 FPS por pequenas variações de chegada. O buffer compartilhado é reaproveitado somente depois da confirmação do navegador; mudança de tamanho e parada liberam o buffer. A confirmação de frame não cria mais uma requisição/resposta completa. O encoder só recebe setParameters quando bitrate, FPS ou escala mudarem; falhas continuam sendo tentadas novamente.
+
+Teste local comparativo com H.264, teto de 20 Mbps, preferência por manter resolução e vídeo de 1246×812: a versão anterior decodificou 263–282 frames; a alteração final decodificou 302 frames durante a mesma janela de teste de 6 segundos. O FPS reportado no fim ficou próximo de 50 nas duas versões. A melhora observada foi na entrega total, sem comprovação de 1080p60 ou desempenho pela internet. Treze testes de regressão de mídia/P2P passaram, além do teste real WGC→WebRTC.

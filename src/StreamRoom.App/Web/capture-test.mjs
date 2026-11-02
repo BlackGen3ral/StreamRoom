@@ -21,16 +21,24 @@ try {
   log('start');const stream=await bridge.start(source.id,{quality:1080,fps:60});
   log('captured');const remote=new Promise(resolve=>{b.ontrack=e=>resolve(e.streams[0]);});
   for(const track of stream.getTracks())a.addTrack(track,stream);
+  const codecs=RTCRtpSender.getCapabilities('video')?.codecs ?? [];
+  const transceiver=a.getTransceivers().find(t=>t.sender.track?.kind==='video');
+  if(transceiver?.setCodecPreferences) transceiver.setCodecPreferences([...codecs.filter(c=>c.mimeType.toLowerCase()==='video/h264'),...codecs.filter(c=>c.mimeType.toLowerCase()!=='video/h264')]);
   log('offer');await a.setLocalDescription(await a.createOffer());await gather(a);log('gatherA');
   await b.setRemoteDescription(a.localDescription);await b.setLocalDescription(await b.createAnswer());await gather(b);log('gatherB');
   await a.setRemoteDescription(b.localDescription);
+  const sender=a.getSenders().find(s=>s.track?.kind==='video');
+  const parameters=sender.getParameters(); parameters.degradationPreference='maintain-resolution';
+  parameters.encodings[0].maxBitrate=20_000_000; parameters.encodings[0].maxFramerate=60; parameters.encodings[0].scaleResolutionDownBy=1;
+  await sender.setParameters(parameters);
   log('remote');const video=document.getElementById('testVideo');video.srcObject=await remote;await video.play();log('playing');
-  await new Promise(resolve=>setTimeout(resolve,4000));
+  await new Promise(resolve=>setTimeout(resolve,6000));
+  const sent=[...(await a.getStats()).values()].find(s=>s.type==='outbound-rtp'&&s.kind==='video');
   const stats=[...(await b.getStats()).values()].filter(s=>s.type==='inbound-rtp'&&s.kind==='video');
   const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;
   const ctx=canvas.getContext('2d');ctx.drawImage(video,0,0);
   const pixel=ctx.getImageData(Math.floor(canvas.width/2),Math.floor(canvas.height/2),1,1).data;
   const greenPixel=pixel[1]>pixel[0]+30&&pixel[1]>pixel[2]+30;
-  result={success:!chromiumCalled&&greenPixel&&stats.some(s=>s.framesDecoded>5),chromiumCalled,greenPixel,width:video.videoWidth,height:video.videoHeight,stats:stats.map(s=>({framesDecoded:s.framesDecoded,framesPerSecond:s.framesPerSecond,decoderImplementation:s.decoderImplementation}))};
+  result={success:!chromiumCalled&&greenPixel&&stats.some(s=>s.framesDecoded>5),chromiumCalled,greenPixel,transport:bridge.transport,sent:{width:sent?.frameWidth,height:sent?.frameHeight,fps:sent?.framesPerSecond,frames:sent?.framesEncoded,encoder:sent?.encoderImplementation,limitation:sent?.qualityLimitationReason},width:video.videoWidth,height:video.videoHeight,stats:stats.map(s=>({framesDecoded:s.framesDecoded,framesPerSecond:s.framesPerSecond,decoderImplementation:s.decoderImplementation}))};
 } catch(e){log(e.stack);result={success:false,error:e.stack};}
 finally {clearTimeout(deadline);clearInterval(animation);a.close();b.close();await bridge.stop();await native('captureTestResult',result);}

@@ -226,7 +226,11 @@ export class RtcRoom extends EventTarget {
     const requested = this.subscribers.find(s => s.subscriptionId === peer.key);
     parameters.encodings[0].maxFramerate = Math.min(suggestion?.fps ?? this.config.fps, this.config.fps, requested?.fps ?? 60);
     parameters.encodings[0].scaleResolutionDownBy = Math.max(suggestion?.scale ?? 1, requested ? this.config.height / requested.height : 1, 1);
+    const encoding = parameters.encodings[0];
+    const signature = [encoding.maxBitrate, encoding.maxFramerate, encoding.scaleResolutionDownBy, parameters.degradationPreference].join(':');
+    if (peer.appliedEncoding === signature) return;
     await sender.setParameters(parameters);
+    peer.appliedEncoding = signature;
   }
   async measure() {
     if (this.statsBusy) return;
