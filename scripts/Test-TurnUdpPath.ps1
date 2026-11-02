@@ -34,7 +34,7 @@ function Same-Mac([string]$A,[string]$B) {
 }
 $TicketPath=[IO.Path]::GetFullPath($TicketPath)
 if (!$ReportPath) { $ReportPath=Join-Path $env:LOCALAPPDATA ('StreamRoom/NetworkDiagnostics/udp-' + $Mode.ToLower() + '-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '.json') }
-$sockets=@();$results=@();$count=0
+$sockets=@();$results=@();$count=0;$key=$null
 try {
     if($Mode -eq 'Listen') {
         $Ports=@($Ports | Select-Object -Unique)

@@ -21,6 +21,8 @@ Evidências locais obtidas:
 
 Abra PowerShell no repositório e execute:
 
+Os testes locais foram executados no PowerShell 7 disponível neste PC. A execução por arquivo no Windows PowerShell 5.1 foi bloqueada pela política local; essa política não foi alterada nem contornada. Se o computador do amigo bloquear scripts, peça ao responsável uma forma autorizada de executá-los; não desative proteções globais para esse diagnóstico.
+
 ```powershell
 ./scripts/Get-TurnHostReadiness.ps1
 ```
