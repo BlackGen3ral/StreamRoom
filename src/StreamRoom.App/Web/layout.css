@@ -53,6 +53,8 @@
 .app-shell .player-card { border:0; border-radius:7px; }
 .app-shell .stream-grid>.stream-card:only-child .player-card { max-height:clamp(260px,45vh,540px); }
 .app-shell .stream-controls { gap:5px; margin-top:12px; }
+.app-shell .stream-controls { opacity:.78; transition:opacity .16s ease; }
+.app-shell .stream-card:hover .stream-controls,.app-shell .stream-card:focus-within .stream-controls { opacity:1; }
 .app-shell .stream-controls button,.app-shell .stream-controls select { font-size:11px; padding:7px 8px; }
 .app-shell .stream-card>.fine { line-height:1.65; margin-bottom:0; }
 .app-shell .stream-card:fullscreen { border:0; border-radius:0; }
@@ -108,3 +110,40 @@
   .settings-tabs button { flex:1; text-align:center; }
   .settings-heading,.settings-content { padding:20px; }
 }
+
+/* Home: the entry flow has its own space; the stage is reserved for screens. */
+.app-shell:not(.in-room) #roomPanel,.app-shell:not(.in-room) .participant-panel,.app-shell:not(.in-room) .stage-title,.app-shell:not(.in-room) .capture-launch,.app-shell:not(.in-room) #playerEmpty { display:none; }
+.app-shell.in-room .lobby,.app-shell.in-room .sidebar-welcome { display:none; }
+.sidebar-welcome { padding:4px 0 20px; border-bottom:1px solid var(--border); }
+.sidebar-kicker { color:#7f8aa1; font-size:9px; letter-spacing:1.4px; }
+.sidebar-welcome strong { display:block; font-size:16px; font-weight:550; line-height:1.5; margin:14px 0 10px; }
+.sidebar-welcome p { font-size:12px; color:#8e9ab0; line-height:1.8; margin:0; }
+.lobby { max-width:1000px; margin:auto; animation:panel-enter .18s ease-out; }
+.lobby-intro { position:relative; padding:16px 190px 22px 0; }
+.lobby-kicker { color:#a69fdb; letter-spacing:1.5px; font-size:9px; font-weight:600; }
+.lobby-intro h1 { max-width:540px; margin:15px 0 12px; font-size:clamp(26px,3vw,38px); letter-spacing:-1.1px; line-height:1.18; font-weight:600; }
+.lobby-intro p { max-width:480px; margin:0; color:#959fb2; font-size:13px; line-height:1.8; }
+.lobby-visual { position:absolute; width:170px; right:0; top:20px; color:#767098; }
+.lobby-visual svg { fill:#1d202d; stroke:currentColor; stroke-width:1.5; }
+.lobby-visual path { fill:none; stroke:#b2a6ed; stroke-linecap:round; stroke-linejoin:round; }
+.lobby-identity { max-width:350px; margin:2px 0 22px; }
+.lobby-identity label { font-size:11px; margin:0 0 9px; color:#a5afc1; }
+.lobby-identity input { background:#171b24; border-color:#343b4b; height:42px; }
+.lobby-actions { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+.lobby-actions>section { display:flex; flex-direction:column; min-width:0; padding:23px; background:#191d27; border:1px solid #303646; border-radius:12px; }
+.lobby-actions .lobby-create { border-color:#48415e; background:#201f2e; }
+.lobby-step { color:#8b96ae; font-size:9px; letter-spacing:1.2px; }
+.lobby-actions h2 { font-size:18px; margin:15px 0 10px; letter-spacing:-.3px; }
+.lobby-actions p { color:#99a4ba; font-size:12px; line-height:1.7; max-width:280px; margin:0 0 22px; }
+.app-shell .lobby-actions #create { margin-top:auto; height:42px; display:flex; align-items:center; justify-content:space-between; }
+.app-shell .lobby-actions #invite { min-height:66px; padding:11px; font-size:11px; margin:0 0 12px; background:#121721; border-color:#363e4f; }
+.lobby-actions .row { margin-top:auto; }
+.app-shell .lobby-actions #join { background:#292f40; border-color:#404b64; }
+.app-shell .lobby-actions #join:hover { background:#343c52; }
+.app-shell .lobby-actions button { min-height:40px; }
+.app-shell .lobby~.support-row { margin-top:24px; }
+.app-shell .settings-content,.app-shell dialog[open] { animation:panel-enter .16s ease-out; }
+@keyframes panel-enter { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+@media(max-width:1100px) { .lobby-intro { padding-right:100px; }.lobby-visual { width:110px; top:42px; }.lobby-intro h1 { font-size:30px; }.lobby-actions>section { padding:18px; } }
+@media(max-width:760px) { .lobby-intro { padding:6px 0 22px; }.lobby-visual { display:none; }.lobby-actions { grid-template-columns:1fr; }.lobby-identity { max-width:none; }.sidebar-welcome { display:none; } }
+@media(prefers-reduced-motion:reduce) { .app-shell *, .app-shell dialog[open] { animation:none !important; transition:none !important; } }
