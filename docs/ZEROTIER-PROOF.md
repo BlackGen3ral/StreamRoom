@@ -14,13 +14,48 @@ O resultado foi reproduzido em duas execuções locais. Na execução registrada
 
 O modo Tailscale já ativado nas configurações deste PC configurava flags de múltiplas rotas e mDNS no WebView2. Mesmo nesse modo, a descoberta não identificou o IP atribuído ao ZeroTier. Não atribuir automaticamente a falha à rede ZeroTier ou ao firewall: há restrições de enumeração no motor a investigar.
 
+## Comparação autorizada: permissão e descoberta da interface
+
+O proprietário autorizou **somente um diagnóstico isolado** com permissão temporária de câmera, sem chamar a câmera, capturar imagens ou mudar as permissões da versão instalada. O script copiou os fontes para um diretório temporário, modificou apenas essa cópia, compilou e criou outro perfil WebView2 descartável.
+
+Resultado observado no WebView2 `156.0.4314.58`, com a mesma rede privada autorizada e as mesmas flags de rede:
+
+| Diagnóstico | Câmera durante descoberta | Microfone | Candidatos ZeroTier |
+| --- | --- | --- | --- |
+| Base, sem mudar permissões | `prompt` | `prompt` | 0 |
+| Cópia temporária autorizada | `granted` | `prompt` | 2: um UDP e um TCP |
+
+A execução com revogação verificada registrou `permissionAfterTest: denied`. O perfil, os binários e os fontes temporários foram removidos ao terminar. Nenhum `getUserMedia` foi chamado; a câmera e o microfone não foram capturados. O relatório de comparação não contém IPs, Network ID, SDP, tokens ou identidade privada.
+
+O teste com permissão recolheu os candidatos antes do limite local de 20 segundos; o estado geral ainda era `gathering`. Isso não deve ser descrito como descoberta completa, negociação bem-sucedida ou transmissão estabelecida. A execução inicial e as repetições mostraram os mesmos dois candidatos ZeroTier. Os builds temporários passaram sem avisos/erros.
+
+**Conclusão limitada:** a permissão de mídia alterou causalmente a disponibilidade da interface ZeroTier neste ambiente. Há um impedimento concreto na descoberta atual do motor, além de quaisquer restrições de NAT que os usuários possam ter. Não foi comprovado que esse seja o único impedimento da conexão entre casas.
+
+## Alternativa diagnosticada sem permissão de câmera/microfone
+
+Foi testado um contexto de extensão local **somente no perfil descartável**, usando `AreBrowserExtensionsEnabled` e `AddBrowserExtensionAsync`, APIs do WebView2. O manifesto é criado pelo próprio diagnóstico, sem permissões adicionais e sem extensão de terceiros. Nenhuma extensão é instalada no Edge, Chrome ou StreamRoom de uso normal. A origem aceita pela ponte nativa temporária é restrita ao identificador efetivamente retornado pela API.
+
+Na execução de 2026-11-02T08:12:32Z, esse contexto encontrou **dois candidatos ZeroTier reais (UDP e TCP)** com câmera e microfone em `prompt`, sem conceder essas permissões. O teste inicial herdou as flags de rede já habilitadas nas configurações Tailscale; a opção de diagnóstico foi depois ajustada para desligar essas flags **apenas na cópia temporária**, sem alterar o arquivo de configurações do proprietário. Não tratar a integração antiga como dependência do novo caminho.
+
+A repetição em **2026-11-02T08:26:56Z**, com `existingTailscaleFlagsEnabled=false`, também encontrou dois candidatos ZeroTier reais, câmera/microfone em `prompt` e nenhum erro. Portanto, o resultado local da extensão não depende das flags Tailscale neste PC.
+
+Também foi executado um teste local de compatibilidade da captura existente nesse contexto. O WGC capturou apenas a própria janela de teste; `WgcStream` entregou os frames a um par WebRTC no mesmo PC. Resultado de 2026-11-02: **181 frames decodificados, 30 FPS, 1102×720, `video-frame-track`, `chromiumCalled=false`, marcador visual verificado e câmera/microfone em `prompt`**. O tamanho corresponde à proporção da janela de teste; não afirmar que houve transmissão 1280×720 entre casas. Os fontes de captura no checkout não foram alterados.
+
+A repetição final, registrada em `zerotier-ice-20261102-082806.json`, também passou sem as flags Tailscale: **182 frames decodificados e 30 FPS**, com as mesmas dimensões e permissões. Áudio e mídia entre casas continuam marcados como `NOT_TESTED`.
+
+Esse teste de compatibilidade **não mede a rota ZeroTier**, desempenho entre provedores ou funcionamento de áudio. Seu objetivo é verificar se a captura atual pode ser usada nesse contexto. Ainda são necessários áudio, negociação e par selecionado sobre ZeroTier entre dois computadores de casas diferentes.
+
+Durante a preparação desse teste houve timeouts causados por um caminho passado incorretamente pelo script, não por uma falha comprovada da captura. Os argumentos foram corrigidos e o teste de compatibilidade passou. A revisão automática bloqueou uma tentativa de limpar pastas temporárias de execuções antigas; esses resíduos ficaram no disco. A última execução concluída descartou seu próprio perfil. Não confundir esses resíduos com as permissões da versão instalada.
+
 ## Limitação técnica a resolver antes da arquitetura
 
-O código Chromium de `FilteringNetworkManager` começa bloqueando a enumeração das interfaces e consulta permissões de mídia. A seleção da política `default` e a desativação de mDNS não equivalem, por si só, a confirmar acesso a todas as interfaces. Essa relação é uma hipótese sustentada pelo código do motor; a causa exata no WebView2 instalado ainda não foi isolada.
+O código Chromium de `FilteringNetworkManager` começa bloqueando a enumeração das interfaces e consulta permissões de mídia. A seleção da política `default` e a desativação de mDNS não equivalem, por si só, a acesso a todas as interfaces. O resultado comparativo acima é consistente com esse controle no motor. A documentação de `SetPermissionStateAsync` confirma que permissões persistem no perfil até serem alteradas; por isso o diagnóstico revoga explicitamente a permissão e descarta o perfil.
 
-Não foram concedidas permissões de câmera ou microfone para contornar a enumeração, nem ativado qualquer dispositivo de captura. Não foram inventados candidatos, substituídos IPs/portas, adicionados relay/TURN, alteradas rotas de internet ou modificado o motor de captura.
+**Não aplicar automaticamente a permissão de câmera ao app final.** A autorização do proprietário se limita ao diagnóstico. Não ativar câmera ou microfone para resolver conectividade. Não inventar candidatos, substituir IPs/portas, adicionar relay/TURN ou alterar rotas da internet.
 
-Próximo passo técnico: identificar uma configuração suportada que permita ao WebRTC obter candidatos reais da interface, sem conceder permissões alheias ao compartilhamento. Se isso exigir ponte nativa, troca de motor ou mudança de permissões de privacidade, explicar a alteração ao proprietário antes de implementá-la. Não reconstruir a arquitetura nem apresentar um instalador como solução já funcional.
+O contexto local de extensão acima é uma alternativa comprovada apenas para descoberta e compatibilidade local de vídeo. Adotá-lo no aplicativo muda sua origem de execução; é preciso verificar CSP, ponte nativa, áudio, dados do perfil, atualização e captura compatível antes de aprová-lo como arquitetura final. O proprietário foi informado da mudança de contexto antes do diagnóstico; isso não autoriza transferir a permissão temporária de câmera para o app final.
+
+Ainda não foi validada uma API específica de enumeração no contexto HTTPS atual. Se a solução exigir ponte nativa adicional, outro motor ou mudança de permissões de privacidade, explicar a alteração ao proprietário antes de implementá-la. Não reconstruir a arquitetura nem apresentar um instalador como solução já funcional.
 
 ## Licença: agente, pacote oficial e SDK são coisas diferentes
 
@@ -54,11 +89,15 @@ Com ZeroTier já instalado e autorizado na rede privada, em PowerShell 7:
 
 Esse script não instala software nem entra em redes: consulta a CLI oficial, exige rede privada autorizada, compila o app atual e roda a descoberta em uma cópia privada temporária. A página temporária conhece os endereços atribuídos apenas para compará-los com os candidatos reais. Remove essa página ao terminar. O relatório exportado contém contagens, tipos de candidatos, estado da rede, versão e permissões consultadas; não contém IP, Network ID, nome da rede, identidade, tokens, SDP ou convite.
 
+Somente após autorização explícita para o diagnóstico, acrescentar `-TemporaryCameraPermission` para a comparação. Essa opção concede câmera apenas ao perfil descartável de teste, consulta a permissão, descobre candidatos reais, revoga e consulta novamente. Não captura câmera/microfone. O script remove os diretórios temporários após conferir que cada alvo é um filho direto do diretório temporário do Windows com o nome exclusivo do teste. A opção não modifica os fontes do aplicativo no checkout nem as permissões do aplicativo instalado.
+
+Para testar a alternativa sem conceder câmera/microfone, acrescentar `-ExtensionContext` em vez de `-TemporaryCameraPermission`. Para a compatibilidade local de vídeo, usar `-ExtensionContext -CaptureBridgeSmokeTest`. Este último captura a própria janela de teste e valida frames decodificados; o relatório deve indicar `success: true`, `chromiumCalled: false` e câmera/microfone em `prompt`. Ele não testa áudio, rede entre casas nem comprova o uso do ZeroTier pelo par ICE local. As duas opções de contexto/permissão são mutuamente exclusivas.
+
 O resultado `zeroTierCandidates > 0` seria apenas um pré-requisito local. Zero candidatos exige investigação antes de prometer o funcionamento. Nenhum resultado desse script aprova a conexão audiovisual entre casas.
 
 ## Validação exigida e pendências
 
-1. Resolver a descoberta da interface no WebRTC sem mudança de arquitetura não explicada.
+1. Resolver a descoberta da interface no WebRTC sem mudança de arquitetura não explicada e sem aplicar a permissão de diagnóstico ao app final. A hipótese de bloqueio por permissão foi reproduzida; a solução de produção ainda está pendente.
 2. Resolver o direito de embalagem/distribuição do instalador oficial. Depois disso, preparar um único instalador experimental StreamRoom que ofereça o cliente oficial com consentimento/UAC, preserve avisos e valide assinatura.
 3. Mostrar instalado/desconectado/aguardando autorização/conectado com base no serviço e na rede configurada. Configurar adesão de forma explícita, sem rotas padrão nem DNS da rede privada. Não expor a credencial administrativa local nem a conta Central ao WebView2.
 4. O proprietário autoriza os dois dispositivos; o amigo não faz cadastro Central. O teste precisa usar computadores de duas casas, com provedores/redes distintos.
@@ -78,3 +117,6 @@ Referências primárias:
 - https://docs.zerotier.com/enterprise-deployment/
 - https://docs.zerotier.com/cli/
 - https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/platform/p2p/filtering_network_manager.cc
+- https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2profile.setpermissionstateasync
+- https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2profile.addbrowserextensionasync
+- https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2environmentoptions.arebrowserextensionsenabled
