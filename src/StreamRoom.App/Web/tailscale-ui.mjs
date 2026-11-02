@@ -1,36 +1,66 @@
 export function createTailscaleUi(native, rtc, save, isConnected, message) {
   const $ = id => document.getElementById(id);
   let busy = false, latest = null, webRtcReady = false;
+  const peerRows = new Map();
   const labels = { direct: 'Direta', relay: 'Relay', disconnected: 'Desconectada', idle: 'Aguardando tráfego', unknown: 'Verificando rota' };
+  const setup = $('tailscaleSetupDialog');
+  const openSetup = () => { if (!setup.open) setup.showModal(); };
+  $('tailscaleSetup').addEventListener('click', openSetup);
+  $('tailscaleEmptyInvite').addEventListener('click', openSetup);
+  for (const id of ['tailscaleSetupClose', 'tailscaleSetupDone']) $(id).addEventListener('click', () => setup.close());
+  setup.addEventListener('pointerdown', e => {
+    if (e.target !== setup) return;
+    const rect = setup.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) setup.close();
+  });
   function update(value) {
     latest = value.status; webRtcReady = value.webRtcReady;
     const enabled = $('tailscaleEnabled').checked;
     rtc.setTailscale(latest, enabled && webRtcReady);
-    $('tailscaleStatus').textContent = !latest.installed ? 'Não instalado' : latest.connected ? 'Conectado à rede privada' : latest.state === 'Unavailable' ? 'Não foi possível consultar. Abra o Tailscale.' : latest.state === 'NeedsLogin' ? 'Entre com sua conta no Tailscale' : latest.state === 'NeedsMachineAuth' ? 'Aguardando aprovação na rede privada' : 'Desconectado · abra o Tailscale';
+    const status = !latest.installed ? 'Não instalado' : latest.connected ? 'Conectado' : latest.state === 'Unavailable' ? 'Status indisponível' : latest.state === 'NeedsLogin' ? 'Aguardando login' : latest.state === 'NeedsMachineAuth' ? 'Aguardando aprovação' : 'Desconectado';
+    $('tailscaleStatus').textContent = status;
+    $('tailscaleSetupStatus').textContent = status;
+    $('tailscaleDot').dataset.state = latest.connected ? 'connected' : 'disconnected';
+    $('tailscaleSetup').textContent = latest.connected ? 'Conectar amigos' : 'Configurar Tailscale';
+    $('tailscaleModeHint').textContent = isConnected() ? 'Saia da sala para alterar' : enabled !== webRtcReady ? 'Reinício necessário' : enabled ? 'Ativa nas próximas conexões' : 'Para conectar com amigos';
     $('tailscaleInstall').hidden = latest.installed;
     $('tailscaleOpen').hidden = !latest.installed;
-    $('tailscaleRestart').hidden = enabled === webRtcReady;
     $('tailscaleRestartHint').hidden = enabled === webRtcReady;
     $('tailscaleRestart').disabled = isConnected() || busy;
     $('tailscaleEnabled').disabled = isConnected() || busy;
-    $('tailscalePeers').replaceChildren(...latest.peers.map(peer => {
-      const row = document.createElement('li'), name = document.createElement('span');
-      name.textContent = (peer.name || 'Computador') + ' · ' + labels[peer.route]; row.append(name);
-      if (peer.online) {
-        const probe = document.createElement('button'); probe.className = 'quiet'; probe.textContent = 'Testar'; probe.disabled = busy;
-        probe.addEventListener('click', () => run(async () => update(await native('tailscaleProbe', { address: peer.addresses[0] })))); row.append(probe);
+    const active = new Set(latest.peers.map(p => p.addresses[0]));
+    for (const [key, row] of peerRows) if (!active.has(key)) { row.root.remove(); peerRows.delete(key); }
+    for (const peer of latest.peers) {
+      const key = peer.addresses[0];
+      let row = peerRows.get(key);
+      if (!row) {
+        const root = document.createElement('li'), avatar = document.createElement('span'), info = document.createElement('div'), name = document.createElement('strong'), route = document.createElement('span'), probe = document.createElement('button');
+        avatar.className = 'tail-peer-avatar'; info.className = 'tail-peer-info'; route.className = 'tail-peer-route';
+        probe.className = 'quiet tail-peer-test'; probe.textContent = 'Testar';
+        probe.addEventListener('click', () => run(async () => update(await native('tailscaleProbe', { address: key }))));
+        info.append(name, route); root.append(avatar, info, probe); $('tailscalePeers').append(root);
+        row = { root, avatar, name, route, probe }; peerRows.set(key, row);
       }
-      return row;
-    }));
+      row.name.textContent = peer.name || 'Computador'; row.name.title = row.name.textContent;
+      row.avatar.textContent = (peer.name || 'PC').slice(0, 2).toUpperCase();
+      row.route.textContent = labels[peer.route] ?? labels.unknown; row.route.dataset.route = peer.route;
+      row.probe.hidden = !peer.online; row.probe.disabled = busy;
+      row.probe.setAttribute('aria-label', 'Testar conexão com ' + (peer.name || 'computador'));
+    }
+    $('tailscaleDeviceSection').hidden = !latest.connected && !latest.peers.length;
+    $('tailscalePeerCount').textContent = String(latest.peers.length);
     $('tailscaleNoPeers').hidden = !latest.connected || latest.peers.length > 0;
   }
   async function refresh() { update(await native('tailscaleStatus')); }
   async function run(action) {
     if (busy) return; busy = true;
+    $('tailscalePanel').setAttribute('aria-busy', 'true');
+    for (const row of peerRows.values()) row.probe.disabled = true;
     for (const id of ['tailscaleInstall','tailscaleOpen','tailscaleRefresh','tailscaleInvitations','tailscaleEnabled','tailscaleRestart']) $(id).disabled = true;
     try { await action(); } catch (e) { message(e.message, true); }
     finally {
       busy = false;
+      $('tailscalePanel').setAttribute('aria-busy', 'false');
       for (const id of ['tailscaleInstall','tailscaleOpen','tailscaleRefresh','tailscaleInvitations']) $(id).disabled = false;
       if (latest) update({ status: latest, webRtcReady });
     }

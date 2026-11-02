@@ -19,15 +19,12 @@
     <label for="server">Servidor de sinalização</label><input id="server" value="https://streamroom.arthostudio.com" spellcheck="false">
     <p class="fine">STUN gratuito, sem TURN pago. A opção Tailscale pode usar a retransmissão gratuita da rede privada. A sala é renovada automaticamente enquanto o criador permanece conectado.</p></details>
   </details>
-  <details class="card" id="tailscalePanel"><summary>Conectar com Tailscale <span class="muted">· opcional</span></summary>
-    <p id="tailscaleStatus" class="fine" role="status" aria-live="polite">Verificando instalação…</p>
-    <label class="checkbox"><input id="tailscaleEnabled" type="checkbox"> Preferir minha rede Tailscale</label>
-    <p class="fine" id="tailscaleRestartHint" hidden>Saia da sala e reinicie para aplicar. Este modo permite ao WebRTC anunciar endereços locais reais aos participantes da sala.</p>
-    <button id="tailscaleRestart" class="wide" hidden>Reiniciar para aplicar</button>
-    <div class="row"><button id="tailscaleInstall" hidden>Instalar Tailscale…</button><button id="tailscaleOpen" hidden>Abrir Tailscale</button><button id="tailscaleRefresh" class="quiet">Atualizar</button></div>
-    <details><summary>Conectar seus amigos</summary><ol class="fine"><li>Cada pessoa instala o Tailscale e entra com sua própria conta pessoal, no plano gratuito.</li><li>Uma pessoa abre os convites da rede privada e envia o link aos amigos. Cada amigo aceita no navegador, com sua própria conta. O convite Tailscale é diferente do convite da sala.</li><li>Com os PCs na mesma rede privada, ativem a preferência acima, reiniciem o StreamRoom e entrem na sala normalmente.</li></ol><button id="tailscaleInvitations" class="quiet">Gerenciar convites no navegador</button></details>
-    <ul id="tailscalePeers" class="tailscale-peers"></ul><p class="fine" id="tailscaleNoPeers" hidden>Nenhum amigo detectado. Confirme que aceitaram o convite e conectaram seus PCs à mesma rede privada.</p>
-    <p class="fine">Direta é a melhor rota para 1080p60. Relay pode ter menor velocidade; a taxa de quadros depende da rede e do PC. Sem exit node e sem TURN pago.</p>
+  <details class="card" id="tailscalePanel"><summary>Rede privada <span class="tail-optional">Opcional</span></summary>
+    <div class="tail-status-row"><div class="tail-connection"><span class="tail-dot" id="tailscaleDot" aria-hidden="true"></span><div><strong>Tailscale</strong><span id="tailscaleStatus" role="status" aria-live="polite">Verificando…</span></div></div><button id="tailscaleRefresh" class="quiet tail-refresh" aria-label="Atualizar status do Tailscale" title="Atualizar status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 11-1l3 3M4 15l3 3a7 7 0 0 0 11-1"/></svg></button></div>
+    <label class="tail-switch"><span>Preferir esta rede<span class="tail-switch-hint" id="tailscaleModeHint">Para conectar com amigos</span></span><input id="tailscaleEnabled" type="checkbox" role="switch"><span class="tail-switch-track" aria-hidden="true"></span></label>
+    <div class="tail-restart" id="tailscaleRestartHint" hidden><p>Reinicie para aplicar a alteração.</p><button id="tailscaleRestart" class="wide">Reiniciar StreamRoom</button></div>
+    <button id="tailscaleSetup" class="tail-setup wide">Conectar amigos</button>
+    <div id="tailscaleDeviceSection" hidden><div class="tail-list-heading"><span>Na rede privada</span><span id="tailscalePeerCount">0</span></div><ul id="tailscalePeers" class="tailscale-peers"></ul><div id="tailscaleNoPeers" class="tail-empty" hidden><span>Nenhum amigo conectado ainda.</span><button id="tailscaleEmptyInvite" class="quiet">Como convidar</button></div></div>
   </details>
 <div class="sidebar-presence"><span id="profileAvatar" class="avatar">V</span><div><strong id="profileName">Você</strong><span id="profileStatus">Pronto para entrar</span></div><span class="presence-dot" aria-hidden="true"></span></div><p class="tray-note">Ao fechar a janela, o StreamRoom continua na bandeja.</p></aside><main id="stage">
   <div class="stage-title"><div><span class="eyebrow" id="roomState">TELA COMPARTILHADA</span><h1 id="title">Transmissões</h1></div><span id="directStatus" class="muted">Conexão direta</span></div>
@@ -52,5 +49,16 @@
   <p class="fine">A captura solicita ao Windows o modo sem borda. Se aparecer uma solicitação, autorize para remover o contorno amarelo.</p>
   <div class="picker-audio"><label for="nativeAudio">Áudio da transmissão</label><select id="nativeAudio"><option value="none">Sem áudio</option><option value="system">Todo o som do computador</option></select><p class="fine">Áudio do sistema inclui Discord e outras transmissões. Para áudio isolado da janela, feche este seletor e use Modo compatível.</p></div>
   <div class="picker-footer"><p class="fine">Você pode parar de compartilhar a qualquer momento.</p><button id="confirmCapture" class="primary" disabled>Compartilhar agora</button></div>
+</dialog>
+<dialog id="tailscaleSetupDialog" class="tail-dialog" aria-labelledby="tailscaleSetupTitle" aria-describedby="tailscaleSetupDescription">
+  <div class="tail-dialog-heading"><div><span class="tail-kicker">REDE PRIVADA</span><h2 id="tailscaleSetupTitle">Conecte seus amigos</h2></div><button id="tailscaleSetupClose" class="quiet tail-close" aria-label="Fechar configuração do Tailscale">✕</button></div>
+  <p id="tailscaleSetupDescription" class="tail-dialog-intro">Configure uma vez. Depois, entrem na sala como de costume.</p>
+  <ol class="tail-steps">
+    <li><span class="tail-step-number" aria-hidden="true">1</span><div><h3>Entre no Tailscale</h3><p>Cada pessoa usa sua própria conta, no plano pessoal gratuito.</p><div class="tail-step-actions"><button id="tailscaleInstall" class="primary" hidden>Instalar Tailscale…</button><button id="tailscaleOpen" hidden>Abrir Tailscale</button><span id="tailscaleSetupStatus" class="tail-step-status" role="status"></span></div></div></li>
+    <li><span class="tail-step-number" aria-hidden="true">2</span><div><h3>Convide para a rede privada</h3><p>Uma pessoa cria o convite no painel do Tailscale e envia o link. Os amigos aceitam pelo navegador com suas próprias contas.</p><button id="tailscaleInvitations">Abrir painel de convites <span aria-hidden="true">↗</span></button><p class="tail-step-note">Esse convite conecta os computadores. O convite do StreamRoom continua sendo usado para entrar na sala.</p></div></li>
+    <li><span class="tail-step-number" aria-hidden="true">3</span><div><h3>Ative no StreamRoom</h3><p>Nos dois PCs, marque <strong>Preferir esta rede</strong> na lateral e reinicie o StreamRoom. Depois, crie ou entre na sala.</p><p class="tail-step-note">Ao ativar, seus endereços locais ficam visíveis aos participantes da sala.</p></div></li>
+  </ol>
+  <details class="tail-connection-info"><summary>Sobre a qualidade da conexão</summary><p>Direta oferece menor latência. Relay pode ajudar quando a conexão direta falha, mas pode ter menor velocidade. 1080p60 depende da rede e dos computadores.</p></details>
+  <div class="tail-dialog-footer"><span>Suas senhas e tokens ficam no Tailscale.</span><button id="tailscaleSetupDone" class="primary">Entendi</button></div>
 </dialog>
 </body></html>

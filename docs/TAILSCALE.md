@@ -6,11 +6,11 @@ Integração preparada para teste entre amigos. **A conexão audiovisual Tailsca
 
 ## Uso
 
-1. Nos dois PCs, atualize o StreamRoom e abra **Conectar com Tailscale** na lateral.
-2. O app detecta o cliente e consulta o estado. Se necessário, escolha **Instalar Tailscale…**. Uma confirmação nativa aparece antes do download; o Windows solicita elevação para instalar. Cancelar mantém o app funcionando normalmente.
+1. Nos dois PCs, atualize o StreamRoom e abra **Rede privada** na lateral.
+2. O painel mostra o estado e a preferência de rede. Em **Conectar amigos** (ou **Configurar Tailscale**, se ainda não conectado), há um guia em três passos. Se necessário, escolha **Instalar Tailscale…** nesse guia. Uma confirmação nativa aparece antes do download; o Windows solicita elevação para instalar. Cancelar mantém o app funcionando normalmente.
 3. Cada pessoa abre o Tailscale e entra com sua própria conta pessoal. Escolha o plano **Personal gratuito**. Não compartilhe senha, auth key, tokens nem a conta do dono da rede.
-4. Uma pessoa usa **Gerenciar convites no navegador**, cria o convite de usuário pelo painel oficial e envia o link ao amigo. O amigo aceita com sua própria conta e conecta o PC à mesma rede privada. O StreamRoom não gera, envia, armazena nem lê esse convite. O convite de sala StreamRoom continua separado.
-5. Ative **Preferir minha rede Tailscale**, saia da sala e use **Reiniciar para aplicar**. Faça isso nos dois PCs. Mudanças nessa opção exigem reinício para reconfigurar o WebView2.
+4. Uma pessoa usa **Conectar amigos → Abrir painel de convites**, cria o convite de usuário pelo painel oficial e envia o link ao amigo. O amigo aceita com sua própria conta e conecta o PC à mesma rede privada. O StreamRoom não gera, envia, armazena nem lê esse convite. O convite de sala StreamRoom continua separado.
+5. Ative **Preferir esta rede**, saia da sala e use **Reiniciar StreamRoom**. Faça isso nos dois PCs. Mudanças nessa opção exigem reinício para reconfigurar o WebView2.
 6. Confira o amigo na lista e escolha **Testar** para estimular a tentativa de rota direta. Crie/entre na sala e compartilhe normalmente. Para 1080p60, configure a captura e a recepção; os dois controles têm limites próprios.
 
 O app não configura exit nodes, rotas de sub-redes, regras de firewall, controle da rede, assinaturas, serviços TURN ou cobrança. Autenticação e convites acontecem nos aplicativos e sites oficiais. O plano gratuito e suas condições pertencem à Tailscale e podem mudar; não há promessa de disponibilidade ou desempenho ilimitado.
