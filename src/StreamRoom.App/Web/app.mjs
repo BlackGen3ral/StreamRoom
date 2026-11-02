@@ -66,7 +66,7 @@ function createCard(id, streamId) {
   card.frame.append(card.video, card.empty, card.play);
   const controls = node('div', 'stream-controls');
   card.watch = button(own ? 'Parar minha transmissão' : 'Assistir', () => busy(async () => {
-    if (own) { await rtc.stopCapture(); status('Sua transmissão parou. As demais continuam.'); return; }
+    if (own) { await rtc.stopCapture(); status(''); return; }
     card.failure = null;
     const watching = rtc.subscriptions.some(s => s.publisherId === id);
     await rtc.watch(id, !watching, quality(card).height, quality(card).fps);
@@ -418,7 +418,7 @@ $('leave').addEventListener('click', () => busy(async () => { await rtc.leave();
 const capturePicker = createCapturePicker(native, rtc, options, status);
 $('start').addEventListener('click', () => capturePicker.open());
 $('startCompatible').addEventListener('click', () => busy(() => rtc.startCapture(options())));
-$('stop').addEventListener('click', () => busy(async () => { await rtc.stopCapture(); status('Sua transmissão parou. As demais continuam.'); }));
+$('stop').addEventListener('click', () => busy(async () => { await rtc.stopCapture(); status(''); }));
 $('updateButton').addEventListener('click', checkUpdates);
 $('installUpdate').addEventListener('click', () => busy(async () => {
   if (state.connected) throw Error('Saia da sala antes de atualizar.');
