@@ -88,9 +88,10 @@ function renderStreams() {
     const stream = card.own ? rtc.localStream : watched && remoteStreams.get(p.id)?.streamId === p.streamId ? remoteStreams.get(p.id).stream : null;
     if (card.video.srcObject !== stream) {
       card.video.srcObject = stream; card.play.hidden = true;
-      if (stream) card.video.play().catch(() => { card.play.hidden = false; });
+      if (stream) card.video.play().catch(() => { card.play.hidden = card.video.srcObject !== stream || Boolean(card.failure); });
     }
-    card.empty.hidden = Boolean(stream && card.video.readyState >= 2 && card.video.videoWidth > 0);
+    card.empty.hidden = !card.failure && Boolean(stream && card.video.readyState >= 2 && card.video.videoWidth > 0);
+    if (card.failure) card.play.hidden = true;
     card.empty.textContent = card.own ? 'Prévia local sem som' : card.failure ? card.failure : watched ? 'Conectando com seu amigo… O vídeo aparece quando a conexão estiver pronta.' : 'Escolha Assistir para receber esta gameplay.';
     card.watch.textContent = card.own ? 'Parar minha transmissão' : watched ? 'Parar de assistir' : 'Assistir';
     card.retry.hidden = card.own || !watched; card.retry.disabled = state.busy;
@@ -174,7 +175,7 @@ rtc.addEventListener('notice', e => status(e.detail));
 rtc.addEventListener('connectionError', ({ detail }) => {
   const name = state.participants.find(p => p.id === detail.id)?.name ?? 'Participante';
   const card = cards.get(detail.id);
-  if (card && !card.own) { card.failure = detail.message; card.empty.hidden = false; card.empty.textContent = detail.message; card.metrics.textContent = 'Conexão não estabelecida. Use Reconectar para tentar novamente.'; }
+  if (card && !card.own) { card.failure = detail.message; card.play.hidden = true; card.empty.hidden = false; card.empty.textContent = detail.message; card.metrics.textContent = 'Conexão não estabelecida. Use Reconectar para tentar novamente.'; }
   status(name + ': ' + detail.message + ' Use Reconectar na transmissão para tentar novamente.', true);
 });
 rtc.addEventListener('capture', ({ detail }) => {
@@ -194,6 +195,7 @@ rtc.addEventListener('stats', ({ detail }) => {
   $('directStatus').textContent = detail.length && detail.every(r => r.direct) ? 'P2P direto confirmado · sem relay' : 'STUN gratuito · aguardando P2P';
   $('stats').replaceChildren(...detail.map(row => {
     const name = state.participants.find(p => p.id === row.id)?.name ?? 'Participante';
+    if (row.failed) return node('p', 'fine', 'Última tentativa com ' + name + ': conexão direta falhou · ICE: ' + row.iceState + ' · descoberta: ' + row.gathering + ' · endereços locais/públicos encontrados: ' + row.candidates.host + '/' + row.candidates.srflx + ' · endereços recebidos do amigo: ' + row.remoteCandidates + ' (públicos: ' + row.remotePublicCandidates + ') · negociação recebida: ' + (row.descriptionReceived ? 'sim' : 'não') + (row.stunError ? ' · houve falha ao consultar STUN' : '') + '. Esses dados permanecem até reconectar ou sair da sala.');
     const text = (row.direction === 'send' ? 'Enviando para ' : 'Recebendo de ') + name + ' · ' + (row.width ? row.width + '×' + row.height : '—') + ' · ' + (row.fps === null ? '—' : Math.round(row.fps)) + ' FPS · ' + (row.bitrate === null ? '—' : row.bitrate.toFixed(2)) + ' Mbps · ' + row.codec + ' · ' + row.route + ' · ICE ' + row.localCandidate + '/' + row.remoteCandidate + ' · ' + row.transport + ' · perda ' + (row.loss * 100).toFixed(1) + '% · RTT ' + (row.rtt === null ? '—' : Math.round(row.rtt) + ' ms') + ' · ' + row.hardware + ' · ICE: ' + (row.iceState ?? row.state) + ' · descoberta: ' + (row.gathering ?? '—') + ' · endereços locais/públicos: ' + (row.candidates?.host ?? 0) + '/' + (row.candidates?.srflx ?? 0) + (row.stunError ? ' · houve falha ao consultar STUN' : '');
     return node('p','fine',text);
   }));
@@ -202,6 +204,7 @@ rtc.addEventListener('stats', ({ detail }) => {
     const rows = detail.filter(r => r.publisherId === card.id);
     if (!card.own && rows.length) {
       const row = rows[0];
+      if (row.failed) { card.play.hidden = true; card.empty.hidden = false; card.empty.textContent = row.message; card.metrics.textContent = 'Conexão direta falhou. O diagnóstico foi preservado em Detalhes da conexão.'; continue; }
       if (row.state !== 'connected') {
         const message = row.elapsed >= 15
           ? 'A conexão está demorando. Tentando uma rota direta entre as redes…'

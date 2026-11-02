@@ -102,3 +102,17 @@ test('manual reconnect replaces only the selected subscription and rejects stale
  await s.room.receiveSignal(s.b,{kind:'offer',streamId:s.incomingId,subscriptionId:request.subscriptionId,session:id(),sdp:'new'});
  assert.equal(s.room.peers.get(request.subscriptionId).pc.remoteDescription.sdp,'new');
 });
+
+test('failed connection diagnostics survive peer disposal and clear on leave', async t => {
+ const s=setup();t.after(()=>s.room.shutdown());s.room.updateRoom(s.state);await settle();
+ const peer=s.room.peers.get(s.send);peer.pc.iceConnectionState='failed';peer.pc.iceGatheringState='complete';
+ peer.candidates.srflx=2;peer.remoteCandidates=3;peer.remotePublicCandidates=1;
+ s.room.attempts.set(s.send,3);let last;
+ s.room.addEventListener('stats',e=>last=e.detail);
+ await s.room.recover(s.send);assert.equal(s.room.peers.has(s.send),false);
+ await s.room.measure();const failure=last.find(r=>r.key===s.send);
+ assert.equal(failure.failed,true);assert.equal(failure.candidates.srflx,2);assert.equal(failure.remoteCandidates,3);
+ assert.equal(failure.gathering,'complete');assert.equal(failure.iceState,'failed');
+ assert.equal('sdp' in failure,false);assert.equal('remoteDescription' in failure,false);
+ await s.room.leave();assert.equal(s.room.failedConnections.size,0);assert.deepEqual(last,[]);
+});

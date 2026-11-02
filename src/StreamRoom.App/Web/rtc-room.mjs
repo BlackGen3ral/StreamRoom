@@ -3,7 +3,7 @@ import { profile, perPeerCap, adapt } from './quality.mjs';
 
 export class RtcRoom extends EventTarget {
   constructor(native) {
-    super(); this.native = native; this.peers = new Map(); this.creating = new Set(); this.attempts = new Map();
+    super(); this.native = native; this.peers = new Map(); this.creating = new Set(); this.attempts = new Map(); this.failedConnections = new Map();
     this.participants = []; this.pending = []; this.identity = null; this.localStream = null; this.run = 0; this.subscriptions = []; this.subscribers = []; this.localId = null;
     this.config = profile(); this.automatic = true; this.statsBusy = false;
     this.timer = setInterval(() => this.measure().catch(error => this.notice(error.message)), 2000);
@@ -28,6 +28,7 @@ export class RtcRoom extends EventTarget {
     this.subscribers = state.subscribers ?? [];
     const valid = new Set([...this.subscriptions, ...this.subscribers].map(s => s.subscriptionId));
     for (const [key, peer] of this.peers) if (!valid.has(key) || !this.validPeer(peer)) this.closePeer(key);
+    for (const key of this.failedConnections.keys()) if (!valid.has(key)) this.failedConnections.delete(key);
     for (const key of this.attempts.keys()) if (!valid.has(key)) this.attempts.delete(key);
     this.ensureViewers();
     this.event('selections', state);
@@ -141,6 +142,7 @@ export class RtcRoom extends EventTarget {
     const pc = new RTCPeerConnection(config), key = sub.subscriptionId;
     const peer = { key, id, streamId: sub.streamId, publisherId: direction === 'send' ? this.identity.participantId : id, direction, session, pc,
       startedAt: performance.now(), candidates: { host: 0, srflx: 0, prflx: 0 }, stunError: false, sent: false, localIce: [], remoteIce: [], last: null, budget: perPeerCap(this.config, this.subscribers.length), healthy: 0, recovery: null };
+    this.failedConnections.delete(key);
     this.peers.set(key, peer);
     const recover = () => this.recover(key).catch(error => this.notice(error.message));
     peer.connectDeadline = setTimeout(() => { if (this.validPeer(peer) && pc.connectionState !== 'connected') void recover(); }, 30_000);
@@ -171,7 +173,21 @@ export class RtcRoom extends EventTarget {
     if (!peer || !this.validPeer(peer)) return;
     clearTimeout(peer.connectDeadline); clearTimeout(peer.recovery); peer.recovery = null;
     const attempts = (this.attempts.get(key) ?? 0) + 1; this.attempts.set(key, attempts);
-    if (attempts > 3) { this.closePeer(key); this.event('connectionError', { id: peer.id, message: DIRECT_FAILURE }); return; }
+    if (attempts > 3) {
+      // Preserve safe summaries before closePeer discards the failed RTCPeerConnection.
+      this.failedConnections.set(key, {
+        key, id: peer.id, publisherId: peer.publisherId, direction: peer.direction,
+        state: 'failed', failed: true, direct: false, message: DIRECT_FAILURE,
+        iceState: peer.pc.iceConnectionState ?? 'unknown', gathering: peer.pc.iceGatheringState ?? 'unknown',
+        candidates: { ...peer.candidates }, remoteCandidates: peer.remoteCandidates ?? 0,
+        remotePublicCandidates: peer.remotePublicCandidates ?? 0,
+        descriptionReceived: Boolean(peer.pc.remoteDescription), stunError: peer.stunError,
+        elapsed: Math.floor((performance.now() - peer.startedAt) / 1000), attempts
+      });
+      this.closePeer(key);
+      this.event('stats', [...this.failedConnections.values()]);
+      this.event('connectionError', { id: peer.id, message: DIRECT_FAILURE }); return;
+    }
     if (peer.direction === 'send') {
       const sub = this.subscribers.find(s => s.subscriptionId === key); if (sub) await this.offer(sub, true);
     } else {
@@ -214,6 +230,7 @@ export class RtcRoom extends EventTarget {
       await peer.pc.setRemoteDescription({ type: 'answer', sdp: payload.sdp });
       for (const ice of peer.remoteIce.splice(0)) if (this.validPeer(peer)) await peer.pc.addIceCandidate(ice);
     } else if (payload.kind === 'ice' && !/ typ relay(?: |$)/.test(payload.candidate)) {
+      if (payload.candidate) { peer.remoteCandidates = (peer.remoteCandidates ?? 0) + 1; if (/ typ (?:srflx|prflx)(?: |$)/.test(payload.candidate)) peer.remotePublicCandidates = (peer.remotePublicCandidates ?? 0) + 1; }
       const ice = { candidate: payload.candidate, sdpMid: payload.sdpMid, sdpMLineIndex: payload.sdpMLineIndex };
       if (peer.pc.remoteDescription) await peer.pc.addIceCandidate(ice); else if (peer.remoteIce.length < 128) peer.remoteIce.push(ice);
     }
@@ -276,7 +293,7 @@ export class RtcRoom extends EventTarget {
           try { await this.configureSender(peer, next); } catch { /* Peer may have closed during stats collection. */ }
         }
       }
-      this.event('stats', rows);
+      this.event('stats', [...rows, ...this.failedConnections.values()]);
     } finally { this.statsBusy = false; }
   }
   closePeer(key) {
@@ -306,7 +323,7 @@ export class RtcRoom extends EventTarget {
     await this.stopCapture();
     for (const key of this.peers.keys()) this.closePeer(key);
     this.identity = null; this.participants = []; this.subscriptions = []; this.subscribers = []; this.pending = [];
-    this.iceCache = null; this.attempts.clear(); this.event('stats', []);
+    this.iceCache = null; this.attempts.clear(); this.failedConnections.clear(); this.event('stats', []);
   }
   async shutdown() { clearInterval(this.timer); await this.leave(); }
 }
