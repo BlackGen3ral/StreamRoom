@@ -5,12 +5,12 @@ using System.Text.RegularExpressions;
 
 namespace StreamRoom.App;
 
-internal sealed record ClientConfiguration(int Version = 1, string DefaultZeroTierNetworkId = "", string GoogleClientId = "")
+internal sealed record ClientConfiguration(int Version = 1, string DefaultZeroTierNetworkId = "", string GoogleClientId = "", bool GoogleTokenExchangeReady = false)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     internal static bool ValidGoogleClientId(string? id) => id is { Length: <= 256 } && Regex.IsMatch(id, "\\A[0-9]+-[a-zA-Z0-9_-]+\\.apps\\.googleusercontent\\.com\\z");
     internal static ClientConfiguration Validate(ClientConfiguration? value) => value?.Version == 1
-        ? new(1, ZeroTierPreferences.IsNetworkId(value.DefaultZeroTierNetworkId) ? value.DefaultZeroTierNetworkId : "", ValidGoogleClientId(value.GoogleClientId) ? value.GoogleClientId : "") : new();
+        ? new(1, ZeroTierPreferences.IsNetworkId(value.DefaultZeroTierNetworkId) ? value.DefaultZeroTierNetworkId : "", ValidGoogleClientId(value.GoogleClientId) ? value.GoogleClientId : "", ValidGoogleClientId(value.GoogleClientId) && value.GoogleTokenExchangeReady) : new();
     internal static async Task<ClientConfiguration> FetchAsync(string directory)
     {
         var file = Path.Combine(directory, "client-config-v1.json");

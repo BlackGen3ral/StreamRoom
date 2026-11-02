@@ -13,7 +13,7 @@
 
 Cliente OAuth do tipo **App para computador**, seguindo o [fluxo oficial de desktop](https://developers.google.com/identity/protocols/oauth2/native-app). Somente `openid profile`, navegador externo, retorno em IPv4 loopback com porta efêmera, PKCE S256, estado aleatório e nonce. Não solicita e-mail, Drive, contatos, acesso offline nem refresh token.
 
-A biblioteca oficial `Google.Apis.Auth` verifica assinatura RS256, emissor, público e validade. O app confere o nonce antes de usar a identidade. Tokens ficam apenas na memória nativa da tentativa e nunca são enviados à interface ou à sinalização. A associação local é protegida pelo Windows; desvincular remove essa associação, preservando o perfil manual. Não há sincronização de amigos nem autenticação de permissões da sala pelo Google nesta entrega.
+A biblioteca oficial `Google.Apis.Auth` verifica assinatura RS256, emissor, público e validade. O app confere o nonce antes de usar a identidade. A troca do código ocorre no Worker existente, com o Client Secret em binding protegido. Apenas o ID token retorna ao processo nativo para validação. Tokens não são enviados à interface nem à sinalização WebSocket e não são persistidos. A associação local é protegida pelo Windows; desvincular remove essa associação, preservando o perfil manual. Não há sincronização de amigos nem autenticação de permissões da sala pelo Google nesta entrega.
 
 No Google Auth Platform, se o projeto estiver em teste, o proprietário pode precisar cadastrar os usuários de teste em **Público-alvo**. O login completo exige uma pessoa escolhendo a conta e consentindo no navegador. Testes de retorno simulado não comprovam esse consentimento real.
 
@@ -21,7 +21,7 @@ No Google Auth Platform, se o projeto estiver em teste, o proprietário pode pre
 
 `GET /v2/client-config` retorna somente `version`, `defaultZeroTierNetworkId` e `googleClientId`, validados. Configure `DEFAULT_ZEROTIER_NETWORK_ID` e `GOOGLE_CLIENT_ID` no Worker existente. Não coloque os valores específicos da rede em arquivos do repositório.
 
-Esses dois identificadores são públicos para quem usa o app, mesmo quando armazenados como bindings de segredo no Worker. Eles não substituem autorização dos dispositivos nem são tokens de acesso. O endpoint nunca serializa o ambiente completo. Nenhum Client Secret é necessário no código público.
+Esses dois identificadores são públicos para quem usa o app, mesmo quando armazenados como bindings de segredo no Worker. Eles não substituem autorização dos dispositivos nem são tokens de acesso. O endpoint nunca serializa o ambiente completo. Configure também GOOGLE_CLIENT_SECRET no servidor a partir do JSON oficial de cliente para computador; essa credencial nunca entra no repositório ou no instalador. O endpoint público informa apenas se a troca está configurada.
 
 O identificador local de perfil serve para continuidade da lista de amigos, não como prova de identidade ou conta Google verificada. Convites e permissões atuais continuam obrigatórios. Clientes antigos seguem compatíveis, mas não podem ser salvos até enviar esse identificador.
 

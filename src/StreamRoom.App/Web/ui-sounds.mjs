@@ -1,7 +1,7 @@
 export function createViewerNotifications(play) {
   let stream = null, viewers = new Set();
   return {
-    capture(id) { if (id && stream !== id) play('share'); stream = id; viewers = new Set(); },
+    capture(id) { if (id && stream !== id) play('share'); else if (!id && stream) play('stop'); stream = id; viewers = new Set(); },
     update(subscribers) {
       if (!stream) return;
       const next = new Set(subscribers.filter(s => s.streamId === stream).map(s => s.viewerId));
@@ -20,7 +20,7 @@ export function createUiSounds(enabled) {
     try { context ??= new AudioContext(); if (context.state === 'suspended') void context.resume().catch(() => {}); } catch { }
   }
   document.addEventListener('pointerdown', unlock, { passive:true }); document.addEventListener('keydown', unlock, { passive:true });
-  const notes = { share:[440,660,880], join:[660,880], leave:[660,440] };
+  const notes = { share:[440,660,880], stop:[660,440,330], join:[660,880], leave:[660,440] };
   return {
     play(kind) {
       if (!enabled() || !context || context.state !== 'running' || performance.now()-last<350) return;

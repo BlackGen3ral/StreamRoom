@@ -28,6 +28,10 @@ internal static class PlayerLayoutSelfTest
             }
             await core.ExecuteScriptAsync("window.restorePlayerAutoSize()"); await Task.Delay(400);
             var automatic = await Probe("auto");
+            await core.ExecuteScriptAsync("window.togglePlayerFill()"); await Task.Delay(300);
+            var filled = await Probe("filled");
+            using (var file = File.Create(Path.ChangeExtension(output, ".filled.png"))) await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, file);
+            await core.ExecuteScriptAsync("window.togglePlayerFill()"); await Task.Delay(200);
             using (var file = File.Create(Path.ChangeExtension(output, ".automatic.png"))) await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, file);
             await core.ExecuteScriptAsync("window.resetPlayerTestSize()"); await Task.Delay(150);
             var initial = await Probe("restored"); var handle = initial.GetProperty("resizeHandle");
@@ -44,7 +48,7 @@ internal static class PlayerLayoutSelfTest
                 && Math.Abs(window.ActualWidth-previousWidth)<3 && Math.Abs(window.ActualHeight-previousHeight)<3;
             if (!restoredWindow) throw new Exception("Native window was not restored.");
             using (var file = File.Create(Path.ChangeExtension(output, ".restored.png"))) await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, file);
-            await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { success = true, automatic, dragged, full, restored, restoredWindow }));
+            await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { success = true, automatic, filled, dragged, full, restored, restoredWindow }));
         }
         catch (Exception error) { Environment.ExitCode = 1; await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { success = false, error = error.ToString() })); }
     }

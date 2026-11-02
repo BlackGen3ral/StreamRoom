@@ -17,6 +17,7 @@ export async function runPlayerLayoutTest({ native, rtc, state, render, showExpi
   width.value = 600; height.value = 310; width.dispatchEvent(new Event('input')); await delay(100);
   window.resetPlayerTestSize = () => { width.value = 600; height.value = 310; width.dispatchEvent(new Event('input')); root.querySelector('.stream-more').open = true; };
   window.restorePlayerAutoSize = () => root.querySelector('.video-size-settings button').click();
+  window.togglePlayerFill = () => root.querySelector('.stream-fill').click();
   root.querySelector('.stream-more').open = false;
   const pointerEvents = [];
   for (const type of ['pointerdown','pointermove','pointerup']) document.addEventListener(type, event => pointerEvents.push({ type, target:event.target.className, x:event.clientX,y:event.clientY,buttons:event.buttons }), true);
@@ -25,7 +26,8 @@ export async function runPlayerLayoutTest({ native, rtc, state, render, showExpi
     const full = document.fullscreenElement === root;
     const main = $('stage'), mainBox = main.getBoundingClientRect();
     const success = video === root.querySelector('video') && video.srcObject === stream && stream.getVideoTracks()[0].readyState === 'live'
-      && (phase === 'auto' ? !full && Math.abs(box.width-root.parentElement.clientWidth)<2 && picture.height>=160 && controls.bottom<=mainBox.bottom+2 && main.scrollHeight<=main.clientHeight+2
+      && (phase === 'filled' ? !full && root.classList.contains('fill-window') && picture.bottom>mainBox.bottom-32 && picture.bottom<=mainBox.bottom && controls.bottom<=picture.bottom && main.scrollHeight<=main.clientHeight+2
+        : phase === 'auto' ? !full && Math.abs(box.width-root.parentElement.clientWidth)<2 && picture.height>=160 && controls.bottom<=mainBox.bottom+2 && main.scrollHeight<=main.clientHeight+2
         : phase === 'full' ? full && Math.abs(box.height-innerHeight)<2 && Math.abs(box.width-innerWidth)<2 && picture.height>innerHeight-130 && controls.bottom<=innerHeight+2 && !root.querySelector('.stream-more').open
         : phase === 'dragged' ? !full && Math.abs(picture.height-330)<2 && Math.abs(box.width-660)<2 : !full && Math.abs(picture.height-310)<2 && Math.abs(box.width-600)<2);
     const handle = root.querySelector('.video-resize-handle').getBoundingClientRect();

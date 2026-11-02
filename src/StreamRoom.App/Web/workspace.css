@@ -189,3 +189,21 @@
 .app-shell #profileDialog[open] { display:flex;flex-direction:column;overflow:hidden; }
 #profileDialog .profile-dialog-header,#profileDialog .profile-dialog-footer { flex-shrink:0; }
 #profileDialog .profile-dialog-body { min-height:0;overflow-y:auto;scrollbar-width:thin; }
+.app-shell .stream-grid>.stream-card.fill-window:where(:not(:fullscreen)) { grid-column:1/-1;grid-row:1;width:100%;margin:0; }
+.app-shell .stream-grid>.stream-card.fill-window:where(:not(:fullscreen)) .player-card { height:var(--video-height-limit);max-height:var(--video-height-limit);aspect-ratio:auto; }
+.app-shell .stream-grid>.stream-card.fill-window:where(:not(:fullscreen)) .stream-controls { position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:5;margin:0;width:max-content;max-width:calc(100% - 24px);background:#161b26ed;box-shadow:0 6px 24px #0006; }
+.app-shell .stream-card.fill-window:where(:not(:fullscreen))>.fine { display:none; }
+.app-shell.stage-filled:has(#screensPage:not([hidden])) #status:not(.error) { display:none; }
+.app-shell .stream-card.fill-window .video-resize-handle { bottom:80px; }
+.app-shell.stage-filled:has(#screensPage:not([hidden])) main { padding-bottom:0; }
+.app-shell.stage-filled:has(#screensPage:not([hidden])) #streamGrid { padding-bottom:0; }
+.app-shell.in-room:not(.has-streams) #screensPage { max-width:1160px;margin-inline:auto; }
+.app-shell.in-room:not(.has-streams) .capture-launch { padding:18px 22px; }
+.app-shell.in-room:not(.has-streams) .empty-player { min-height:260px;max-height:360px;height:36dvh;margin-top:18px;background:#151923;border-color:#2d3443; }
+.app-shell.in-room:not(.has-streams) .empty-player .play-mark { width:64px;height:60px;margin-bottom:10px; }
+@media(prefers-reduced-motion:no-preference) {
+  .app-shell dialog[open] { animation:streamroom-enter .14s ease-out; }
+  .app-shell button { transition:background-color .12s ease,border-color .12s ease,opacity .12s ease; }
+  .app-shell .empty-player { animation:streamroom-enter .16s ease-out; }
+  @keyframes streamroom-enter { from { opacity:0;transform:translateY(4px); } to { opacity:1;transform:translateY(0); } }
+}

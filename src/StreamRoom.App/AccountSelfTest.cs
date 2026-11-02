@@ -27,6 +27,8 @@ internal static class AccountSelfTest
             Check((await FriendBook.RemoveAsync(directory, peerId)).Count == 0 && FriendBook.Load(directory).Count == 0, "Friend removal did not persist.");
             try { await FriendBook.SavePeerAsync(directory, peer with { ProfileId = null }); throw new Exception("Legacy peer was accepted."); } catch (IOException) { }
             Check(GoogleLogin.Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", "RFC 7636 challenge failed.");
+            Check(GoogleLogin.ExchangeError("{\"error\":\"invalid_request\",\"error_description\":\"client_secret is missing.\"}",400).Contains("servidor"), "Missing client credential was misdiagnosed.");
+            Check(!GoogleLogin.ExchangeError("{\"error\":\"unknown\",\"error_description\":\"sensitive-token\"}",400).Contains("sensitive-token"), "Provider details leaked.");
             using var callback = new GoogleLoopback();
             string authority = new Uri(callback.RedirectUri).Authority;
             string Request(string query, string? host = null) => $"GET /oauth2/callback?{query} HTTP/1.1\r\nHost: {host ?? authority}\r\n\r\n";

@@ -5,6 +5,7 @@ export { Room } from './legacy';
 import { ROOM_TTL, SWEEP_INTERVAL, renewalExpiry, stale } from './policy';
 import { validAvatar, validName } from './profile';
 import { clientConfig, type ClientConfigEnv } from './client-config';
+import { googleExchange } from './google-oauth';
 const MAX_MESSAGE = 64 * 1024;
 const json = (body: unknown, status = 200) => Response.json(body, {
   status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
@@ -27,6 +28,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/v1/rooms')) return legacy.fetch(request, env);
     if (url.pathname === '/v2/client-config' && request.method === 'GET') return json(clientConfig(env));
+    if (url.pathname === '/v2/google/exchange' && request.method === 'POST') return googleExchange(request, env);
     if (url.pathname === '/health' && request.method === 'GET')
       return json({ service: 'StreamRoom signaling', protocol: 2, version: '0.4.3', persistentRooms: true, profiles: true, savedFriends: true, mediaPolicy: 'direct-only' });
     if (url.pathname === '/v2/rooms' && request.method === 'POST') {

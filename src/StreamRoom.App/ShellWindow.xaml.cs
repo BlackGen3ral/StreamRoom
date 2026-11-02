@@ -224,7 +224,7 @@ public partial class ShellWindow : Window
                         _googleLogin = login;
                         try
                         {
-                            var identity = await GoogleLogin.SignInAsync(googleConfig.GoogleClientId, login.Token);
+                            var identity = await GoogleLogin.SignInAsync(googleConfig.GoogleClientId, login.Token, googleConfig.GoogleTokenExchangeReady);
                             await GoogleAccountStore.SaveAsync(DataDirectory, identity);
                             result = new { account = GoogleAccountStore.Status(DataDirectory), name = identity.Name, avatar = identity.Avatar };
                         }
@@ -447,6 +447,8 @@ public partial class ShellWindow : Window
                 case "nativeCaptureStop":
                     if (_nativeSession == p.GetProperty("session").GetString()) StopNativeCapture();
                     break;
+                case "audioConfirm":
+                    result = new { accepted = AppPrompt.Confirm(this, "Ativar som na transmissão?", "Será compartilhado todo o som do computador, incluindo jogos, Discord e outras transmissões. Nenhum microfone será capturado.", "Ativar som") }; break;
                 case "audioStart":
                     if (_connection?.IsConnected != true) throw new SignalingException("Entre em uma sala primeiro.");
                     int rate = _audio.Start(bytes =>

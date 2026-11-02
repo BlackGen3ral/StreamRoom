@@ -9,7 +9,7 @@ test('viewer cues track people per stream, ignore reconnections/profile changes 
   cues.update([{...watch('friend'),subscriptionId:'reconnected',name:'changed'}]);
   cues.update([watch('friend'),watch('other')]);cues.update([watch('other')]);
   cues.capture(null);cues.update([]);cues.reset();
-  assert.deepEqual(heard,['share','join','join','leave']);
+  assert.deepEqual(heard,['share','join','join','leave','stop']);
 });
 test('disabled app sounds do not create an output context or request media devices',()=>{
   const previous=globalThis.document;let contexts=0;

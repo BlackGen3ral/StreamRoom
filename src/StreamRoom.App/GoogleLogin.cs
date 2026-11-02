@@ -22,7 +22,7 @@ internal static class GoogleLogin
             ["access_type"] = "online", ["prompt"] = "select_account"
         }.Select(p => Uri.EscapeDataString(p.Key) + "=" + Uri.EscapeDataString(p.Value))));
 
-    internal static async Task<GoogleIdentity> SignInAsync(string clientId, CancellationToken cancellationToken)
+    internal static async Task<GoogleIdentity> SignInAsync(string clientId, CancellationToken cancellationToken, bool serverExchange = false)
     {
         if (!ClientConfiguration.ValidGoogleClientId(clientId)) throw new IOException("O login Google ainda não foi configurado pelo proprietário.");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -34,14 +34,16 @@ internal static class GoogleLogin
         Process.Start(new ProcessStartInfo(url.AbsoluteUri) { UseShellExecute = true });
         var code = await callback.ReceiveAsync(state, ct);
         using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(20) };
-        using var body = new FormUrlEncodedContent(new Dictionary<string, string> {
+        var fields = new Dictionary<string, string> {
             ["client_id"] = clientId, ["code"] = code, ["code_verifier"] = verifier, ["redirect_uri"] = callback.RedirectUri, ["grant_type"] = "authorization_code"
-        });
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://oauth2.googleapis.com/token") { Content = body };
+        };
+        using HttpContent body = serverExchange ? new StringContent(JsonSerializer.Serialize(fields), Encoding.UTF8, "application/json") : new FormUrlEncodedContent(fields);
+        using var request = new HttpRequestMessage(HttpMethod.Post, serverExchange ? "https://streamroom.arthostudio.com/v2/google/exchange" : "https://oauth2.googleapis.com/token") { Content = body };
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         await response.Content.LoadIntoBufferAsync(32_768, ct);
-        if (!response.IsSuccessStatusCode) throw new IOException("O Google não concluiu o login. Confira o cliente OAuth para computador e os usuários de teste no Google Cloud.");
-        using var tokens = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var responseText = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode) throw new IOException(ExchangeError(responseText, (int)response.StatusCode));
+        using var tokens = JsonDocument.Parse(responseText);
         if (!tokens.RootElement.TryGetProperty("id_token", out var token) || token.ValueKind != JsonValueKind.String) throw new IOException("O Google não retornou uma identidade válida.");
         string jwt = token.GetString()!;
         GoogleJsonWebSignature.Payload identity;
@@ -66,6 +68,25 @@ internal static class GoogleLogin
         }
         // No access, ID or refresh token is persisted, logged, or sent to the WebView.
         return new(identity.Subject, name, avatar, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+    }
+    internal static string ExchangeError(string body, int status)
+    {
+        string? code = null; bool missingSecret = false;
+        try
+        {
+            using var result = JsonDocument.Parse(body);
+            if (result.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String) code = error.GetString();
+            if (result.RootElement.TryGetProperty("error_description", out var description) && description.ValueKind == JsonValueKind.String)
+                missingSecret = description.GetString()?.Contains("client_secret is missing", StringComparison.OrdinalIgnoreCase) == true;
+        } catch (JsonException) { }
+        if (missingSecret || code == "oauth_not_configured") return "O cadastro Google exige uma credencial do aplicativo que ainda falta no servidor. O proprietário precisa concluir a configuração do login. Atualize o StreamRoom e tente novamente.";
+        return code switch {
+            "invalid_grant" => "O código Google expirou ou já foi usado. Clique em Continuar com Google e faça uma nova tentativa.",
+            "invalid_client" or "unauthorized_client" => "O Google recusou o cadastro do StreamRoom. O proprietário precisa revisar as credenciais OAuth no servidor.",
+            "access_denied" => "O Google não autorizou o login. Confira o acesso à conta e os usuários de teste no Google Cloud.",
+            "rate_limited" => "Muitas tentativas de login. Aguarde um minuto e tente novamente.",
+            _ => $"Não foi possível concluir a troca de código com o Google (HTTP {status}). Tente novamente."
+        };
     }
     internal static void ValidateNonce(string jwt, string expected)
     {

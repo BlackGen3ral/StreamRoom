@@ -82,7 +82,7 @@ function createCard(id, streamId) {
   card.quality.addEventListener('change', () => busy(async () => { if (rtc.subscriptions.some(s => s.publisherId === id)) await rtc.watch(id, true, quality(card).height, quality(card).fps); }));
   card.mute = button('Ativar som', async () => { card.video.muted = !card.video.muted; card.mute.textContent = card.video.muted ? 'Ativar som' : 'Silenciar'; });
   card.mute.hidden = own;
-  card.sendMute = button('Silenciar live', () => { try { rtc.setCaptureAudioMuted(!rtc.captureAudioMuted); } catch(error) { status(error.message,true); } });
+  card.sendMute = button('Silenciar live', () => busy(async()=> { if(!rtc.localStream?.getAudioTracks().length)await rtc.enableCaptureAudio();else rtc.setCaptureAudioMuted(!rtc.captureAudioMuted); }));
   card.sendMute.classList.add('stream-audio');card.sendMute.hidden = !own;
   card.volume = node('input'); card.volume.type = 'range'; card.volume.min = '0'; card.volume.max = '1'; card.volume.step = '.01'; card.volume.value = '.8'; card.video.volume = .8; card.volume.hidden = own;
   card.volume.setAttribute('aria-label', 'Volume desta transmissão');
@@ -154,7 +154,7 @@ function renderStreams() {
     card.mute.disabled = card.volume.disabled = card.pause.disabled = !stream;
     if(card.own) {
       const audio = Boolean(rtc.localStream?.getAudioTracks().length);
-      card.sendMute.disabled = !audio; card.sendMute.textContent = !audio ? 'Sem áudio' : rtc.captureAudioMuted ? 'Ativar áudio' : 'Silenciar live';
+      card.sendMute.disabled = state.busy; card.sendMute.textContent = !audio ? 'Ativar som do PC' : rtc.captureAudioMuted ? 'Ativar áudio' : 'Silenciar live';
       card.sendMute.setAttribute('aria-pressed',String(Boolean(rtc.captureAudioMuted)));
     }
     if (!watched && !card.own) card.metrics.textContent = 'Sem recepção: nenhum vídeo é solicitado.';
@@ -279,7 +279,7 @@ rtc.addEventListener('connectionError', ({ detail }) => {
 rtc.addEventListener('capture', ({ detail }) => {
   viewerSounds.capture(detail ? rtc.localId : null);
   $('source').textContent = detail ? 'Compartilhando: ' + (detail.source || 'fonte selecionada') + ' · prévia sem som' : 'Nenhuma fonte selecionada';
-  if (detail) status('Captura real iniciada: ' + detail.settings.width + '×' + detail.settings.height + '. Vídeo é enviado somente a quem escolher assistir. ' + (detail.audio ? 'Faixa de áudio ativa.' : 'Sem faixa de áudio.'));
+  if (detail) status('Captura iniciada' + (detail.settings.width&&detail.settings.height ? ': '+detail.settings.width+'×'+detail.settings.height : '') + '. ' + (detail.audio ? 'Faixa de áudio ativa.' : 'Você pode ativar o som do PC nos controles.'));
   render();
 });
 rtc.addEventListener('captureAudio', () => renderStreams());

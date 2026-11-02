@@ -88,6 +88,7 @@ export class RtcRoom extends EventTarget {
     finally { this.captureStarting = false; }
   }
   async startCaptureCore(options) {
+    if (this.stopPending) await this.stopPending;
     if (!this.identity) throw Error('Entre em uma sala para transmitir.');
     if (this.localStream) throw Error('Pare a fonte atual antes de escolher outra.');
     this.setOptions(options);
@@ -111,13 +112,7 @@ export class RtcRoom extends EventTarget {
       if (!options.nativeSource) await video.applyConstraints({ width: { max: config.width }, height: { max: config.height }, frameRate: { max: config.fps } });
       video.onended = () => { if (this.localStream === stream) void this.stopCapture(); };
       if (options.audio === 'system') {
-        const format = await this.native('audioStart');
-        this.audioContext = new AudioContext({ sampleRate: format.sampleRate, latencyHint: 'interactive' });
-        await this.audioContext.audioWorklet.addModule('pcm-worklet.js');
-        this.audioNode = new AudioWorkletNode(this.audioContext, 'pcm-source', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
-        this.audioDestination = this.audioContext.createMediaStreamDestination();
-        this.audioNode.connect(this.audioDestination); await this.audioContext.resume();
-        for (const track of this.audioDestination.stream.getAudioTracks()) stream.addTrack(track);
+        await this.startSystemAudio(stream,run);
       }
       if (this.run !== run || this.localStream !== stream) return;
       this.event('capture', { stream, streamId: this.localId, source: this.nativeBridge?.name ?? video.label, settings: video.getSettings(), audio: stream.getAudioTracks().length > 0, audioMode: options.audio });
@@ -125,6 +120,44 @@ export class RtcRoom extends EventTarget {
       this.ensureViewers();
       if (!stream.getAudioTracks().length && options.audio !== 'none') this.notice('Vídeo ativo, sem faixa de áudio. O seletor não forneceu áudio da janela. Pare e escolha WASAPI para compartilhar todo o sistema, se desejar.');
     } catch (error) { await this.stopCapture(); throw error; }
+  }
+  async startSystemAudio(stream,run) {
+    const format=await this.native('audioStart');
+    if(this.localStream!==stream || this.run!==run) { await this.native('audioStop');throw Error('A transmissão foi encerrada.'); }
+    this.audioContext=new AudioContext({sampleRate:format.sampleRate,latencyHint:'interactive'});
+    await this.audioContext.audioWorklet.addModule('pcm-worklet.js');
+    if(this.localStream!==stream || this.run!==run)throw Error('A transmissão foi encerrada.');
+    this.audioNode=new AudioWorkletNode(this.audioContext,'pcm-source',{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2]});
+    this.audioDestination=this.audioContext.createMediaStreamDestination();this.audioNode.connect(this.audioDestination);await this.audioContext.resume();
+    if(this.localStream!==stream || this.run!==run)throw Error('A transmissão foi encerrada.');
+    for(const track of this.audioDestination.stream.getAudioTracks())stream.addTrack(track);
+  }
+  async enableCaptureAudio() {
+    if(this.audioChange)return this.audioChange;
+    if(!this.localStream)throw Error('Inicie uma transmissão primeiro.');
+    if(this.localStream.getAudioTracks().length){this.setCaptureAudioMuted(false);return;}
+    const stream=this.localStream,run=this.run;
+    this.audioChange=(async()=>{
+      const consent=await this.native('audioConfirm');if(!consent?.accepted)return;
+      if(this.localStream!==stream||this.run!==run)throw Error('A transmissão foi encerrada.');
+      try {
+        await this.startSystemAudio(stream,run);
+        const track=stream.getAudioTracks()[0];
+        for(const peer of this.peers.values()) {
+          if(peer.direction!=='send'||!this.validPeer(peer))continue;
+          if(peer.audioSender)await peer.audioSender.replaceTrack(track);
+          else {const sub=this.subscribers.find(s=>s.subscriptionId===peer.key);if(sub)await this.offer(sub,true);}
+        }
+        if(this.localStream!==stream||this.run!==run)throw Error('A transmissão foi encerrada.');
+        this.captureAudioMuted=false;this.event('captureAudio',{muted:false,added:true});
+      } catch(error) {
+        for(const peer of this.peers.values())if(peer.direction==='send'&&peer.audioSender)try{await peer.audioSender.replaceTrack(null);}catch{}
+        for(const track of stream.getAudioTracks()){stream.removeTrack(track);track.stop();}
+        this.audioNode?.disconnect();this.audioNode=null;if(this.audioContext)await this.audioContext.close();this.audioContext=null;
+        try{await this.native('audioStop');}catch{}throw error;
+      }
+    })().finally(()=>{this.audioChange=null;});
+    return this.audioChange;
   }
   pushPcm(data) {
     if (!this.audioNode) return;
@@ -160,6 +193,9 @@ export class RtcRoom extends EventTarget {
       if (this.peers.has(key)) return;
       peer = this.newPeer(sub.viewerId, sub, 'send', crypto.randomUUID(), config);
       for (const track of stream.getTracks()) peer.pc.addTrack(track, stream);
+      peer.audioSender=peer.pc.getSenders().find(sender=>sender.track?.kind==='audio');
+      // Reserve audio without capturing anything; replaceTrack can enable sound later without new ICE/video.
+      if(!peer.audioSender&&peer.pc.addTransceiver)peer.audioSender=peer.pc.addTransceiver('audio',{direction:'sendonly',streams:[stream]}).sender;
       const transceiver = peer.pc.getTransceivers().find(t => t.sender.track?.kind === 'video');
       const codecs = RTCRtpSender.getCapabilities('video')?.codecs;
       if (transceiver?.setCodecPreferences && codecs) {
@@ -385,6 +421,7 @@ export class RtcRoom extends EventTarget {
   }
   async disposeCapture() {
     this.run++; const stream = this.localStream, streamId = this.localId; this.localStream = null; this.localId = null;
+    if(this.audioChange)try{await this.audioChange;}catch{}
     if (this.nativeBridge) { const bridge = this.nativeBridge; this.nativeBridge = null; try { await bridge.stop(); } catch { } }
     for (const track of stream?.getTracks() ?? []) { track.onended = null; track.stop(); }
     for (const [key, peer] of this.peers) if (peer.direction === 'send') { this.closePeer(key); this.attempts.delete(key); }

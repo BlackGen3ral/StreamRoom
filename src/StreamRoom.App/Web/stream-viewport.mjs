@@ -26,6 +26,14 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
   }
   const reset = element('button', 'quiet', 'Restaurar tamanho automático'); reset.type = 'button';
   settings.append(reset); extra.append(settings);
+  const fill = element('button', 'quiet stream-fill', 'Expandir janela'); fill.type = 'button';
+  fill.title = 'Ocupar a área até embaixo, com os controles sobre o vídeo'; fill.setAttribute('aria-pressed','false');
+  fullscreenButton.parentElement.insertBefore(fill,fullscreenButton);
+  const updateFill = active => {
+    root.classList.toggle('fill-window',active); fill.setAttribute('aria-pressed',String(active));fill.textContent=active?'Voltar ao layout':'Expandir janela';
+    document.body.classList.toggle('stage-filled',Boolean(document.querySelector('.stream-card.fill-window')));
+  };
+  fill.addEventListener('click',()=> { updateFill(!root.classList.contains('fill-window')); more.open=false; sync(); });
   const handle = element('button', 'video-resize-handle', '↘'); handle.type = 'button';
   handle.title = 'Arraste para ajustar o tamanho. Dois cliques restauram o automático.';
   handle.setAttribute('aria-label', 'Redimensionar vídeo. Use as setas para ajustar; Home restaura o tamanho.');
@@ -39,9 +47,10 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
       return element.getBoundingClientRect().height+(parseFloat(style.marginTop)||0)+(parseFloat(style.marginBottom)||0);
     };
     const top=frame.getBoundingClientRect().top-main.getBoundingClientRect().top+main.scrollTop;
-    const controls=outerHeight(root.querySelector('.stream-controls'));
-    const metrics=outerHeight(root.querySelector(':scope>.fine'));
-    const status=outerHeight(main.querySelector('#status'));
+    const filled=root.classList.contains('fill-window');
+    const controls=filled?0:outerHeight(root.querySelector('.stream-controls'));
+    const metrics=filled?0:outerHeight(root.querySelector(':scope>.fine'));
+    const status=filled?0:outerHeight(main.querySelector('#status'));
     const padding=(parseFloat(getComputedStyle(main).paddingBottom)||0)+(parseFloat(getComputedStyle(root.parentElement).paddingBottom)||0);
     return Math.max(160,Math.floor(main.clientHeight-top-controls-metrics-status-padding-4));
   }
@@ -62,6 +71,7 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
   }
   function apply(size) {
     if (document.fullscreenElement === root) return;
+    updateFill(false);
     if (root.classList.contains('expanded')) {
       root.classList.remove('expanded');
       const highlight = root.querySelector('.stream-enlarge');
@@ -111,6 +121,7 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
   const status=root.closest('main')?.querySelector('#status');if(status)observer.observe(status);
   window.addEventListener('resize',sync);
   return { sync, dispose() {
+    updateFill(false);
     endDrag(); observer.disconnect(); document.removeEventListener('fullscreenchange', fullscreenChanged);window.removeEventListener('resize',sync);
     document.removeEventListener('pointermove', pointerMove); document.removeEventListener('pointerup', pointerEnd); document.removeEventListener('pointercancel', pointerEnd); window.removeEventListener('blur', endDrag);
   } };
