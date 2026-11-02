@@ -36,7 +36,15 @@ internal static class WgcSelfTest
                 var source = sources.Resolve(sources.AddTestWindow(new WindowInteropHelper(window).Handle));
                 await NativeCapture.RequestBorderlessAccessAsync();
                 capture.Start(source, 60, 480); timer.Start();
-                await Task.Delay(5000);
+                await Task.Delay(1500);
+                var firstCount = frames;
+                capture.Configure(30, 720);
+                await Task.Delay(1500);
+                if (frames <= firstCount || height > 720) throw new InvalidOperationException("Mudança ao vivo para 720p30 não entregou frames.");
+                var secondCount = frames;
+                capture.Configure(60, 1080);
+                await Task.Delay(2000);
+                if (frames <= secondCount) throw new InvalidOperationException("Mudança ao vivo para 1080p60 não entregou frames.");
                 if (frames < 10 || !greenPixel) throw new InvalidOperationException("Frames ou pixels da janela de teste não foram capturados corretamente.");
             }
             catch (Exception e) { error = e.ToString(); }

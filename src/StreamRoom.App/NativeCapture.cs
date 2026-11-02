@@ -38,6 +38,17 @@ internal sealed class NativeCapture : IDisposable
     public event Action<byte[], int, int>? Frame;
     public event Action<string>? Ended;
     public static bool Supported => GraphicsCaptureSession.IsSupported();
+    public void Configure(int fps, int maxHeight)
+    {
+        if (fps is not (30 or 60) || maxHeight is not (480 or 720 or 1080))
+            throw new ArgumentException("Qualidade de captura inválida.");
+        lock (_lifetimeGate)
+        {
+            if (_disposed) throw new InvalidOperationException("A captura foi encerrada.");
+            Volatile.Write(ref _maxHeight, maxHeight);
+            Interlocked.Exchange(ref _interval, Stopwatch.Frequency / fps);
+        }
+    }
     public void Start(CaptureSource source, int fps, int maxHeight = 1080)
     {
         string stage = "verificar suporte do Windows";

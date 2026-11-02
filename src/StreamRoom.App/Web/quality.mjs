@@ -1,4 +1,4 @@
-export function profile(resolution = 720, fps = 30, upload = 24) {
+export function profile(resolution = 1080, fps = 60, upload = 24) {
   const height = [480, 720, 1080].includes(Number(resolution)) ? Number(resolution) : 720;
   const frameRate = Number(fps) === 60 ? 60 : 30;
   return { width: Math.round(height * 16 / 9), height, fps: frameRate,

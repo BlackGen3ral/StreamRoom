@@ -103,6 +103,39 @@ test('manual reconnect replaces only the selected subscription and rejects stale
  assert.equal(s.room.peers.get(request.subscriptionId).pc.remoteDescription.sdp,'new');
 });
 
+test('live native quality changes retain stream, audio and both WebRTC directions', async t => {
+ const s=setup(); t.after(()=>s.room.shutdown()); s.room.updateRoom(s.state);await settle();
+ await s.room.receiveSignal(s.b,{kind:'offer',streamId:s.incomingId,subscriptionId:s.receive,session:id(),sdp:'v=0'});
+ const stream=s.room.localStream, sender=s.room.peers.get(s.send).pc,receiver=s.room.peers.get(s.receive).pc;
+ const changes=[];s.room.nativeBridge={configure:async o=>changes.push(o),stop:async()=>{}};
+ await s.room.changeOptions({quality:720,fps:30,upload:24,autoQuality:false});
+ assert.equal(s.room.config.height,720);assert.equal(s.room.config.fps,30);
+ await s.room.changeOptions({quality:1080,fps:60,upload:24,autoQuality:false});
+ assert.equal(s.room.localStream,stream);assert.equal(s.room.localId,s.streamId);assert.equal(s.track.stopped,false);
+ assert.equal(s.room.peers.get(s.send).pc,sender);assert.equal(s.room.peers.get(s.receive).pc,receiver);
+ assert.deepEqual(changes.map(c=>[c.quality,c.fps]),[[720,30],[1080,60]]);
+ assert.equal(s.calls.some(c=>c.type==='audioStop'||c.type==='audioStart'||c.type==='stream'),false);
+ assert.equal(sender.getSenders()[0].parameters.encodings[0].maxFramerate,30); // this viewer requested 30 FPS
+});
+
+test('compatible live constraints preserve source and reject failures without changing profile', async t => {
+ const room=new RtcRoom(async()=>{});t.after(()=>room.shutdown());room.enter({participantId:id()});
+ let fail=false,last; const track={kind:'video',stop(){},async applyConstraints(c){if(fail)throw Error('unsupported');last=c;}};
+ const stream={getVideoTracks:()=>[track],getTracks:()=>[track],getAudioTracks:()=>[]};room.localStream=stream;room.localId=id();
+ await room.changeOptions({quality:720,fps:30,upload:24,autoQuality:true});
+ assert.equal(last.height.max,720);assert.equal(last.frameRate.max,30);assert.equal(room.localStream,stream);
+ fail=true;await assert.rejects(room.changeOptions({quality:1080,fps:60,upload:24,autoQuality:true}),/unsupported/);
+ assert.equal(room.config.height,720);assert.equal(room.config.fps,30);
+ fail=false;await room.changeOptions({quality:1080,fps:60,upload:24,autoQuality:true});assert.equal(room.config.fps,60);
+});
+
+test('quality request stopped during native configuration cannot change a new session', async t => {
+ const s=setup();t.after(()=>s.room.shutdown());let resolve;const wait=new Promise(r=>resolve=r);
+ s.room.nativeBridge={configure:async()=>wait,stop:async()=>{}};
+ const pending=s.room.changeOptions({quality:480,fps:30,upload:24,autoQuality:true});await settle();
+ await s.room.stopCapture();resolve();await assert.rejects(pending,/encerrada/);assert.equal(s.room.config.height,1080);
+});
+
 test('failed connection diagnostics survive peer disposal and clear on leave', async t => {
  const s=setup();t.after(()=>s.room.shutdown());s.room.updateRoom(s.state);await settle();
  const peer=s.room.peers.get(s.send);peer.pc.iceConnectionState='failed';peer.pc.iceGatheringState='complete';

@@ -29,9 +29,17 @@ export class WgcStream {
       if (!this.active) throw Error('Seleção de captura cancelada.');
       const timer = setTimeout(() => this.rejectFirst(Error('A fonte não entregou vídeo. Use outra janela ou o modo compatível.')), 10000);
       try { await this.first; } finally { clearTimeout(timer); }
-      this.stream ??= this.canvas.captureStream(options.fps);
+      this.stream ??= this.canvas.captureStream(0);
+      this.stream.getVideoTracks()[0]?.requestFrame?.();
       return this.stream;
     } catch (e) { await this.stop(); throw e; }
+  }
+  async configure(options) {
+    const session = this.session;
+    if (!this.active || !session) throw Error('A captura foi encerrada.');
+    await this.native('nativeCaptureConfigure', { session, quality: options.quality, fps: options.fps });
+    if (!this.active || this.session !== session) throw Error('A fonte de captura mudou.');
+    this.options = { ...this.options, ...options };
   }
   async frame(e) {
     const meta = e.additionalData;
@@ -55,7 +63,10 @@ export class WgcStream {
           resized = new VideoFrame(this.canvas, { timestamp: frame.timestamp });
         }
         await this.writer.write(resized ?? frame);
-      } else this.context.drawImage(frame, 0, 0, width, height);
+      } else {
+        this.context.drawImage(frame, 0, 0, width, height);
+        this.stream?.getVideoTracks()[0]?.requestFrame?.();
+      }
       this.resolveFirst();
     } catch (error) { this.rejectFirst(error); this.ended(error.message); }
     finally {

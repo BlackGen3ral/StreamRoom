@@ -61,6 +61,26 @@ export class RtcRoom extends EventTarget {
     this.config = profile(options.quality, options.fps, options.upload);
     this.automatic = options.autoQuality;
   }
+  changeOptions(options) {
+    const apply = async () => {
+      const config = profile(options.quality, options.fps, options.upload);
+      const stream = this.localStream, run = this.run;
+      if (stream) {
+        if (this.nativeBridge) await this.nativeBridge.configure({ ...options, quality: config.height, fps: config.fps });
+        else await stream.getVideoTracks()[0].applyConstraints({ width: { max: config.width }, height: { max: config.height }, frameRate: { max: config.fps } });
+        if (this.localStream !== stream || this.run !== run) throw Error('A transmissão foi encerrada durante o ajuste.');
+      }
+      this.setOptions(options);
+      for (const peer of this.peers.values()) {
+        if (peer.direction !== 'send') continue;
+        peer.budget = perPeerCap(this.config, this.subscribers.length); peer.healthy = 0;
+        try { await this.configureSender(peer); }
+        catch { this.notice('Qualidade da captura alterada. Um envio ainda está ajustando o encoder.'); }
+      }
+    };
+    const next = (this.qualityChange ?? Promise.resolve()).catch(() => {}).then(apply);
+    this.qualityChange = next; return next;
+  }
   async startCapture(options) {
     if (this.captureStarting) throw Error('Uma seleção de captura já está em andamento.');
     this.captureStarting = true;

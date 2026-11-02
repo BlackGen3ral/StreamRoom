@@ -7,17 +7,23 @@ export function createCapturePicker(native, rtc, options, report) {
   const note = document.getElementById('pickerStatus');
   let sources = [], selected = null, kind = 'window', loading = false, generation = 0;
   function render() {
+    grid.dataset.kind = kind;
     const visible = sources.filter(s => s.kind === kind && s.name.toLocaleLowerCase().includes(search.value.toLocaleLowerCase()));
     grid.replaceChildren(...visible.map(source => {
       const button = document.createElement('button'); button.className = 'source-choice'; button.type = 'button';
+      button.dataset.sourceId = source.id;
       button.classList.toggle('selected', selected === source.id); button.setAttribute('aria-pressed', String(selected === source.id));
       if (source.thumbnail) { const image = document.createElement('img'); image.src = source.thumbnail; image.alt = ''; button.append(image); }
       else { const placeholder = document.createElement('span'); placeholder.className = 'thumbnail-unavailable'; placeholder.textContent = 'Prévia indisponível'; button.append(placeholder); }
       const title = document.createElement('span'); title.className = 'source-name'; title.textContent = source.name; button.title = source.name; button.append(title);
-      button.onclick = () => { selected = source.id; render(); }; return button;
+      const check = document.createElement('span'); check.className = 'source-check'; check.setAttribute('aria-hidden','true'); check.textContent = selected === source.id ? '✓' : ''; button.append(check);
+      button.onclick = () => { selected = source.id; render(); grid.querySelector('[data-source-id="' + CSS.escape(selected) + '"]')?.focus({ preventScroll: true }); }; return button;
     }));
     confirm.disabled = loading || !visible.some(s => s.id === selected);
-    if (!loading) note.textContent = visible.length ? 'Selecione uma fonte para compartilhar.' : 'Nenhuma fonte disponível. Tente atualizar a lista.';
+    const choice = visible.find(s => s.id === selected);
+    document.getElementById('pickerSelected').textContent = choice?.name ?? 'Escolha uma janela ou monitor';
+    const config = options(); document.getElementById('pickerQuality').textContent = config.quality + 'p · ' + config.fps + ' FPS';
+    if (!loading) note.textContent = visible.length ? choice ? 'Fonte selecionada. Confirme para começar.' : visible.length + ' fontes disponíveis · escolha uma para continuar' : 'Nenhuma fonte disponível. Tente atualizar a lista.';
   }
   async function refresh() {
     if (loading) return;
@@ -40,6 +46,7 @@ export function createCapturePicker(native, rtc, options, report) {
   search.oninput = render;
   document.getElementById('refreshSources').onclick = refresh;
   document.getElementById('cancelCapture').onclick = () => dialog.close();
+  document.getElementById('pickerBack').onclick = () => dialog.close();
   confirm.onclick = async () => {
     if (confirm.disabled || !selected) return;
     const sourceId = selected;

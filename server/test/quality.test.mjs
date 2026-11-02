@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { profile, perPeerCap, adapt } from '../../src/StreamRoom.App/Web/quality.mjs';
+test('novo perfil padrão é 1080p60', () => { assert.equal(profile().height,1080); assert.equal(profile().fps,60); });
 test('limita upload agregado para quatro espectadores', () => {
   const config = profile(1080, 60, 24);
   assert.equal(config.height, 1080); assert.equal(config.fps, 60);

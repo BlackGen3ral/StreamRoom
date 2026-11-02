@@ -37,7 +37,7 @@ internal static class TailscaleRetirement
             await File.WriteAllTextAsync(marker, "not-managed");
             return "A integração Tailscale foi retirada do StreamRoom. Nenhum pacote MSI compatível foi encontrado para desinstalar.";
         }
-        if (MessageBox.Show(owner, "O StreamRoom agora usa ZeroTier como rede privada e não utiliza mais o Tailscale. Deseja desinstalar o Tailscale deste PC? Isso também afeta outros aplicativos que o utilizem. O Windows poderá pedir autorização.", "Remover Tailscale", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+        if (!AppPrompt.Confirm(owner, "Remover Tailscale?", "O StreamRoom não utiliza mais o Tailscale. A desinstalação também afeta outros aplicativos que o utilizem. O Windows poderá pedir autorização.", "Desinstalar"))
         {
             await File.WriteAllTextAsync(marker, "kept");
             return "Integração Tailscale retirada. O programa foi mantido neste PC por sua escolha.";

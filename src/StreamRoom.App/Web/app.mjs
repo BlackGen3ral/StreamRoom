@@ -2,6 +2,20 @@ import { RtcRoom } from './rtc-room.mjs';
 import { createCapturePicker } from './capture-picker.mjs';
 import { createZeroTierUi } from './zerotier-ui.mjs';
 const $ = id => document.getElementById(id);
+$('transmissionPage').append($('settingsTransmission'));
+$('connectionsPage').append($('settingsConnections'));
+$('settingsConnections').hidden = false;
+for (const id of ['settingsTransmission','settingsConnections']) { $(id).removeAttribute('role'); $(id).removeAttribute('aria-labelledby'); }
+let currentPage = 'screens';
+function selectPage(page, focus = false) {
+  currentPage = page;
+  for (const tab of document.querySelectorAll('[data-page]')) {
+    const active = tab.dataset.page === page;
+    tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1;
+    $(tab.getAttribute('aria-controls')).hidden = !active;
+    if (active && focus) tab.focus();
+  }
+}
 const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
@@ -21,15 +35,8 @@ function options() { return { quality: Number($('quality').value), fps: Number($
 function node(tag, className, text) { const e = document.createElement(tag); if (className) e.className = className; if (text !== undefined) e.textContent = text; return e; }
 function button(text, action) { const e = node('button', 'quiet', text); e.addEventListener('click', action); return e; }
 function openSettings(tab = 'transmission') {
-  const connections = tab === 'connections';
-  $('settingsTransmission').hidden = connections; $('settingsConnections').hidden = !connections;
   $('settings').open = true;
-  for (const button of document.querySelectorAll('[data-settings-tab]')) {
-    const selected = button.dataset.settingsTab === tab;
-    button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1;
-  }
-  if (!$('appSettingsDialog').open) $('appSettingsDialog').showModal();
-  $(connections ? 'tabConnections' : 'tabTransmission').focus();
+  selectPage(tab, true);
 }
 function quality(card) { const [height, fps] = card.quality.value.split(':').map(Number); return { height, fps }; }
 function createCard(id, streamId) {
@@ -59,6 +66,7 @@ function createCard(id, streamId) {
     const option = node('option', '', label); option.value = value; card.quality.append(option);
   }
   card.quality.hidden = own;
+  card.quality.value = '1080:60';
   card.quality.addEventListener('change', () => busy(async () => { if (rtc.subscriptions.some(s => s.publisherId === id)) await rtc.watch(id, true, quality(card).height, quality(card).fps); }));
   card.mute = button('Ativar som', async () => { card.video.muted = !card.video.muted; card.mute.textContent = card.video.muted ? 'Ativar som' : 'Silenciar'; });
   card.mute.hidden = own;
@@ -158,7 +166,9 @@ function render() {
   if (!rtc.localStream) $('source').textContent = state.connected ? 'Você confirma a fonte no seletor.' : 'Entre em uma sala para começar.';
   $('start').hidden = Boolean(rtc.localStream); $('stop').hidden = true; $('stop').disabled = state.busy;
   document.body.classList.toggle('is-sharing', Boolean(rtc.localStream));
-  for (const id of ['quality', 'fps', 'audio']) $(id).disabled = Boolean(rtc.localStream);
+  for (const id of ['quality', 'fps', 'autoQuality', 'upload']) $(id).disabled = state.busy;
+  $('audio').disabled = Boolean(rtc.localStream);
+  $('liveQualityHint').textContent = rtc.localStream ? 'Alterações de resolução e FPS são aplicadas à transmissão em andamento. Áudio pode ser alterado na próxima captura.' : 'Padrão: 1080p a 60 FPS. A qualidade real depende da fonte, da conexão e do PC.';
   $('showTransmissionSettings').textContent = $('quality').value + 'p · ' + $('fps').value + ' FPS';
   $('networkBadge').textContent = state.connected ? 'Sala conectada' : 'Desconectado'; $('networkBadge').classList.toggle('connected', state.connected);
   $('participantCount').textContent = state.participants.length + '/5'; $('emptyPeers').hidden = state.participants.length > 0;
@@ -178,7 +188,7 @@ async function busy(action) {
   try { await action(); } catch (e) { status(e.name === 'NotAllowedError' ? 'Compartilhamento cancelado ou não autorizado. Escolha uma fonte quando quiser.' : e.message, e.name !== 'NotAllowedError'); }
   finally { state.busy = false; render(); }
 }
-async function save() { await native('settings', { server: $('server').value.trim(), name: $('name').value.trim(), tailscaleEnabled: false, ...options() }); }
+async function save() { await native('settings', { server: $('server').value.trim(), name: $('name').value.trim(), qualityDefaults: 2, tailscaleEnabled: false, ...options() }); }
 async function refreshGroup() {
   try { const group = await native('groupRoomStatus'); state.groupSaved = group.saved; state.groupInvalid = false; }
   catch { state.groupSaved = false; state.groupInvalid = true; }
@@ -191,6 +201,7 @@ async function connect(mode) {
   if (response.server) $('server').value = response.server;
   state.connected = true; state.role = response.welcome.role; state.invitation = response.invitation; state.roomId = response.welcome.roomId;
   state.persistent = Boolean(response.welcome.persistent);
+  selectPage('screens');
   rtc.setOptions(options()); rtc.enter(response.welcome); if (state.room) rtc.updateRoom(state.room);
   showExpiry(response.welcome.expiresAt); $('invite').value = '';
   void save().catch(() => status('Sala conectada. Não foi possível salvar o endereço para a próxima sessão.', true));
@@ -318,7 +329,18 @@ async function checkUpdates() {
   if (result) showUpdate(result);
 }
 $('name').addEventListener('input', renderProfile);
-$('showStage').addEventListener('click', () => $('stage').scrollIntoView({ block: 'start' }));
+$('showStage').addEventListener('click', () => { selectPage('screens', true); $('stage').scrollIntoView({ block: 'start' }); });
+for (const tab of document.querySelectorAll('[data-page]')) {
+  tab.addEventListener('click', () => { if (tab.dataset.page === 'screens') selectPage('screens'); else openSettings(tab.dataset.page); });
+  tab.addEventListener('keydown', event => {
+    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+    event.preventDefault(); const pages = ['screens','transmission','connections'];
+    const index = pages.indexOf(currentPage);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (index + (event.key === 'ArrowRight' ? 1 : 2)) % 3;
+    if (pages[next] !== 'screens') $('settings').open = true;
+    selectPage(pages[next], true);
+  });
+}
 $('showSettings').addEventListener('click', () => openSettings());
 $('showConnections').addEventListener('click', () => openSettings('connections'));
 $('showTransmissionSettings').addEventListener('click', () => openSettings());
@@ -355,7 +377,16 @@ $('installUpdate').addEventListener('click', () => busy(async () => {
 }));
 $('updateApplying').addEventListener('cancel', event => event.preventDefault());
 $('dismissMaintenance').addEventListener('click', () => { $('maintenanceNotice').hidden = true; });
-for (const id of ['quality','fps','autoQuality','upload']) $(id).addEventListener('change', () => { rtc.setOptions(options()); $('showTransmissionSettings').textContent = $('quality').value + 'p · ' + $('fps').value + ' FPS'; void save().catch(e => status(e.message,true)); });
+for (const id of ['quality','fps','autoQuality','upload']) $(id).addEventListener('change', () => busy(async () => {
+  try {
+    await rtc.changeOptions(options()); await save();
+    status(rtc.localStream ? 'Qualidade alterada para ' + $('quality').value + 'p · ' + $('fps').value + ' FPS, sem parar a transmissão.' : 'Preferências de transmissão salvas.');
+  } catch (error) {
+    $('quality').value = String(rtc.config.height); $('fps').value = String(rtc.config.fps);
+    $('autoQuality').checked = rtc.automatic; $('upload').value = String(rtc.config.upload / 1e6);
+    throw error;
+  }
+}));
 $('audio').addEventListener('change', () => { $('audioHint').textContent = $('audio').value === 'system' ? 'WASAPI captura todo o sistema, incluindo Discord e outras gameplays que você estiver ouvindo. Pode causar retorno. Prefira áudio da janela.' : $('audio').value === 'none' ? 'Apenas vídeo.' : 'Escolha a janela do jogo e habilite áudio no seletor. Depende do Windows/WebView2.'; });
 window.streamroom = { shutdown: async () => { state.shuttingDown = true; await rtc.shutdown(); }, diagnostics: () => ({ peers: rtc.peers.size, sending: rtc.subscribers.length, watching: rtc.subscriptions.length }) };
 window.streamroom.shutdown = async () => { zeroTierUi.dispose(); state.shuttingDown = true; await rtc.shutdown(); };
@@ -373,7 +404,9 @@ try {
   await refreshGroup();
   await zeroTierUi.start(r);
   for (const [key,value] of Object.entries(r.settings ?? {})) { const input=$(key); if (!input) continue; if(input.type==='checkbox') input.checked=Boolean(value); else input.value=String(value); }
-  if (r.zeroTierEnabled) { $('quality').value = '720'; $('fps').value = '30'; }
+  if (r.settings?.qualityDefaults !== 2) { $('quality').value = '1080'; $('fps').value = '60'; }
+  rtc.setOptions(options());
+  if (!r.uiPreview) void save().catch(() => {});
   buildVersion = r.version; runtimeVersion = r.runtime;
   $('version').textContent=r.version+(r.installed?'':' · desenvolvimento'); $('runtime').textContent='Motor WebView2 '+r.runtime; $('footerVersion').textContent='StreamRoom '+r.version+(r.installed?'':' · build de desenvolvimento');
   if (!isSecureContext || !navigator.mediaDevices?.getDisplayMedia || !globalThis.RTCPeerConnection) status('Atualize o Microsoft Edge WebView2 Runtime para captura/WebRTC.',true);

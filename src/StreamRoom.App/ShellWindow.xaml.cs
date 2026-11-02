@@ -34,6 +34,7 @@ public partial class ShellWindow : Window
     private UpdateInfo? _availableUpdate;
     private bool _updateDownloaded;
     private bool _retiringTailscale;
+    private BackgroundNotice? _backgroundNotice;
     private readonly SemaphoreSlim _updateCommands = new(1, 1);
     private SignalingClient? _connection;
     private bool _closing;
@@ -240,11 +241,11 @@ public partial class ShellWindow : Window
                     result = new { saved = group is not null, owner = group?.Owner ?? false }; break;
                 case "groupRoomForget":
                     if (_connection?.IsConnected == true) throw new IOException("Saia da sala antes de remover o acesso salvo.");
-                    if (MessageBox.Show(this, "Remover o acesso salvo somente deste PC? A sala continuará existindo. Se você é o criador, perderá o controle de exclusão e precisará de um convite para voltar.", "Remover sala salva", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes)
+                    if (AppPrompt.Confirm(this, "Remover acesso deste PC?", "A sala continuará existindo. Se você é o criador, perderá o controle de exclusão e precisará de um convite para voltar.", "Remover acesso"))
                         SavedGroupRoom.Forget(DataDirectory);
                     break;
                 case "groupRoomDestroy":
-                    if (MessageBox.Show(this, "Excluir a sala fixa para todos? Os convites e acessos salvos deixarão de funcionar. Esta ação não pode ser desfeita.", "Excluir sala do grupo", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes)
+                    if (AppPrompt.Confirm(this, "Excluir sala do grupo?", "A sala será excluída para todos. Os convites e acessos salvos deixarão de funcionar. Esta ação não pode ser desfeita.", "Excluir sala"))
                     {
                         await (_connection ?? throw new IOException("Entre na sala para excluí-la.")).DestroyGroupRoomAsync();
                         SavedGroupRoom.Forget(DataDirectory);
@@ -279,7 +280,8 @@ public partial class ShellWindow : Window
                     result = new { id = _captureSources.AddTestWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle) };
                     break;
                 case "uiPreview" when App.UiPreviewOutput is not null:
-                    using (var preview = File.Create(App.UiPreviewOutput)) await Browser.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, preview);
+                    if (Path.GetFileName(App.UiPreviewOutput) == "confirm-preview.png") AppPrompt.Preview(this, App.UiPreviewOutput);
+                    else using (var preview = File.Create(App.UiPreviewOutput)) await Browser.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, preview);
                     _ = Dispatcher.BeginInvoke(Close);
                     break;
                 case "capturePreview" when App.PickerPreviewOutput is not null:
@@ -294,7 +296,9 @@ public partial class ShellWindow : Window
                     _ = Dispatcher.BeginInvoke(Close);
                     break;
                 case "trayTestClose" when App.TrayTestOutput is not null:
-                    Close(); result = new { hidden = !IsVisible, tray = _tray?.IsAvailable, ready = _ready, closing = _closing };
+                    _testCloseToTray = true;
+                    try { Close(); } finally { _testCloseToTray = false; }
+                    result = new { hidden = !IsVisible, tray = _tray?.IsAvailable, ready = _ready, closing = _closing, noticePassive = _backgroundNotice is null || _backgroundNotice.IsPassive };
                     break;
                 case "trayTestOpen" when App.TrayTestOutput is not null:
                     OpenFromTray(); result = new { visible = IsVisible, tray = _tray?.IsAvailable };
@@ -358,6 +362,11 @@ public partial class ShellWindow : Window
                 case "nativeFrameAck":
                     if (_nativeSession == p.GetProperty("session").GetString() && _nativeSequence == p.GetProperty("frame").GetInt64())
                     { Volatile.Write(ref _nativePending, 0); }
+                    break;
+                case "nativeCaptureConfigure":
+                    if (_nativeSession != p.GetProperty("session").GetString() || _nativeCapture is null)
+                        throw new InvalidOperationException("A fonte de captura mudou. Tente novamente.");
+                    _nativeCapture.Configure(p.GetProperty("fps").GetInt32(), p.GetProperty("quality").GetInt32());
                     break;
                 case "nativeCaptureStop":
                     if (_nativeSession == p.GetProperty("session").GetString()) StopNativeCapture();
@@ -548,6 +557,7 @@ public partial class ShellWindow : Window
     private void OpenFromTray()
     {
         if (_closing) return;
+        if (_backgroundNotice?.IsVisible == true) _backgroundNotice.Close(); _backgroundNotice = null;
         ShowInTaskbar = true;
         Show();
         if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
@@ -561,11 +571,12 @@ public partial class ShellWindow : Window
         {
             e.Cancel = true;
             Hide(); ShowInTaskbar = false;
-            if (!_backgroundExplained) { _tray.ExplainBackground(); _backgroundExplained = true; }
+            if (!_backgroundExplained) { _backgroundNotice = BackgroundNotice.ShowBriefly(); _backgroundExplained = true; }
             return;
         }
         e.Cancel = true;
         _closing = true; _updateTimer.Stop(); StopNativeCapture();
+        if (_backgroundNotice?.IsVisible == true) _backgroundNotice.Close(); _backgroundNotice = null;
         _mediaTestScene?.Close();
         try { if (_ready) await Browser.ExecuteScriptAsync("window.streamroom?.shutdown()").WaitAsync(TimeSpan.FromSeconds(2)); } catch { }
         await DisconnectAsync();

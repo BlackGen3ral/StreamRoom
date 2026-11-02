@@ -7,6 +7,6 @@ try{
  const closed=await native('trayTestClose');
  await new Promise(r=>setTimeout(r,500));
  const reopened=await native('trayTestOpen');
- result={success:closed.hidden&&closed.tray&&closed.ready&&!closed.closing&&reopened.visible,closed,reopened};
+ result={success:closed.hidden&&closed.tray&&closed.ready&&!closed.closing&&closed.noticePassive&&reopened.visible,closed,reopened};
 }catch(e){result={success:false,error:String(e)};}
 await native('trayTestFinish',result);

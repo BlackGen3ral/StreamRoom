@@ -29,15 +29,6 @@ internal sealed class TrayIcon : IDisposable
         IsAvailable = ShellNotifyIcon(0, ref _data);
         if (!IsAvailable) { _source.RemoveHook(Hook); throw new Win32Exception(Marshal.GetLastWin32Error(), "Não foi possível criar o ícone na bandeja."); }
     }
-    public void ExplainBackground()
-    {
-        _data.Flags |= 0x10;
-        _data.InfoTitle = "StreamRoom continua aberto";
-        _data.Info = "Sua sala e transmissão continuam ativas. Clique no ícone para abrir; use Sair no menu para encerrar.";
-        _data.InfoFlags = 1;
-        ShellNotifyIcon(1, ref _data);
-        _data.Flags &= ~0x10u;
-    }
     private nint Hook(nint hwnd, int message, nint wparam, nint lparam, ref bool handled)
     {
         if (_disposed) return 0;
