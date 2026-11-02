@@ -33,15 +33,22 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
   const available = () => root.parentElement?.clientWidth || 280;
   function heightLimit() {
     const main=root.closest('main');if(!main || document.fullscreenElement===root)return 2160;
+    const outerHeight = element => {
+      if(!element || element.hidden)return 0;
+      const style=getComputedStyle(element);
+      return element.getBoundingClientRect().height+(parseFloat(style.marginTop)||0)+(parseFloat(style.marginBottom)||0);
+    };
     const top=frame.getBoundingClientRect().top-main.getBoundingClientRect().top+main.scrollTop;
-    const controls=root.querySelector('.stream-controls')?.getBoundingClientRect().height ?? 60;
-    const metrics=root.querySelector(':scope>.fine')?.getBoundingClientRect().height ?? 20;
-    return Math.max(160,Math.floor(main.clientHeight-top-controls-metrics-100));
+    const controls=outerHeight(root.querySelector('.stream-controls'));
+    const metrics=outerHeight(root.querySelector(':scope>.fine'));
+    const status=outerHeight(main.querySelector('#status'));
+    const padding=(parseFloat(getComputedStyle(main).paddingBottom)||0)+(parseFloat(getComputedStyle(root.parentElement).paddingBottom)||0);
+    return Math.max(160,Math.floor(main.clientHeight-top-controls-metrics-status-padding-4));
   }
   function sync() {
     if(document.fullscreenElement!==root) {
       const limit=heightLimit();root.style.setProperty('--video-height-limit',limit+'px');
-      root.style.setProperty('--auto-video-width',Math.min(available(),limit*16/9)+'px');
+      root.style.setProperty('--auto-video-width',available()+'px');
       inputs.height.max=limit;
     }
     const width = Math.round(root.getBoundingClientRect().width), height = Math.round(frame.getBoundingClientRect().height);
@@ -101,6 +108,7 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
   document.addEventListener('fullscreenchange', fullscreenChanged);
   const observer = new ResizeObserver(sync); observer.observe(root); observer.observe(frame);
   if(root.closest('main'))observer.observe(root.closest('main'));
+  const status=root.closest('main')?.querySelector('#status');if(status)observer.observe(status);
   window.addEventListener('resize',sync);
   return { sync, dispose() {
     endDrag(); observer.disconnect(); document.removeEventListener('fullscreenchange', fullscreenChanged);window.removeEventListener('resize',sync);

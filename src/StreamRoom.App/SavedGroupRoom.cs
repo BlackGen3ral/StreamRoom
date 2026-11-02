@@ -11,14 +11,14 @@ internal sealed record SavedGroupRoom(string Server, string RoomId, string Token
     [DllImport("crypt32.dll", SetLastError = true)] private static extern bool CryptProtectData(ref Blob input, IntPtr description, IntPtr entropy, IntPtr reserved, IntPtr prompt, uint flags, out Blob output);
     [DllImport("crypt32.dll", SetLastError = true)] private static extern bool CryptUnprotectData(ref Blob input, IntPtr description, IntPtr entropy, IntPtr reserved, IntPtr prompt, uint flags, out Blob output);
     [DllImport("kernel32.dll")] private static extern IntPtr LocalFree(IntPtr pointer);
-    private static byte[] Transform(byte[] bytes, bool protect)
+    internal static byte[] Transform(byte[] bytes, bool protect)
     {
         var input = new Blob { Size = bytes.Length, Data = Marshal.AllocHGlobal(bytes.Length) }; Blob output = default;
         try
         {
             Marshal.Copy(bytes, 0, input.Data, bytes.Length);
             var success = protect ? CryptProtectData(ref input, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 1, out output) : CryptUnprotectData(ref input, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 1, out output);
-            if (!success) throw new IOException("O Windows não conseguiu acessar a sala salva neste perfil.");
+            if (!success) throw new IOException("O Windows não conseguiu acessar os dados salvos neste perfil.");
             var result = new byte[output.Size]; Marshal.Copy(output.Data, result, 0, result.Length); return result;
         }
         finally { Marshal.FreeHGlobal(input.Data); if (output.Data != IntPtr.Zero) LocalFree(output.Data); }

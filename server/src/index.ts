@@ -4,6 +4,7 @@ export { Room } from './legacy';
 
 import { ROOM_TTL, SWEEP_INTERVAL, renewalExpiry, stale } from './policy';
 import { validAvatar, validName } from './profile';
+import { clientConfig, type ClientConfigEnv } from './client-config';
 const MAX_MESSAGE = 64 * 1024;
 const json = (body: unknown, status = 200) => Response.json(body, {
   status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
@@ -15,18 +16,19 @@ async function hash(value: string) {
 }
 type Metadata = { roomId: string; inviteHash: string; hostHash: string; expiresAt: number; persistent?: boolean };
 type Watch = { publisherId: string; streamId: string; subscriptionId: string; height: number; fps: number };
-type Session = { id: string; name?: string; avatar?: string | null; profileAt?: number; role?: 'host' | 'viewer'; lastSeen: number; window: number; count: number; streamId?: string; watching?: Watch[] };
+type Session = { id: string; name?: string; avatar?: string | null; profileId?: string | null; profileAt?: number; role?: 'host' | 'viewer'; lastSeen: number; window: number; count: number; streamId?: string; watching?: Watch[] };
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v);
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env & ClientConfigEnv): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/v1/rooms')) return legacy.fetch(request, env);
+    if (url.pathname === '/v2/client-config' && request.method === 'GET') return json(clientConfig(env));
     if (url.pathname === '/health' && request.method === 'GET')
-      return json({ service: 'StreamRoom signaling', protocol: 2, version: '0.4.2', persistentRooms: true, profiles: true, mediaPolicy: 'direct-only' });
+      return json({ service: 'StreamRoom signaling', protocol: 2, version: '0.4.3', persistentRooms: true, profiles: true, savedFriends: true, mediaPolicy: 'direct-only' });
     if (url.pathname === '/v2/rooms' && request.method === 'POST') {
       if (request.body) await request.body.cancel();
       const key = request.headers.get('CF-Connecting-IP') ?? 'local';
@@ -91,7 +93,7 @@ export class MultiRoom extends DurableObject<Env> {
   }
   private broadcast() {
     const sessions = this.sessions();
-    const participants = sessions.map(({ session: s }) => ({ id: s.id, name: s.name!, avatar: s.avatar ?? null, role: s.role!, streamId: s.streamId ?? null, streaming: Boolean(s.streamId) }));
+    const participants = sessions.map(({ session: s }) => ({ id: s.id, name: s.name!, avatar: s.avatar ?? null, profileId: s.profileId ?? null, role: s.role!, streamId: s.streamId ?? null, streaming: Boolean(s.streamId) }));
     // Watch lists are private to the receiving publisher/subscriber, not room-wide.
     for (const { ws, session: s } of sessions) this.send(ws, {
       type: 'room', participants, subscriptions: s.watching ?? [],
@@ -138,7 +140,11 @@ export class MultiRoom extends DurableObject<Env> {
       }
       s.role = role; s.name = message.displayName.trim();
       if (!validAvatar(message.avatar)) { this.reject(ws, 'invalid_profile', 'Foto de perfil inválida.', true); return; }
+      if (message.profileId !== undefined && message.profileId !== null && (!uuid(message.profileId) || message.profileId === '00000000-0000-0000-0000-000000000000')) {
+        this.reject(ws, 'invalid_profile', 'Identificador de perfil inválido.', true); return;
+      }
       s.avatar = message.avatar ?? null;
+      s.profileId = message.profileId ?? null;
       ws.serializeAttachment(s);
       this.send(ws, { type: 'welcome', participantId: s.id, role, roomId: this.metadata.roomId, expiresAt: this.metadata.expiresAt, persistent: Boolean(this.metadata.persistent), profiles: true, protocol: 2 });
       this.broadcast(); return;

@@ -3,10 +3,12 @@ import { createCapturePicker } from './capture-picker.mjs';
 import { createZeroTierUi } from './zerotier-ui.mjs';
 import { createStreamViewport } from './stream-viewport.mjs';
 import { createProfileUi, showAvatar } from './profile-ui.mjs';
+import { createFriendsUi } from './friends-ui.mjs';
 import { createUiSounds, createViewerNotifications } from './ui-sounds.mjs';
 const $ = id => document.getElementById(id);
 $('transmissionPage').append($('settingsTransmission'));
 $('connectionsPage').append($('settingsConnections'));
+$('connectionsPage').append(document.querySelector('.support-row'));
 $('settingsConnections').hidden = false;
 for (const id of ['settingsTransmission','settingsConnections']) { $(id).removeAttribute('role'); $(id).removeAttribute('aria-labelledby'); }
 let currentPage = 'screens';
@@ -23,7 +25,7 @@ const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
     const id = String(++sequence);
-    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'profilePhoto' ? 900000 : type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
+    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'googleSignIn' ? 330000 : type === 'profilePhoto' ? 900000 : type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
     requests.set(id, { resolve, reject, timer }); window.chrome.webview.postMessage({ id, type, payload });
   });
 }
@@ -34,6 +36,7 @@ let latestStats = [], buildVersion = '', runtimeVersion = '';
 const cards = new Map(), remoteStreams = new Map();
 function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
 const zeroTierUi = createZeroTierUi(native, rtc, () => state.connected, status);
+const friendsUi = createFriendsUi(native, () => render());
 const profileUi = createProfileUi(native, (profile, note) => {
   $('name').value = profile.name; uiSounds.refresh(); render();
   void save().catch(() => {}); status(note || (state.connected ? 'Perfil atualizado na sala.' : 'Perfil salvo neste PC.'));
@@ -108,12 +111,12 @@ function createCard(id, streamId) {
   fit.addEventListener('change', () => { card.video.style.objectFit = fit.value; });
   const more = node('details', 'stream-more');
   const moreButton = node('summary', '', 'Opções'); moreButton.setAttribute('aria-label','Mais opções e tamanho do vídeo'); more.append(moreButton);
-  const extra = node('div', 'stream-extra'); extra.append(card.pause, fit); more.append(extra);
+  const extra = node('div', 'stream-extra'); extra.append(card.pause); more.append(extra);
   card.watch.classList.add('stream-action'); if (own) card.watch.classList.add('stream-stop');
   fullscreen.classList.add('stream-fullscreen'); enlarge.classList.add('stream-enlarge');
   card.retry.classList.add('stream-retry');card.mute.classList.add('stream-audio');
   const primaryActions=node('div','stream-primary-actions'),playbackActions=node('div','stream-playback-actions'),viewActions=node('div','stream-view-actions');
-  primaryActions.append(card.watch,card.retry,card.sendMute);playbackActions.append(card.quality,card.mute,card.volume);viewActions.append(enlarge,fullscreen,more);
+  primaryActions.append(card.watch,card.retry,card.sendMute);playbackActions.append(card.quality,card.mute,card.volume);viewActions.append(enlarge,fit,fullscreen,more);
   playbackActions.hidden=own;controls.append(primaryActions,playbackActions,viewActions);
   card.metrics = node('p', 'fine', own ? 'Prévia local · aguardando espectadores' : 'Clique em Assistir para abrir esta tela.');
   card.root.append(heading, card.frame, controls, card.metrics); cards.set(id, card); $('streamGrid').append(card.root);
@@ -158,7 +161,13 @@ function renderStreams() {
   }
   $('streamGrid').hidden = streams.length === 0; $('playerEmpty').hidden = streams.length !== 0;
   $('streamCount').textContent = streams.length + ' ao vivo';
+  document.body.classList.toggle('has-streams', streams.length > 0);
+  const launcher = document.querySelector('.capture-launch'), target = streams.length ? $('transmissionPage') : $('screensPage');
+  if (launcher.parentElement !== target) target.insertBefore(launcher, streams.length ? $('settingsTransmission') : $('streamGrid'));
+  $('stageShare').hidden = !streams.length || Boolean(rtc.localStream);
+  $('stageShare').disabled = state.busy || !state.connected;
   $('streamGrid').classList.toggle('has-highlight', [...cards.values()].some(card => card.root.classList.contains('expanded')));
+  for (const card of cards.values()) card.viewport.sync();
 }
 function renderProfile() {
   const name = $('name').value.trim() || 'Você';
@@ -201,13 +210,16 @@ function render() {
   $('title').textContent = 'Transmissões';
   $('emptyTitle').textContent = state.connected ? 'Sua sala está pronta.' : 'Nenhuma transmissão';
   $('emptyDescription').textContent = state.connected ? 'Compartilhe sua tela ou escolha uma transmissão para assistir.' : 'Crie uma sala ou entre com um convite.';
+  friendsUi.update(state.participants, rtc.identity?.participantId);
   $('participants').replaceChildren(...state.participants.map(p => {
     const li = node('li','participant-item'), details = node('div','participant-copy');
     const self = p.id === rtc.identity?.participantId;
     details.append(node('div','peer-name',p.name + (self ? ' (você)' : '')), node('div','peer-role',p.streamId ? 'Compartilhando tela' : p.role === 'host' ? 'Criador da sala' : 'Na sala'));
     const avatar = node('span','avatar'); showAvatar(avatar, p.name, self ? profileUi.avatar : p.avatar);
     const presence = node('span','peer-presence'); presence.classList.toggle('streaming', Boolean(p.streamId)); presence.title = p.streamId ? 'Compartilhando tela' : 'Conectado';
-    li.append(avatar,details,presence); return li;
+    li.append(avatar,details,presence);
+    if (!self) li.append(friendsUi.actionFor(p));
+    return li;
   }));
   renderStreams();
 }
@@ -368,6 +380,7 @@ async function checkUpdates() {
 }
 $('name').addEventListener('input', renderProfile);
 $('showStage').addEventListener('click', () => { selectPage('screens', true); $('stage').scrollIntoView({ block: 'start' }); });
+$('stageShare').addEventListener('click', () => $('start').click());
 for (const tab of document.querySelectorAll('[data-page]')) {
   tab.addEventListener('click', () => { if (tab.dataset.page === 'screens') selectPage('screens'); else openSettings(tab.dataset.page); });
   tab.addEventListener('keydown', event => {
@@ -442,7 +455,8 @@ try {
   await refreshGroup();
   await zeroTierUi.start(r);
   for (const [key,value] of Object.entries(r.settings ?? {})) { const input=$(key); if (!input) continue; if(input.type==='checkbox') input.checked=Boolean(value); else input.value=String(value); }
-  profileUi.start(r.profile);
+  profileUi.start(r.profile, r.google, Boolean(r.clientConfiguration?.googleClientId));
+  await friendsUi.start();
   if (r.settings?.qualityDefaults !== 2) { $('quality').value = '1080'; $('fps').value = '60'; }
   rtc.setOptions(options());
   if (!r.uiPreview) void save().catch(() => {});

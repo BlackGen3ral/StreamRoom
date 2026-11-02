@@ -54,13 +54,14 @@ public sealed class SignalingClient : IAsyncDisposable
     }
     private static bool ValidToken(string? value) => value is { Length: 64 } && value.All(char.IsAsciiHexDigitLower);
 
-    public async Task<Welcome> ConnectAsync(Uri server, string roomId, string token, string displayName, CancellationToken cancellationToken = default, string? avatar = null)
+    public async Task<Welcome> ConnectAsync(Uri server, string roomId, string token, string displayName, CancellationToken cancellationToken = default, string? avatar = null, string? profileId = null)
     {
         if (_receiver is not null || _disposed) throw new InvalidOperationException("Crie uma nova conexão para entrar novamente.");
         if (!Guid.TryParseExact(roomId, "D", out _) || !ValidToken(token)) throw new ArgumentException("Credenciais inválidas.");
         displayName = displayName.Trim();
         if (displayName.Length is < 1 or > 32 || displayName.Any(char.IsControl)) throw new ArgumentException("Seu nome deve ter entre 1 e 32 caracteres.");
         ProfileData.ValidateAvatar(avatar);
+        if (profileId is not null && !ProfileData.ValidId(profileId)) throw new ArgumentException("Identificador de perfil inválido.");
         var socketUri = new UriBuilder(new Uri(server, $"v2/rooms/{roomId}/socket")) { Scheme = server.Scheme == "https" ? "wss" : "ws" };
         _socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
         _socket.Options.KeepAliveTimeout = TimeSpan.FromSeconds(20);
@@ -70,7 +71,7 @@ public sealed class SignalingClient : IAsyncDisposable
         {
             await _socket.ConnectAsync(socketUri.Uri, timeout.Token);
             _receiver = ReceiveAsync();
-            await SendAsync(new { type = "join", token, displayName, avatar, protocol = 2 }, timeout.Token);
+            await SendAsync(new { type = "join", token, displayName, avatar, profileId, protocol = 2 }, timeout.Token);
             var welcome = await _welcome.Task.WaitAsync(timeout.Token);
             _profiles = welcome.Profiles;
             _role = welcome.Role; _expiresAt = welcome.ExpiresAt; _persistent = welcome.Persistent;

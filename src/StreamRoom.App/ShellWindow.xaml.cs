@@ -41,6 +41,10 @@ public partial class ShellWindow : Window
     private readonly ZeroTierDownload _zeroTierDownload = new();
     private readonly SemaphoreSlim _updateCommands = new(1, 1);
     private SignalingClient? _connection;
+    private Participant[] _participants = [];
+    private string? _selfParticipantId;
+    private Task<ClientConfiguration>? _clientConfiguration;
+    private CancellationTokenSource? _googleLogin;
     private bool _closing;
     private bool _exitRequested;
     private bool _testCloseToTray;
@@ -80,6 +84,8 @@ public partial class ShellWindow : Window
         try
         {
             Directory.CreateDirectory(DataDirectory);
+            _clientConfiguration = App.UiPreviewOutput is not null || App.ZeroTierProof || App.MediaTestRole is not null || App.NetworkTestOutput is not null || App.CaptureTestOutput is not null || App.TrayTestOutput is not null || App.PickerPreviewOutput is not null
+                ? Task.FromResult(new ClientConfiguration()) : ClientConfiguration.FetchAsync(DataDirectory);
             try
             {
                 using var startupSettings = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(DataDirectory, "settings-v2.json")));
@@ -175,7 +181,8 @@ public partial class ShellWindow : Window
             id = message.GetProperty("id").GetString();
             if (type?.StartsWith("tailscale", StringComparison.Ordinal) == true)
                 throw new InvalidOperationException("A integração Tailscale foi retirada. Use a opção ZeroTier em Conexões.");
-            commandGate = type is "profilePhoto" or "profileSave" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
+            if (type == "googleCancel") { _googleLogin?.Cancel(); Emit(new { type = "reply", id, ok = true, result = new { } }); return; }
+            commandGate = type is "profilePhoto" or "profileSave" or "googleSignIn" or "googleDisconnect" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
             object? result = null;
@@ -206,8 +213,33 @@ public partial class ShellWindow : Window
                         try { using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(file)); settings = doc.RootElement.Clone(); }
                         catch (JsonException) { }
                     }
-                    result = new { settings, profile = ProfileStore.Load(DataDirectory), zeroTierProof = App.ZeroTierProof, zeroTierEnabled = App.ZeroTierEnabled, zeroTierContextUnavailable = App.ZeroTierContextUnavailable, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = !App.ZeroTierProof && _updates.IsInstalled, capturePreview = App.PickerPreviewOutput is not null, uiPreview = App.UiPreviewOutput is not null, playerLayoutTest = App.PlayerLayoutTestOutput is not null };
+                    var configuration = await (_clientConfiguration ?? Task.FromResult(new ClientConfiguration()));
+                    result = new { settings, profile = ProfileStore.Load(DataDirectory), clientConfiguration = configuration, google = GoogleAccountStore.Status(DataDirectory), zeroTierProof = App.ZeroTierProof, zeroTierEnabled = App.ZeroTierEnabled, zeroTierContextUnavailable = App.ZeroTierContextUnavailable, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = !App.ZeroTierProof && _updates.IsInstalled, capturePreview = App.PickerPreviewOutput is not null, uiPreview = App.UiPreviewOutput is not null, playerLayoutTest = App.PlayerLayoutTestOutput is not null };
                     break;
+                case "googleSignIn":
+                    if (App.UiPreviewOutput is not null || App.MediaTestRole is not null) throw new IOException("Login indisponível no diagnóstico isolado.");
+                    var googleConfig = await (_clientConfiguration ?? Task.FromResult(new ClientConfiguration()));
+                    using (var login = new CancellationTokenSource())
+                    {
+                        _googleLogin = login;
+                        try
+                        {
+                            var identity = await GoogleLogin.SignInAsync(googleConfig.GoogleClientId, login.Token);
+                            await GoogleAccountStore.SaveAsync(DataDirectory, identity);
+                            result = new { account = GoogleAccountStore.Status(DataDirectory), name = identity.Name, avatar = identity.Avatar };
+                        }
+                        finally { _googleLogin = null; }
+                    }
+                    break;
+                case "googleDisconnect":
+                    GoogleAccountStore.Remove(DataDirectory); result = GoogleAccountStore.Status(DataDirectory); break;
+                case "friendsStatus": result = FriendBook.Load(DataDirectory); break;
+                case "friendSave":
+                    if (_connection?.IsConnected != true) throw new IOException("Entre na sala para salvar um amigo que está nela.");
+                    var peer = _participants.FirstOrDefault(peer => peer.Id == p.GetProperty("participantId").GetString());
+                    if (peer is null || peer.Id == _selfParticipantId || peer.ProfileId == ProfileStore.Load(DataDirectory)?.Id) throw new IOException("Escolha outro participante da sala para salvar como amigo.");
+                    result = await FriendBook.SavePeerAsync(DataDirectory, peer); break;
+                case "friendRemove": result = await FriendBook.RemoveAsync(DataDirectory, p.GetProperty("profileId").GetString() ?? ""); break;
                 case "playerLayoutReady" when App.PlayerLayoutTestOutput is not null:
                     await PlayerLayoutSelfTest.Run(this, Browser.CoreWebView2, App.PlayerLayoutTestOutput);
                     _exitRequested = true; _ = Dispatcher.BeginInvoke(Close); break;
@@ -244,8 +276,11 @@ public partial class ShellWindow : Window
                     }
                     break;
                 case "zeroTierStatus":
-                    var zeroTier = new ZeroTierService(); var zeroTierStatus = await zeroTier.StatusAsync(); var zeroTierConfig = ZeroTierPreferences.Load();
-                    result = new { status = zeroTierStatus, networkId = zeroTierConfig.NetworkId.Length > 0 ? zeroTierConfig.NetworkId : zeroTier.DetectedNetworkId, enabled = zeroTierConfig.Enabled, active = App.ZeroTierEnabled, proof = App.ZeroTierProof }; break;
+                    var zeroTier = new ZeroTierService(); var zeroTierConfig = ZeroTierPreferences.Load();
+                    var defaults = await (_clientConfiguration ?? Task.FromResult(new ClientConfiguration()));
+                    var targetNetwork = zeroTierConfig.NetworkId.Length > 0 ? zeroTierConfig.NetworkId : defaults.DefaultZeroTierNetworkId;
+                    var zeroTierStatus = await zeroTier.StatusAsync(targetNetwork);
+                    result = new { status = zeroTierStatus, networkId = targetNetwork.Length > 0 ? targetNetwork : zeroTier.DetectedNetworkId, defaultNetwork = targetNetwork.Length > 0 && targetNetwork == defaults.DefaultZeroTierNetworkId, enabled = zeroTierConfig.Enabled, active = App.ZeroTierEnabled, proof = App.ZeroTierProof }; break;
                 case "zeroTierConfigure":
                     if (App.ZeroTierProof) throw new InvalidOperationException("A configuração do protótipo é definida pelo pacote.");
                     if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de alterar a rede privada.");
@@ -265,9 +300,10 @@ public partial class ShellWindow : Window
                     _zeroTierDownload.OpenInstaller(); break;
                 case "zeroTierJoin":
                     if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de conectar este PC à rede privada.");
-                    if (MessageBox.Show(this, "Conectar este PC à rede privada configurada?\n\nO Windows pedirá autorização. O proprietário deverá autorizar este dispositivo no painel ZeroTier. Não será alterada a rota padrão da internet nem o DNS.", "Conectar ZeroTier", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes)
-                        await ZeroTierService.RequestJoinAsync();
-                    result = await new ZeroTierService().StatusAsync(); break;
+                    if (!AppPrompt.Confirm(this, "Conectar à rede dos amigos?", "O Windows pode pedir autorização. O proprietário deverá autorizar este PC no ZeroTier. Depois, o serviço manterá a conexão automaticamente. Sua rota padrão da internet e o DNS serão preservados.", "Conectar PC"))
+                    { result = new { cancelled = true }; break; }
+                    await ZeroTierService.RequestJoinAsync();
+                    result = new { cancelled = false }; break;
                 case "settings":
                     Invitations.ValidateServer(p.GetProperty("server").GetString()!);
                     if (p.GetRawText().Length > 4096) throw new ArgumentException("Configurações inválidas.");
@@ -494,6 +530,7 @@ public partial class ShellWindow : Window
             (roomId, token) = Invitations.Parse(server, invitation);
         }
         var client = new SignalingClient(); _connection = client;
+        client.ParticipantsChanged += peers => { if (_connection == client) _participants = peers.ToArray(); };
         client.RoomStateChanged += state => { if (_connection == client) Emit(new { type = "roomState", state }); };
         client.RoomRenewed += expiresAt => { if (_connection == client) Emit(new { type = "roomRenewed", expiresAt }); };
         client.SignalReceived += (from, payload) => { if (_connection == client) Emit(new { type = "signal", from, payload }); };
@@ -504,7 +541,8 @@ public partial class ShellWindow : Window
         };
         try
         {
-            var welcome = await client.ConnectAsync(server, roomId, token, name, avatar: localProfile.Avatar);
+            var welcome = await client.ConnectAsync(server, roomId, token, name, avatar: localProfile.Avatar, profileId: localProfile.Id);
+            _selfParticipantId = welcome.ParticipantId;
             if (welcome.Persistent)
             {
                 var existing = SavedGroupRoom.Load(DataDirectory);
@@ -534,6 +572,7 @@ public partial class ShellWindow : Window
         Title = "StreamRoom";
         _audio.Dispose();
         var previous = _connection; _connection = null;
+        _participants = []; _selfParticipantId = null;
         if (previous is not null) await previous.DisposeAsync();
     }
     private void SendNativeFrame(string session, byte[] pixels, int width, int height)
@@ -619,7 +658,7 @@ public partial class ShellWindow : Window
             return;
         }
         e.Cancel = true;
-        _closing = true; _updateTimer.Stop(); StopNativeCapture();
+        _closing = true; _googleLogin?.Cancel(); _updateTimer.Stop(); StopNativeCapture();
         if (_backgroundNotice?.IsVisible == true) _backgroundNotice.Close(); _backgroundNotice = null;
         _mediaTestScene?.Close();
         try { if (_ready) await Browser.ExecuteScriptAsync("window.streamroom?.shutdown()").WaitAsync(TimeSpan.FromSeconds(2)); } catch { }

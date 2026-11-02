@@ -26,6 +26,10 @@ internal static class PlayerLayoutSelfTest
                 if (!value.GetProperty("success").GetBoolean()) throw new Exception("Player layout assertion failed: " + value.GetRawText());
                 return value;
             }
+            await core.ExecuteScriptAsync("window.restorePlayerAutoSize()"); await Task.Delay(400);
+            var automatic = await Probe("auto");
+            using (var file = File.Create(Path.ChangeExtension(output, ".automatic.png"))) await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, file);
+            await core.ExecuteScriptAsync("window.resetPlayerTestSize()"); await Task.Delay(150);
             var initial = await Probe("restored"); var handle = initial.GetProperty("resizeHandle");
             double x = handle.GetProperty("x").GetDouble(), y = handle.GetProperty("y").GetDouble();
             await core.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent", JsonSerializer.Serialize(new { type = "mousePressed", button = "left", buttons = 1, clickCount = 1, x, y }));
@@ -40,7 +44,7 @@ internal static class PlayerLayoutSelfTest
                 && Math.Abs(window.ActualWidth-previousWidth)<3 && Math.Abs(window.ActualHeight-previousHeight)<3;
             if (!restoredWindow) throw new Exception("Native window was not restored.");
             using (var file = File.Create(Path.ChangeExtension(output, ".restored.png"))) await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, file);
-            await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { success = true, dragged, full, restored, restoredWindow }));
+            await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { success = true, automatic, dragged, full, restored, restoredWindow }));
         }
         catch (Exception error) { Environment.ExitCode = 1; await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { success = false, error = error.ToString() })); }
     }

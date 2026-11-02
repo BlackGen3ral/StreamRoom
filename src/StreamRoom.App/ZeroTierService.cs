@@ -55,13 +55,13 @@ internal sealed class ZeroTierService
         if (json.Length > 2 * 1024 * 1024) throw new IOException("Resposta inválida.");
         return JsonDocument.Parse(json);
     }
-    public async Task<object> StatusAsync()
+    public async Task<object> StatusAsync(string? requestedNetworkId = null)
     {
         if (!File.Exists(Executable)) return new { installed = false, connected = false, state = "missing", addresses = Array.Empty<string>(), deviceId = "" };
         try
         {
             using var info = await ReadAsync("info"); using var networks = await ReadAsync("listnetworks");
-            var networkId = ZeroTierPreferences.Load().NetworkId;
+            var networkId = ZeroTierPreferences.IsNetworkId(requestedNetworkId) ? requestedNetworkId! : ZeroTierPreferences.Load().NetworkId;
             if (networkId.Length == 0)
             {
                 var privateNetworks = networks.RootElement.EnumerateArray().Where(n => n.TryGetProperty("type", out var type) && type.GetString() == "PRIVATE").ToArray();

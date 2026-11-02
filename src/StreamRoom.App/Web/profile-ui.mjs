@@ -12,7 +12,12 @@ export function showAvatar(element, name, avatar) {
 
 export function createProfileUi(native, onSaved) {
   const $ = id => document.getElementById(id), dialog = $('profileDialog');
-  let profile = { name: '', avatar: null }, draft = null, busy = false;
+  let profile = { name: '', avatar: null }, draft = null, busy = false, google = {}, configured = false, signing = false;
+  function drawGoogle() {
+    $('googleAccountStatus').textContent = signing ? 'Aguardando você no navegador…' : google.linked ? 'Vinculado neste PC: ' + google.name : configured ? 'Use seu nome e foto do Google.' : 'Login Google indisponível. Verifique a conexão e reabra o app.';
+    $('googleSignIn').disabled = busy || !configured; $('googleDisconnect').disabled = busy;
+    $('googleDisconnect').hidden = !google.linked; $('googleCancel').hidden = !signing;
+  }
   function feedback(text, error = false) {
     $('profileFeedback').textContent = text; $('profileFeedback').hidden = !text; $('profileFeedback').classList.toggle('error', error);
   }
@@ -20,15 +25,30 @@ export function createProfileUi(native, onSaved) {
   async function run(action) {
     if (busy) return; busy = true; feedback('');
     for (const id of ['profileChoosePhoto','profileRemovePhoto','profileSave','profileDisplayName','profileSounds']) $(id).disabled = true;
+    drawGoogle();
     try { await action(); } catch (error) { feedback(error.message, true); }
-    finally { busy = false; for (const id of ['profileChoosePhoto','profileSave','profileDisplayName','profileSounds']) $(id).disabled = false; preview(); }
+    finally { busy = false; for (const id of ['profileChoosePhoto','profileSave','profileDisplayName','profileSounds']) $(id).disabled = false; preview(); drawGoogle(); }
   }
   $('editProfile').addEventListener('click', () => {
     draft = profile.avatar; $('profileDisplayName').value = $('name').value.trim() || profile.name;
     $('profileSounds').checked = profile.sounds !== false;
-    preview(); feedback(''); dialog.showModal();
+    preview(); feedback(''); drawGoogle(); dialog.showModal();
   });
   for (const id of ['profileClose','profileCancel']) $(id).addEventListener('click', () => dialog.close());
+  const cancelLogin = () => { if (signing) void native('googleCancel').catch(() => {}); };
+  dialog.addEventListener('close', cancelLogin); dialog.addEventListener('cancel', cancelLogin);
+  $('googleCancel').addEventListener('click', cancelLogin);
+  $('googleSignIn').addEventListener('click', () => run(async () => {
+    signing = true; drawGoogle();
+    try {
+      const result = await native('googleSignIn'); google = result.account;
+      $('profileDisplayName').value = result.name; if (result.avatar) draft = result.avatar;
+      preview(); feedback('Google conectado. Confira o nome e a foto, depois salve o perfil.');
+    } finally { signing = false; drawGoogle(); }
+  }));
+  $('googleDisconnect').addEventListener('click', () => run(async () => {
+    google = await native('googleDisconnect'); feedback('Google desvinculado deste PC. Seu nome e sua foto continuam no perfil.');
+  }));
   $('profileDisplayName').addEventListener('input', preview);
   $('profileChoosePhoto').addEventListener('click', () => run(async () => {
     const result = await native('profilePhoto'); if (result.avatar) { draft = result.avatar; preview(); }
@@ -40,5 +60,5 @@ export function createProfileUi(native, onSaved) {
     const result = await native('profileSave', { name, avatar: draft, sounds: $('profileSounds').checked });
     profile = result.profile; onSaved(profile, result.message); dialog.close();
   }));
-  return { start(value) { if (value) { profile = value; $('name').value = value.name; } }, get avatar() { return profile.avatar; }, get soundsEnabled() { return profile.sounds !== false; } };
+  return { start(value, account, available = false) { if (value) { profile = value; $('name').value = value.name; } google = account ?? {}; configured = available; drawGoogle(); }, get avatar() { return profile.avatar; }, get soundsEnabled() { return profile.sounds !== false; } };
 }

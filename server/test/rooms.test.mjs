@@ -12,7 +12,7 @@ function socket(roomId, route = "v2") {
   const opened=new Promise((resolve,reject)=>{ws.addEventListener('open',resolve,{once:true});ws.addEventListener('error',reject,{once:true});});
   return {ws,opened,messages,send(value){ws.send(JSON.stringify(value));},async wait(type,predicate=()=>true){
     const deadline=Date.now()+8000;while(Date.now()<deadline){const i=messages.findIndex(m=>m.type===type&&predicate(m));if(i!==-1)return messages.splice(i,1)[0];await delay(10);}throw Error('Timed out: '+type);
-  },async join(token,displayName='Jogador',protocol=2){await opened;this.send({type:'join',token,displayName,protocol});return this.wait('welcome');}};
+  },async join(token,displayName='Jogador',protocol=2,profileId){await opened;this.send({type:'join',token,displayName,protocol,profileId});return this.wait('welcome');}};
 }
 test('salas e múltiplas publicações reais no workerd',async t=>{
   const sockets=[];const connect=id=>{const c=socket(id);sockets.push(c);return c;};
@@ -35,7 +35,8 @@ test('salas e múltiplas publicações reais no workerd',async t=>{
     }
   });
   const guests=[0,1,2,3].map(()=>connect(room.roomId));
-  const welcomes=await Promise.all(guests.map((c,i)=>c.join(room.inviteToken,'Amigo '+i)));
+  const profileIds = guests.map(() => uuid());
+  const welcomes=await Promise.all(guests.map((c,i)=>c.join(room.inviteToken,'Amigo '+i,2,profileIds[i])));
   const clients=[host,...guests], ids=[h.participantId,...welcomes.map(w=>w.participantId)], streams=ids.map(uuid);
   await t.test('cinco participantes; sexto recusado',async()=>{
     assert.equal((await host.wait('room',m=>m.participants.length===5)).participants.length,5);
@@ -70,9 +71,11 @@ test('salas e múltiplas publicações reais no workerd',async t=>{
     }
   });
   await t.test('perfil é privado da sala e pode mudar sem alterar streams ou assinaturas',async()=>{
-    guests[0].send({type:'profile',displayName:'Novo nome',avatar,participantId:ids[0]});
+    guests[0].send({type:'profile',displayName:'Novo nome',avatar,participantId:ids[0],profileId:uuid()});
     await guests[0].wait('profile_saved');
     const state=await host.wait('room',m=>m.participants.some(p=>p.id===ids[1]&&p.avatar===avatar));
+    assert.equal(state.participants.find(p=>p.id===ids[1]).profileId,profileIds[0]);
+    assert.equal(state.participants.find(p=>p.id===ids[0]).profileId,null); // Older clients remain compatible.
     assert.equal(state.participants.find(p=>p.id===ids[1]).name,'Novo nome');
     assert.equal(state.participants.find(p=>p.id===ids[0]).name,'Criador');
     for(let i=0;i<ids.length;i++) assert.equal(state.participants.find(p=>p.id===ids[i]).streamId,streams[i]);

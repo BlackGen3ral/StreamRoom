@@ -37,6 +37,11 @@ jobs:
       - run: npm run build
         working-directory: server
       - run: dotnet build src/StreamRoom.App/StreamRoom.App.csproj -c Release
+      - name: Verify saved friends and Google login callback safety
+        shell: pwsh
+        run: |
+          dotnet src/StreamRoom.App/bin/Release/net10.0-windows10.0.22621.0/StreamRoom.dll --account-self-test account-test.json
+          if ($LASTEXITCODE -ne 0 -or !(Get-Content account-test.json | ConvertFrom-Json).success) { throw 'Account tests failed.' }
       - run: dotnet run --project tests/StreamRoom.NetworkTests -c Release
       - name: Start local Cloudflare runtime and run integration tests
         shell: pwsh

@@ -26,8 +26,10 @@ internal static class ProfileStore
     internal static async Task<UserProfile> SaveAsync(string directory, string name, string? avatar, bool sounds = true)
     {
         name = ProfileData.Name(name); ProfileData.ValidateAvatar(avatar);
-        var profile = new UserProfile(name, avatar, sounds);
+        var previous = Load(directory);
+        var profile = new UserProfile(name, avatar, sounds, ProfileData.ValidId(previous?.Id) ? previous!.Id : Guid.NewGuid().ToString("D"));
         var file = Path.Combine(directory, "profile-v1.json");
+        Directory.CreateDirectory(directory);
         await File.WriteAllTextAsync(file + ".tmp", JsonSerializer.Serialize(profile, Json));
         File.Move(file + ".tmp", file, true); return profile;
     }
@@ -40,6 +42,10 @@ internal static class ProfileStore
     internal static string EncodePhoto(string path)
     {
         using var file = File.OpenRead(path);
+        return EncodePhoto(file);
+    }
+    internal static string EncodePhoto(Stream file)
+    {
         if (file.Length > 10 * 1024 * 1024) throw new IOException("Escolha uma imagem de até 10 MB.");
         var decoder = BitmapDecoder.Create(file, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
         var frame = decoder.Frames[0];

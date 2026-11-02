@@ -1,8 +1,9 @@
 namespace StreamRoom.Core;
 
-public sealed record UserProfile(string Name, string? Avatar = null, bool Sounds = true);
+public sealed record UserProfile(string Name, string? Avatar = null, bool Sounds = true, string? Id = null);
 public static class ProfileData
 {
+    public static bool ValidId(string? value) => Guid.TryParseExact(value, "D", out var id) && id != Guid.Empty && id.ToString("D") == value;
     public static string Name(string? value)
     {
         value = (value ?? "").Trim();
