@@ -116,3 +116,34 @@ test('failed connection diagnostics survive peer disposal and clear on leave', a
  assert.equal('sdp' in failure,false);assert.equal('remoteDescription' in failure,false);
  await s.room.leave();assert.equal(s.room.failedConnections.size,0);assert.deepEqual(last,[]);
 });
+
+test('end of ICE candidates cannot overtake queued candidates during a slow signal send', async t => {
+ const s=setup();t.after(()=>s.room.shutdown());s.room.updateRoom(s.state);await settle();
+ const peer=s.room.peers.get(s.send),sent=[];let release;
+ peer.localIce.push({kind:'ice',candidate:'first'},{kind:'ice',candidate:'second'});
+ s.room.signal=async(_peer,payload)=>{sent.push(payload.candidate);if(payload.candidate==='first')await new Promise(r=>release=r);};
+ const flush=s.room.flushLocal(peer);await settle();
+ peer.pc.onicecandidate({candidate:{type:'',toJSON:()=>({candidate:'',sdpMid:'0',sdpMLineIndex:0})}});
+ await settle();release();await flush;await settle();
+ assert.deepEqual(sent,['first','second','']);
+});
+
+test('concurrent recovery requests create only one replacement and spend one retry',async t=>{
+ const s=setup();t.after(()=>s.room.shutdown());s.room.updateRoom(s.state);await new Promise(r=>setImmediate(r));
+ let release;s.room.ice=()=>new Promise(r=>release=r);
+ const original=s.room.peers.get(s.send);
+ const first=s.room.recover(s.send),second=s.room.recover(s.send);
+ try { assert.equal(s.room.attempts.get(s.send),1); } finally { release(ice);await Promise.all([first,second]); }
+ assert.notEqual(s.room.peers.get(s.send),original);
+ await s.room.recover(s.send,original);
+ assert.equal(s.room.attempts.get(s.send),1);
+});
+
+test('local gathering completion does not synthesize a remote end marker',async t=>{
+ const s=setup();t.after(()=>s.room.shutdown());s.room.updateRoom(s.state);await new Promise(r=>setImmediate(r));
+ const peer=s.room.peers.get(s.send);const before=s.calls.length;
+ peer.pc.onicecandidate({candidate:null});await settle();assert.equal(s.calls.length,before);
+ peer.pc.onicecandidate({candidate:{type:'',toJSON:()=>({candidate:'',sdpMid:'0',sdpMLineIndex:0})}});
+ await peer.iceSending;
+ const last=s.calls.at(-1);assert.equal(last.type,'signal');assert.equal(last.payload.payload.candidate,'');assert.equal(last.payload.payload.sdpMid,'0');
+});

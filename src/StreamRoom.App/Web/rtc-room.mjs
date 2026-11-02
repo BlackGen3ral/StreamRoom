@@ -144,14 +144,17 @@ export class RtcRoom extends EventTarget {
       startedAt: performance.now(), candidates: { host: 0, srflx: 0, prflx: 0 }, stunError: false, sent: false, localIce: [], remoteIce: [], last: null, budget: perPeerCap(this.config, this.subscribers.length), healthy: 0, recovery: null };
     this.failedConnections.delete(key);
     this.peers.set(key, peer);
-    const recover = () => this.recover(key).catch(error => this.notice(error.message));
+    const recover = () => this.recover(key, peer).catch(error => this.notice(error.message));
     peer.connectDeadline = setTimeout(() => { if (this.validPeer(peer) && pc.connectionState !== 'connected') void recover(); }, 30_000);
     pc.onicecandidate = ({ candidate }) => {
-      if (!this.validPeer(peer) || candidate?.type === 'relay') return;
+      if (!this.validPeer(peer) || !candidate || candidate.type === 'relay') return;
       if (candidate && candidate.type in peer.candidates) peer.candidates[candidate.type]++;
-      const ice = candidate?.toJSON() ?? { candidate: '', sdpMid: null, sdpMLineIndex: null };
+      // A null event is local gathering completion. Only actual per-generation
+      // candidates (including their empty-string marker) go to the remote peer.
+      const ice = candidate.toJSON();
       const payload = { kind: 'ice', candidate: ice.candidate ?? '', sdpMid: ice.sdpMid ?? null, sdpMLineIndex: ice.sdpMLineIndex ?? null };
-      if (!peer.sent) peer.localIce.push(payload); else void this.signal(peer, payload).catch(error => this.notice(error.message));
+      peer.localIce.push(payload);
+      if (peer.sent) void this.flushLocal(peer).catch(error => this.notice(error.message));
     };
     pc.onicecandidateerror = () => { if (this.validPeer(peer)) peer.stunError = true; };
     pc.ontrack = e => {
@@ -167,33 +170,43 @@ export class RtcRoom extends EventTarget {
     };
     return peer;
   }
-  async flushLocal(peer) { for (const payload of peer.localIce.splice(0)) if (this.validPeer(peer)) await this.signal(peer, payload); }
-  async recover(key) {
+  flushLocal(peer) {
+    // One ordered queue for both buffered and newly discovered ICE candidates.
+    // End-of-candidates must not pass candidates waiting on a slower signaling send.
+    peer.iceSending = (peer.iceSending ?? Promise.resolve()).then(async () => {
+      while (this.validPeer(peer) && peer.localIce.length) await this.signal(peer, peer.localIce.shift());
+    });
+    return peer.iceSending;
+  }
+  async recover(key, expectedPeer) {
     const peer = this.peers.get(key);
-    if (!peer || !this.validPeer(peer)) return;
-    clearTimeout(peer.connectDeadline); clearTimeout(peer.recovery); peer.recovery = null;
-    const attempts = (this.attempts.get(key) ?? 0) + 1; this.attempts.set(key, attempts);
-    if (attempts > 3) {
-      // Preserve safe summaries before closePeer discards the failed RTCPeerConnection.
-      this.failedConnections.set(key, {
-        key, id: peer.id, publisherId: peer.publisherId, direction: peer.direction,
-        state: 'failed', failed: true, direct: false, message: DIRECT_FAILURE,
-        iceState: peer.pc.iceConnectionState ?? 'unknown', gathering: peer.pc.iceGatheringState ?? 'unknown',
-        candidates: { ...peer.candidates }, remoteCandidates: peer.remoteCandidates ?? 0,
-        remotePublicCandidates: peer.remotePublicCandidates ?? 0,
-        descriptionReceived: Boolean(peer.pc.remoteDescription), stunError: peer.stunError,
-        elapsed: Math.floor((performance.now() - peer.startedAt) / 1000), attempts
-      });
-      this.closePeer(key);
-      this.event('stats', [...this.failedConnections.values()]);
-      this.event('connectionError', { id: peer.id, message: DIRECT_FAILURE }); return;
-    }
-    if (peer.direction === 'send') {
-      const sub = this.subscribers.find(s => s.subscriptionId === key); if (sub) await this.offer(sub, true);
-    } else {
-      await this.signal(peer, { kind: 'restart' });
-      if (this.validPeer(peer)) peer.connectDeadline = setTimeout(() => this.recover(key).catch(error => this.notice(error.message)), 30_000);
-    }
+    if (!peer || (expectedPeer && peer !== expectedPeer) || !this.validPeer(peer) || peer.recovering) return;
+    peer.recovering = true;
+    try {
+      clearTimeout(peer.connectDeadline); clearTimeout(peer.recovery); peer.recovery = null;
+      const attempts = (this.attempts.get(key) ?? 0) + 1; this.attempts.set(key, attempts);
+      if (attempts > 3) {
+        // Preserve safe summaries before closePeer discards the failed RTCPeerConnection.
+        this.failedConnections.set(key, {
+          key, id: peer.id, publisherId: peer.publisherId, direction: peer.direction,
+          state: 'failed', failed: true, direct: false, message: DIRECT_FAILURE,
+          iceState: peer.pc.iceConnectionState ?? 'unknown', gathering: peer.pc.iceGatheringState ?? 'unknown',
+          candidates: { ...peer.candidates }, remoteCandidates: peer.remoteCandidates ?? 0,
+          remotePublicCandidates: peer.remotePublicCandidates ?? 0,
+          descriptionReceived: Boolean(peer.pc.remoteDescription), stunError: peer.stunError,
+          elapsed: Math.floor((performance.now() - peer.startedAt) / 1000), attempts
+        });
+        this.closePeer(key);
+        this.event('stats', [...this.failedConnections.values()]);
+        this.event('connectionError', { id: peer.id, message: DIRECT_FAILURE }); return;
+      }
+      if (peer.direction === 'send') {
+        const sub = this.subscribers.find(s => s.subscriptionId === key); if (sub) await this.offer(sub, true);
+      } else {
+        await this.signal(peer, { kind: 'restart' });
+        if (this.validPeer(peer)) peer.connectDeadline = setTimeout(() => this.recover(key, peer).catch(error => this.notice(error.message)), 30_000);
+      }
+    } finally { peer.recovering = false; }
   }
   signal(peer, payload) {
     return this.native('signal', { to: peer.id, payload: { ...payload, streamId: peer.streamId, subscriptionId: peer.key, session: peer.session } });
@@ -210,7 +223,7 @@ export class RtcRoom extends EventTarget {
     const sub = this.subscriptions.find(s => s.publisherId === from && s.streamId === payload.streamId && s.subscriptionId === key);
     let peer = this.peers.get(key);
     if (payload.kind === 'restart') {
-      if (peer?.direction === 'send' && peer.id === from && payload.session === peer.session) await this.recover(key);
+      if (peer?.direction === 'send' && peer.id === from && payload.session === peer.session) await this.recover(key, peer);
       return;
     }
     if (payload.kind === 'offer' && sub) {
