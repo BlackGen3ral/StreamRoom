@@ -38,14 +38,29 @@ function createCard(id, streamId) {
   }
   card.quality.hidden = own;
   card.quality.addEventListener('change', () => busy(async () => { if (rtc.subscriptions.some(s => s.publisherId === id)) await rtc.watch(id, true, quality(card).height, quality(card).fps); }));
-  card.mute = button('Ativar som', async () => { card.video.muted = !card.video.muted; card.mute.textContent = card.video.muted ? 'Ativar som' : 'Silenciar'; try { await card.video.play(); card.play.hidden = true; } catch (e) { status(e.message, true); } });
+  card.mute = button('Ativar som', async () => { card.video.muted = !card.video.muted; card.mute.textContent = card.video.muted ? 'Ativar som' : 'Silenciar'; });
   card.mute.hidden = own;
   card.volume = node('input'); card.volume.type = 'range'; card.volume.min = '0'; card.volume.max = '1'; card.volume.step = '.01'; card.volume.value = '.8'; card.video.volume = .8; card.volume.hidden = own;
   card.volume.setAttribute('aria-label', 'Volume desta transmissão');
-  card.volume.addEventListener('input', () => { card.video.volume = Number(card.volume.value); });
-  const enlarge = button('Ampliar', () => { const focused = card.root.classList.toggle('expanded'); enlarge.textContent = focused ? 'Voltar à grade' : 'Ampliar'; });
+  card.volume.addEventListener('input', () => { card.video.volume = Number(card.volume.value); card.video.muted = card.video.volume === 0; card.mute.textContent = card.video.muted ? 'Ativar som' : 'Silenciar'; });
+  const enlarge = button('Destacar', () => { const focused = card.root.classList.toggle('expanded'); enlarge.textContent = focused ? 'Voltar à grade' : 'Destacar'; });
   const fullscreen = button('Tela cheia', async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await card.root.requestFullscreen(); } catch (e) { status(e.message, true); } });
-  controls.append(card.watch, card.quality, card.mute, card.volume, enlarge, fullscreen);
+  card.pause = button('Pausar reprodução', async () => {
+    if (!card.video.srcObject) return;
+    if (card.video.paused) {
+      try { await card.video.play(); card.play.hidden = true; } catch (e) { status(e.message, true); }
+    } else card.video.pause();
+  });
+  const syncPlayback = () => { card.pause.textContent = card.video.paused ? 'Retomar reprodução' : 'Pausar reprodução'; };
+  card.video.addEventListener('play', syncPlayback); card.video.addEventListener('pause', syncPlayback);
+  const fit = node('select'); fit.setAttribute('aria-label', 'Enquadramento do vídeo');
+  for (const [value, label] of [['contain','Vídeo inteiro'],['cover','Preencher área']]) {
+    const option = node('option', '', label); option.value = value; fit.append(option);
+  }
+  fit.addEventListener('change', () => { card.video.style.objectFit = fit.value; });
+  const more = node('details', 'stream-more'); more.append(node('summary', '', 'Mais opções'));
+  const extra = node('div', 'stream-extra'); extra.append(card.pause, fit, enlarge); more.append(extra);
+  controls.append(card.watch, card.quality, card.mute, card.volume, fullscreen, more);
   card.metrics = node('p', 'fine', own ? 'Sem espectadores: nenhum vídeo é enviado.' : 'Sem recepção: nenhum vídeo é solicitado.');
   card.root.append(heading, card.frame, controls, card.metrics); cards.set(id, card); $('streamGrid').append(card.root); return card;
 }
@@ -74,7 +89,7 @@ function renderStreams() {
     card.empty.textContent = card.own ? 'Prévia local sem som' : watched ? 'Conectando P2P direto...' : 'Escolha Assistir para receber esta gameplay.';
     card.watch.textContent = card.own ? 'Parar minha transmissão' : watched ? 'Parar de assistir' : 'Assistir';
     card.watch.disabled = state.busy; card.quality.disabled = state.busy;
-    card.mute.disabled = card.volume.disabled = !stream;
+    card.mute.disabled = card.volume.disabled = card.pause.disabled = !stream;
     if (!watched && !card.own) card.metrics.textContent = 'Sem recepção: nenhum vídeo é solicitado.';
   }
   $('streamGrid').hidden = streams.length === 0; $('playerEmpty').hidden = streams.length !== 0;
@@ -104,9 +119,9 @@ function render() {
   $('networkBadge').textContent = state.connected ? 'Sala conectada' : 'Desconectado'; $('networkBadge').classList.toggle('connected', state.connected);
   $('participantCount').textContent = state.participants.length + '/5'; $('emptyPeers').hidden = state.participants.length > 0;
   $('leave').textContent = state.role === 'host' ? 'Encerrar sala para todos' : 'Sair da sala';
-  $('roomState').textContent = 'COMPARTILHE O MOMENTO';
+  $('roomState').textContent = 'TELA COMPARTILHADA';
   $('title').textContent = 'Transmissões';
-  $('emptyTitle').textContent = state.connected ? 'Sua sala está pronta.' : 'Uma tela compartilhada. Todo mundo junto.';
+  $('emptyTitle').textContent = state.connected ? 'Sua sala está pronta.' : 'Nenhuma transmissão';
   $('emptyDescription').textContent = state.connected ? 'Compartilhe sua tela ou escolha uma transmissão para assistir.' : 'Crie uma sala ou entre com um convite.';
   $('participants').replaceChildren(...state.participants.map(p => {
     const li = node('li'), details = node('div'); details.append(node('div','peer-name',p.name + (p.id === rtc.identity?.participantId ? ' (você)' : '')), node('div','peer-role',(p.role === 'host' ? 'Criador da sala' : 'Amigo') + (p.streamId ? ' · transmitindo' : '')));
