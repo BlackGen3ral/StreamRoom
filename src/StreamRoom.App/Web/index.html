@@ -3,11 +3,11 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; media-src 'self' blob: mediastream:; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>StreamRoom</title><link rel="stylesheet" href="app.css"><script type="module" src="app.mjs"></script></head>
 <body>
-<header><div class="brand"><span class="brand-icon">S</span><div>StreamRoom<small>GAMEPLAY ENTRE AMIGOS</small></div></div><div class="header-right"><span id="version">0.4.0 · desenvolvimento</span><span class="badge" id="networkBadge">Desconectado</span><button id="updateButton" class="quiet">Atualizações</button></div></header>
+<header><div class="brand"><span class="brand-icon">S</span><div>StreamRoom<small>Gameplay entre amigos</small></div></div><div class="header-right"><span id="version">0.4.0 · desenvolvimento</span><span class="badge" id="networkBadge">Desconectado</span><button id="updateButton" class="quiet">Atualizações</button></div></header>
 <div id="updateNotice" class="notice" hidden><span id="updateText"></span><button id="installUpdate">Atualizar e reiniciar</button></div>
 <div class="layout"><aside>
-  <section class="card"><h2>Sua sala</h2><label for="name">Como seus amigos te chamam?</label><input id="name" maxlength="32" placeholder="Seu nome" autocomplete="off">
-  <div id="entryControls"><button id="create" class="primary wide">＋ Criar sala privada</button><div class="divider">ENTRAR COM CONVITE</div><textarea id="invite" rows="3" placeholder="Cole o convite completo aqui" spellcheck="false"></textarea><div class="row"><button id="paste" class="quiet">Colar</button><button id="join" class="wide">Entrar na sala →</button></div></div>
+  <section class="card"><h2>Sua sala</h2><label for="name">Seu nome</label><input id="name" maxlength="32" placeholder="Como seus amigos te chamam?" autocomplete="off">
+  <div id="entryControls"><button id="create" class="primary wide">Criar sala</button><div class="divider">ou entre com um convite</div><textarea id="invite" rows="2" aria-label="Convite da sala" placeholder="Cole o convite completo aqui" spellcheck="false"></textarea><div class="row"><button id="paste" class="quiet">Colar</button><button id="join" class="wide">Entrar</button></div></div>
   <div id="roomControls" hidden><p id="roomCode" class="muted"></p><button id="copy" class="wide">Copiar convite</button><button id="leave" class="danger wide">Sair da sala</button></div></section>
   <section class="card"><div class="section-title"><h2>Participantes</h2><span id="participantCount" class="muted">0/5</span></div><ul id="participants"></ul><p id="emptyPeers" class="muted">Até cinco pessoas podem transmitir e escolher o que assistir.</p></section>
   <details class="card" id="settings"><summary>Minha transmissão</summary>
@@ -15,19 +15,19 @@
     <label for="fps">Taxa de quadros máxima</label><select id="fps"><option value="60">60 FPS</option><option value="30" selected>30 FPS</option></select>
     <label for="audio">Áudio compartilhado</label><select id="audio"><option value="window">Aplicativo da janela, se disponível</option><option value="system">Sistema via WASAPI (inclui Discord)</option><option value="none">Sem áudio</option></select>
     <p class="fine" id="audioHint">No seletor, escolha o jogo/janela e habilite o áudio. Se o Windows não oferecer essa opção, o vídeo terá aviso de ausência de áudio.</p>
-    <label class="checkbox"><input id="autoQuality" type="checkbox" checked> Ajustar qualidade à conexão</label>
+    <details class="advanced-settings"><summary>Ajustes avançados</summary><label class="checkbox"><input id="autoQuality" type="checkbox" checked> Ajustar qualidade à conexão</label>
     <label for="upload">Limite total de envio (Mbps)</label><input id="upload" type="number" min="2" max="80" step="1" value="24">
     <p class="fine">O envio é dividido entre espectadores. Quatro amigos exigem até quatro cópias do vídeo.</p>
     <label for="server">Servidor de sinalização</label><input id="server" value="https://streamroom-signaling-dev.arthurgabrielfera.workers.dev" spellcheck="false">
-    <p class="fine">Apenas P2P direto com STUN gratuito. Redes incompatíveis não conectam; nenhum relay é ativado. Salas de 24h com renovação pelo criador.</p>
+    <p class="fine">Apenas P2P direto com STUN gratuito. Redes incompatíveis não conectam; nenhum relay é ativado. Salas de 24h com renovação pelo criador.</p></details>
   </details>
 </aside><main>
-  <div class="stage-title"><div><span class="eyebrow" id="roomState">SEU PONTO DE ENCONTRO</span><h1 id="title">O jogo fica melhor junto.</h1></div><span id="directStatus" class="muted">WebRTC P2P</span></div>
+  <div class="stage-title"><div><span class="eyebrow" id="roomState">Gameplay entre amigos</span><h1 id="title">O jogo fica melhor junto.</h1></div><span id="directStatus" class="muted">Conexão direta</span></div>
   <div id="streamGrid" class="stream-grid" hidden></div>
   <div class="empty-player" id="playerEmpty"><span class="play-mark">▷</span><h2 id="emptyTitle">A próxima partida começa aqui.</h2><p id="emptyDescription">Crie uma sala ou entre com um convite.</p></div>
-  <div class="toolbar"><div class="row"><button id="start" class="primary" disabled>▣ Compartilhar minha tela</button><button id="stop" class="danger" hidden>■ Parar minha transmissão</button><span id="source" class="muted">Nenhuma fonte selecionada</span></div></div>
-  <div id="captureInfo" class="info-card"><strong>Compartilhe com intenção.</strong><p>Você escolhe o que capturar no seletor do Windows. Jogos em tela cheia exclusiva podem exigir modo janela sem bordas. Nenhum microfone é capturado.</p></div>
-  <section class="card telemetry"><div class="section-title"><h2>Conexão e mídia</h2><span class="muted">Medições em tempo real</span></div><div id="stats" class="stats-empty">As estatísticas aparecem quando houver uma conexão WebRTC.</div></section>
+  <div class="toolbar"><div class="row"><button id="start" class="primary" disabled>Compartilhar tela</button><button id="stop" class="danger" hidden>Parar transmissão</button><span id="source" class="muted">Nenhuma fonte selecionada</span></div></div>
+  <details id="captureInfo" class="info-card"><summary>Sobre captura e áudio</summary><p>Você escolhe o que capturar no seletor do Windows. Jogos em tela cheia exclusiva podem exigir modo janela sem bordas. Nenhum microfone é capturado.</p></details>
+  <details class="card telemetry"><summary>Detalhes da conexão</summary><div id="stats" class="stats-empty">As estatísticas aparecem quando houver uma conexão WebRTC.</div></details>
   <div id="status" role="status" aria-live="polite">Pronto para começar.</div>
 </main></div><footer><span id="runtime"></span><span id="footerVersion">StreamRoom · build de desenvolvimento</span></footer>
 </body></html>

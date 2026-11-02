@@ -1,12 +1,12 @@
 # StreamRoom
 
-Aplicativo Windows C#/.NET 10 para compartilhar gameplays por **WebRTC P2P direto**, com até cinco participantes e uma transmissão por pessoa. Build **0.4.0-beta.1**, de desenvolvimento. Não há Release oficial publicada.
+Aplicativo Windows C#/.NET 10 para compartilhar gameplays por **WebRTC P2P direto**, com até cinco participantes e uma transmissão por pessoa. A branch `main` publica versões Windows `0.4.<número da execução>` depois que a compilação e os testes passam no GitHub Actions.
 
 ## Instalar e usar
 
-1. Baixe o instalador de desenvolvimento ou o artefato **StreamRoom-installer-development** na execução bem-sucedida do [GitHub Actions](https://github.com/BlackGen3ral/StreamRoom/actions).
+1. Baixe **StreamRoom-win-Setup.exe** na [versão mais recente](https://github.com/BlackGen3ral/StreamRoom/releases/latest). A primeira instalação é manual; depois, o aplicativo verifica novas versões ao iniciar e a cada 30 minutos. Clique em **Atualizar e reiniciar** para aplicar.
 2. Extraia e execute **StreamRoom-win-Setup.exe**. O pacote x64 inclui .NET e declara WebView2 como requisito. O instalador beta ainda não tem assinatura digital.
-3. Informe um nome, crie uma sala ou cole um convite. Use a mesma versão 0.4 em todos os participantes da nova sala.
+3. Informe um nome, crie uma sala ou cole um convite. Use a mesma versão em todos os participantes da nova sala.
 4. **Qualquer participante** pode clicar em **Compartilhar minha tela** e selecionar janela, monitor ou jogo em janela. Para áudio isolado, habilite áudio da janela no seletor.
 5. As transmissões disponíveis aparecem na grade. Clique em **Assistir** nas que quiser receber. Não há recepção automática.
 6. Cada player remoto possui qualidade, volume, ativar/silenciar áudio, parar de assistir, ampliar e tela cheia. O áudio começa silenciado para evitar reprodução inesperada e retorno.

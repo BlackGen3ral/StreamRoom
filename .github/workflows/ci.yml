@@ -5,6 +5,8 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+env:
+  STREAMROOM_VERSION: 0.4.${{ github.run_number }}
 jobs:
   stage-one:
     runs-on: windows-latest
@@ -51,7 +53,7 @@ jobs:
             $global:LASTEXITCODE = 0
           }
       - name: Build portable development app
-        run: dotnet publish src/StreamRoom.App/StreamRoom.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/publish
+        run: dotnet publish src/StreamRoom.App/StreamRoom.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true "-p:Version=$env:STREAMROOM_VERSION" -o artifacts/publish
       - uses: actions/upload-artifact@v4
         with:
           name: StreamRoom-win-x64-development
@@ -62,10 +64,50 @@ jobs:
         run: |
           dotnet tool restore
           if ($LASTEXITCODE -ne 0) { throw 'Velopack CLI restore failed.' }
-          dotnet tool run vpk pack --packId StreamRoom --packVersion 0.4.0-beta.1 --packDir artifacts/publish --mainExe StreamRoom.exe --packTitle StreamRoom --icon src/StreamRoom.App/Assets/StreamRoom.ico --framework webview2 --runtime win-x64 --outputDir artifacts/installer --channel win
+          dotnet tool run vpk pack --packId StreamRoom --packVersion $env:STREAMROOM_VERSION --packDir artifacts/publish --mainExe StreamRoom.exe --packTitle StreamRoom --icon src/StreamRoom.App/Assets/StreamRoom.ico --framework webview2 --runtime win-x64 --outputDir artifacts/installer --channel win
           if ($LASTEXITCODE -ne 0) { throw 'Installer packaging failed.' }
       - uses: actions/upload-artifact@v4
         with:
           name: StreamRoom-installer-development
           path: artifacts/installer/
           retention-days: 14
+
+  release:
+    name: Publish Windows update
+    needs: stage-one
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: streamroom-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: StreamRoom-installer-development
+          path: artifacts/installer
+      - name: Publish installer and update feed
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = gh api "repos/$env:GITHUB_REPOSITORY/branches/main" --jq '.commit.sha'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not check the main branch.' }
+          if ($head -ne $env:GITHUB_SHA) { Write-Host 'A newer commit will publish the next update.'; exit 0 }
+          $tag = "v$env:STREAMROOM_VERSION"
+          $files = @(Get-ChildItem artifacts/installer -File | ForEach-Object { $_.FullName })
+          if (!$files.Count) { throw 'Installer artifacts are missing.' }
+          $existing = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if (!(($existing | ConvertFrom-Json).isDraft)) { Write-Host 'Release already published.'; exit 0 }
+          } else {
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "StreamRoom $env:STREAMROOM_VERSION" --notes "Atualização do StreamRoom. Código: $env:GITHUB_SHA. Instale com StreamRoom-win-Setup.exe; instalações existentes recebem a atualização pelo aplicativo." --draft
+            if ($LASTEXITCODE -ne 0) { throw 'Could not create release draft.' }
+          }
+          gh release upload $tag @files --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Could not upload update files.' }
+          gh release edit $tag --repo $env:GITHUB_REPOSITORY --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish release.' }

@@ -84,13 +84,13 @@ function render() {
   $('start').disabled = !state.connected || state.busy || Boolean(rtc.localStream);
   $('start').hidden = Boolean(rtc.localStream); $('stop').hidden = !rtc.localStream; $('stop').disabled = state.busy;
   for (const id of ['quality', 'fps', 'audio']) $(id).disabled = Boolean(rtc.localStream);
-  $('networkBadge').textContent = state.connected ? '● Sala conectada' : 'Desconectado'; $('networkBadge').classList.toggle('connected', state.connected);
+  $('networkBadge').textContent = state.connected ? 'Sala conectada' : 'Desconectado'; $('networkBadge').classList.toggle('connected', state.connected);
   $('participantCount').textContent = state.participants.length + '/5'; $('emptyPeers').hidden = state.participants.length > 0;
   $('leave').textContent = state.role === 'host' ? 'Encerrar sala para todos' : 'Sair da sala';
-  $('roomState').textContent = state.connected ? 'SALA PRIVADA · TODOS PODEM TRANSMITIR' : 'SEU PONTO DE ENCONTRO';
-  $('title').textContent = state.connected ? 'Escolha qual partida acompanhar.' : 'O jogo fica melhor junto.';
+  $('roomState').textContent = state.connected ? 'Sala privada' : 'Gameplay entre amigos';
+  $('title').textContent = state.connected ? 'Sua sala, suas partidas.' : 'O jogo fica melhor junto.';
   $('emptyTitle').textContent = state.connected ? 'Compartilhe sua próxima partida.' : 'A próxima partida começa aqui.';
-  $('emptyDescription').textContent = state.connected ? 'Qualquer pessoa pode transmitir. As gameplays aparecem aqui; clique em Assistir para receber uma delas.' : 'Crie uma sala ou entre com um convite.';
+  $('emptyDescription').textContent = state.connected ? 'Compartilhe sua tela ou escolha uma transmissão para assistir.' : 'Crie uma sala ou entre com um convite.';
   $('participants').replaceChildren(...state.participants.map(p => {
     const li = node('li'), details = node('div'); details.append(node('div','peer-name',p.name + (p.id === rtc.identity?.participantId ? ' (você)' : '')), node('div','peer-role',(p.role === 'host' ? 'Criador da sala' : 'Amigo') + (p.streamId ? ' · transmitindo' : '')));
     li.append(node('span','avatar',p.name.slice(0,1).toUpperCase()),details); return li;
