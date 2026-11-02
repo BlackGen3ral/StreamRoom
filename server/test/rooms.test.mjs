@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
+import { readFile } from 'node:fs/promises';
+const avatar = (await readFile(new URL('../../tests/fixtures/avatar.txt', import.meta.url), 'utf8')).trim();
 const base = process.env.STREAMROOM_TEST_URL ?? 'http://127.0.0.1:8787';
 const uuid = () => crypto.randomUUID();
 async function createRoom() { const r=await fetch(base+'/v2/rooms',{method:'POST'}); assert.equal(r.status,201); return r.json(); }
@@ -66,6 +68,26 @@ test('salas e múltiplas publicações reais no workerd',async t=>{
       signal(viewer,publisher,sub,publisher,'ice',{candidate:'candidate:test',sdpMid:'0',sdpMLineIndex:0});
       assert.equal((await clients[publisher].wait('signal',m=>m.payload.subscriptionId===sub)).payload.kind,'ice');
     }
+  });
+  await t.test('perfil é privado da sala e pode mudar sem alterar streams ou assinaturas',async()=>{
+    guests[0].send({type:'profile',displayName:'Novo nome',avatar,participantId:ids[0]});
+    await guests[0].wait('profile_saved');
+    const state=await host.wait('room',m=>m.participants.some(p=>p.id===ids[1]&&p.avatar===avatar));
+    assert.equal(state.participants.find(p=>p.id===ids[1]).name,'Novo nome');
+    assert.equal(state.participants.find(p=>p.id===ids[0]).name,'Criador');
+    for(let i=0;i<ids.length;i++) assert.equal(state.participants.find(p=>p.id===ids[i]).streamId,streams[i]);
+    const own=await guests[0].wait('room',m=>m.participants.some(p=>p.name==='Novo nome'));
+    assert.equal(own.subscribers.length,2);assert.equal(own.subscriptions.length,2);
+    assert.ok(JSON.stringify(state).length<64*1024);
+    guests[0].send({type:'profile',displayName:'Inválido',avatar:'https://example.com/photo.jpg'});
+    assert.equal((await guests[0].wait('error')).code,'invalid_profile');
+    guests[0].send({type:'profile',displayName:'Muito rápido',avatar:null});
+    assert.equal((await guests[0].wait('error')).code,'profile_rate_limited');
+    await delay(1050);
+    guests[0].send({type:'profile',displayName:'Sem foto',avatar:null});
+    await guests[0].wait('profile_saved');
+    const removed=await host.wait('room',m=>m.participants.some(p=>p.id===ids[1]&&p.name==='Sem foto'));
+    assert.equal(removed.participants.find(p=>p.id===ids[1]).avatar,null);
   });
   await t.test('isolamento de direção, transmissão e identificadores',async()=>{
     signal(0,1,subAB,1,'offer',{sdp:'bad'});assert.equal((await host.wait('error')).code,'invalid_signal');

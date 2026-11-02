@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework></PropertyGroup>
   <ItemGroup><ProjectReference Include="../../src/StreamRoom.Core/StreamRoom.Core.csproj" /></ItemGroup>
+  <ItemGroup><Content Include="../fixtures/avatar.txt" Link="fixtures/avatar.txt" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

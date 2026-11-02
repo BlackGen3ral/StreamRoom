@@ -8,6 +8,7 @@ public partial class App : Application
     public static bool ZeroTierContextUnavailable { get; private set; }
     internal static void UseNormalNetworkContext() { ZeroTierEnabled = false; ZeroTierContextUnavailable = true; }
     public static string? UiPreviewOutput { get; private set; }
+    public static string? PlayerLayoutTestOutput { get; private set; }
     public static string? TrayTestOutput { get; private set; }
     public static int MediaTestHeight { get; private set; } = 720;
     public static string? MediaTestRole { get; private set; }
@@ -19,6 +20,8 @@ public partial class App : Application
     public static void Main(string[] args)
     {
         VelopackApp.Build().Run();
+        int profileTest = Array.IndexOf(args, "--profile-self-test");
+        if (profileTest >= 0) { ProfileSelfTest.Run(System.IO.Path.GetFullPath(args.ElementAtOrDefault(profileTest + 1) ?? "profile-self-test.json")).GetAwaiter().GetResult(); return; }
         int previewTest = Array.IndexOf(args, "--preview-self-test");
         if (previewTest >= 0)
         {
@@ -44,6 +47,8 @@ public partial class App : Application
         }
         int uiPreview = Array.IndexOf(args, "--ui-preview");
         if (uiPreview >= 0) UiPreviewOutput = System.IO.Path.GetFullPath(args.ElementAtOrDefault(uiPreview + 1) ?? "ui-preview.png");
+        int playerTest = Array.IndexOf(args, "--player-layout-test");
+        if (playerTest >= 0) { PlayerLayoutTestOutput = System.IO.Path.GetFullPath(args.ElementAtOrDefault(playerTest + 1) ?? "player-layout-test.json"); UiPreviewOutput = PlayerLayoutTestOutput + ".preview.png"; }
         ZeroTierEnabled = ZeroTierProof || ZeroTierPreferences.Load().Enabled;
         int trayTest = Array.IndexOf(args, "--tray-self-test");
         if (trayTest >= 0) TrayTestOutput = System.IO.Path.GetFullPath(args.ElementAtOrDefault(trayTest + 1) ?? "tray-self-test.json");

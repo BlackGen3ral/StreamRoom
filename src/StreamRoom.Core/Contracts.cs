@@ -3,11 +3,11 @@ using System.Text.Json;
 namespace StreamRoom.Core;
 
 public sealed record RoomCredentials(string RoomId, string InviteToken, string HostToken, long ExpiresAt, int Protocol, bool Persistent = false);
-public sealed record Participant(string Id, string Name, string Role, bool Streaming = false, string? StreamId = null)
+public sealed record Participant(string Id, string Name, string Role, bool Streaming = false, string? StreamId = null, string? Avatar = null)
 {
     public string RoleLabel => Role == "host" ? "Criador da sala" : "Amigo";
 }
-public sealed record Welcome(string ParticipantId, string Role, string RoomId, long ExpiresAt, int Protocol, bool Persistent = false);
+public sealed record Welcome(string ParticipantId, string Role, string RoomId, long ExpiresAt, int Protocol, bool Persistent = false, bool Profiles = false);
 public sealed class SignalingException(string message) : Exception(message);
 
 public static class Invitations

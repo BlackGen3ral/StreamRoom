@@ -1,6 +1,9 @@
 import { RtcRoom } from './rtc-room.mjs';
 import { createCapturePicker } from './capture-picker.mjs';
 import { createZeroTierUi } from './zerotier-ui.mjs';
+import { createStreamViewport } from './stream-viewport.mjs';
+import { createProfileUi, showAvatar } from './profile-ui.mjs';
+import { createUiSounds, createViewerNotifications } from './ui-sounds.mjs';
 const $ = id => document.getElementById(id);
 $('transmissionPage').append($('settingsTransmission'));
 $('connectionsPage').append($('settingsConnections'));
@@ -20,7 +23,7 @@ const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
     const id = String(++sequence);
-    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
+    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'profilePhoto' ? 900000 : type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
     requests.set(id, { resolve, reject, timer }); window.chrome.webview.postMessage({ id, type, payload });
   });
 }
@@ -31,6 +34,12 @@ let latestStats = [], buildVersion = '', runtimeVersion = '';
 const cards = new Map(), remoteStreams = new Map();
 function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
 const zeroTierUi = createZeroTierUi(native, rtc, () => state.connected, status);
+const profileUi = createProfileUi(native, (profile, note) => {
+  $('name').value = profile.name; uiSounds.refresh(); render();
+  void save().catch(() => {}); status(note || (state.connected ? 'Perfil atualizado na sala.' : 'Perfil salvo neste PC.'));
+});
+const uiSounds = createUiSounds(() => profileUi.soundsEnabled);
+const viewerSounds = createViewerNotifications(kind => uiSounds.play(kind));
 function options() { return { quality: Number($('quality').value), fps: Number($('fps').value), audio: $('audio').value, autoQuality: $('autoQuality').checked, upload: Number($('upload').value) }; }
 function node(tag, className, text) { const e = document.createElement(tag); if (className) e.className = className; if (text !== undefined) e.textContent = text; return e; }
 function button(text, action) { const e = node('button', 'quiet', text); e.addEventListener('click', action); return e; }
@@ -95,13 +104,19 @@ function createCard(id, streamId) {
     const option = node('option', '', label); option.value = value; fit.append(option);
   }
   fit.addEventListener('change', () => { card.video.style.objectFit = fit.value; });
-  const more = node('details', 'stream-more'); more.append(node('summary', '', 'Mais opções'));
+  const more = node('details', 'stream-more');
+  const moreButton = node('summary', '', 'Opções'); moreButton.setAttribute('aria-label','Mais opções e tamanho do vídeo'); more.append(moreButton);
   const extra = node('div', 'stream-extra'); extra.append(card.pause, fit); more.append(extra);
   card.watch.classList.add('stream-action'); if (own) card.watch.classList.add('stream-stop');
   fullscreen.classList.add('stream-fullscreen'); enlarge.classList.add('stream-enlarge');
-  controls.append(card.watch, card.retry, card.quality, card.mute, card.volume, enlarge, fullscreen, more);
-  card.metrics = node('p', 'fine', own ? 'Sem espectadores: nenhum vídeo é enviado.' : 'Sem recepção: nenhum vídeo é solicitado.');
-  card.root.append(heading, card.frame, controls, card.metrics); cards.set(id, card); $('streamGrid').append(card.root); return card;
+  card.retry.classList.add('stream-retry');card.mute.classList.add('stream-audio');
+  const primaryActions=node('div','stream-primary-actions'),playbackActions=node('div','stream-playback-actions'),viewActions=node('div','stream-view-actions');
+  primaryActions.append(card.watch,card.retry);playbackActions.append(card.quality,card.mute,card.volume);viewActions.append(enlarge,fullscreen,more);
+  playbackActions.hidden=own;controls.append(primaryActions,playbackActions,viewActions);
+  card.metrics = node('p', 'fine', own ? 'Prévia local · aguardando espectadores' : 'Clique em Assistir para abrir esta tela.');
+  card.root.append(heading, card.frame, controls, card.metrics); cards.set(id, card); $('streamGrid').append(card.root);
+  card.viewport = createStreamViewport(card.root, card.frame, fullscreen, more, extra);
+  return card;
 }
 function renderStreams() {
   const streams = state.participants.filter(p => p.streamId).map(p => ({ ...p }));
@@ -112,13 +127,13 @@ function renderStreams() {
   }
   const valid = new Set(streams.map(p => p.id));
   for (const [id, card] of cards) if (!valid.has(id) || streams.find(p => p.id === id).streamId !== card.streamId) {
-    card.video.pause(); card.video.srcObject = null; card.root.remove(); cards.delete(id); remoteStreams.delete(id);
+    card.viewport.dispose(); card.video.pause(); card.video.srcObject = null; card.root.remove(); cards.delete(id); remoteStreams.delete(id);
   }
   for (const p of streams) {
     const card = cards.get(p.id) ?? createCard(p.id, p.streamId);
     const watched = rtc.subscriptions.some(s => s.publisherId === p.id && s.streamId === p.streamId);
     card.title.textContent = p.name + (card.own ? ' · você' : '');
-    card.avatar.textContent = p.name.slice(0, 1).toUpperCase();
+    showAvatar(card.avatar, p.name, card.own ? profileUi.avatar : p.avatar);
     card.quality.setAttribute('aria-label', 'Qualidade de ' + p.name);
     const stream = card.own ? rtc.localStream : watched && remoteStreams.get(p.id)?.streamId === p.streamId ? remoteStreams.get(p.id).stream : null;
     if (card.video.srcObject !== stream) {
@@ -128,7 +143,7 @@ function renderStreams() {
     card.empty.hidden = !card.failure && Boolean(stream && card.video.readyState >= 2 && card.video.videoWidth > 0);
     if (card.failure) card.play.hidden = true;
     card.empty.textContent = card.own ? 'Prévia local sem som' : card.failure ? card.failure : watched ? 'Conectando com seu amigo… O vídeo aparece quando a conexão estiver pronta.' : 'Escolha Assistir para receber esta gameplay.';
-    card.watch.textContent = card.own ? 'Parar minha transmissão' : watched ? 'Parar de assistir' : 'Assistir';
+    card.watch.textContent = card.own ? 'Parar transmissão' : watched ? 'Parar de assistir' : 'Assistir';
     card.retry.hidden = card.own || !watched; card.retry.disabled = state.busy;
     card.watch.disabled = state.busy; card.quality.disabled = state.busy;
     card.mute.disabled = card.volume.disabled = card.pause.disabled = !stream;
@@ -141,7 +156,7 @@ function renderStreams() {
 function renderProfile() {
   const name = $('name').value.trim() || 'Você';
   $('profileName').textContent = name;
-  $('profileAvatar').textContent = name.slice(0, 1).toUpperCase();
+  showAvatar($('profileAvatar'), name, profileUi.avatar);
   $('profileStatus').textContent = rtc.localStream ? 'Compartilhando tela' : state.connected ? 'Conectado à sala' : 'Pronto para entrar';
 }
 function render() {
@@ -180,8 +195,12 @@ function render() {
   $('emptyTitle').textContent = state.connected ? 'Sua sala está pronta.' : 'Nenhuma transmissão';
   $('emptyDescription').textContent = state.connected ? 'Compartilhe sua tela ou escolha uma transmissão para assistir.' : 'Crie uma sala ou entre com um convite.';
   $('participants').replaceChildren(...state.participants.map(p => {
-    const li = node('li'), details = node('div'); details.append(node('div','peer-name',p.name + (p.id === rtc.identity?.participantId ? ' (você)' : '')), node('div','peer-role',(p.role === 'host' ? 'Criador da sala' : 'Amigo') + (p.streamId ? ' · transmitindo' : '')));
-    li.append(node('span','avatar',p.name.slice(0,1).toUpperCase()),details); return li;
+    const li = node('li','participant-item'), details = node('div','participant-copy');
+    const self = p.id === rtc.identity?.participantId;
+    details.append(node('div','peer-name',p.name + (self ? ' (você)' : '')), node('div','peer-role',p.streamId ? 'Compartilhando tela' : p.role === 'host' ? 'Criador da sala' : 'Na sala'));
+    const avatar = node('span','avatar'); showAvatar(avatar, p.name, self ? profileUi.avatar : p.avatar);
+    const presence = node('span','peer-presence'); presence.classList.toggle('streaming', Boolean(p.streamId)); presence.title = p.streamId ? 'Compartilhando tela' : 'Conectado';
+    li.append(avatar,details,presence); return li;
   }));
   renderStreams();
 }
@@ -213,12 +232,13 @@ async function connect(mode) {
 async function disconnected(message) {
   if (state.shuttingDown) return;
   state.connected = false; state.role = null; state.persistent = false; state.invitation = ''; state.participants = []; state.room = null;
+  viewerSounds.reset();
   await rtc.leave(); remoteStreams.clear(); $('source').textContent = 'Nenhuma fonte selecionada'; status(message); render();
 }
 window.chrome.webview.addEventListener('message', ({ data }) => {
   if (data.type === 'reply') {
     const r = requests.get(data.id); if (!r) return; requests.delete(data.id); clearTimeout(r.timer); data.ok ? r.resolve(data.result) : r.reject(Error(data.error));
-  } else if (data.type === 'roomState') { state.room = data.state; state.participants = data.state.participants; if (rtc.identity) rtc.updateRoom(data.state); render(); }
+  } else if (data.type === 'roomState') { state.room = data.state; state.participants = data.state.participants; if (rtc.identity) rtc.updateRoom(data.state); if (rtc.localStream) viewerSounds.update(data.state.subscribers ?? []); else viewerSounds.reset(); render(); }
   else if (data.type === 'signal') rtc.enqueueSignal(data.from, data.payload);
   else if (data.type === 'disconnected') void disconnected(data.message);
   else if (data.type === 'serverError' || data.type === 'audioError') status(data.message, true);
@@ -236,6 +256,7 @@ rtc.addEventListener('connectionError', ({ detail }) => {
   status(name + ': ' + detail.message + ' Use Reconectar na transmissão para tentar novamente.', true);
 });
 rtc.addEventListener('capture', ({ detail }) => {
+  viewerSounds.capture(detail ? rtc.localId : null);
   $('source').textContent = detail ? 'Compartilhando: ' + (detail.source || 'fonte selecionada') + ' · prévia sem som' : 'Nenhuma fonte selecionada';
   if (detail) status('Captura real iniciada: ' + detail.settings.width + '×' + detail.settings.height + '. Vídeo é enviado somente a quem escolher assistir. ' + (detail.audio ? 'Faixa de áudio ativa.' : 'Sem faixa de áudio.'));
   render();
@@ -277,7 +298,7 @@ rtc.addEventListener('stats', ({ detail }) => {
       }
       if (!row.frames) { card.empty.hidden = false; card.empty.textContent = 'Conexão estabelecida. Aguardando o primeiro frame de vídeo…'; }
     }
-    card.metrics.textContent = card.own ? rtc.subscribers.length + ' espectador(es) selecionaram sua transmissão · ' + (rows.length ? rows.reduce((sum,r)=>sum+(r.bitrate??0),0).toFixed(2) + ' Mbps enviados' : 'nenhum vídeo enviado')
+    card.metrics.textContent = card.own ? rtc.subscribers.length ? rtc.subscribers.length + (rtc.subscribers.length===1 ? ' pessoa selecionou sua tela' : ' pessoas selecionaram sua tela') + (rows.length ? ' · '+ rows.reduce((sum,r)=>sum+(r.bitrate??0),0).toFixed(2) + ' Mbps' : '') : 'Prévia local · aguardando espectadores'
       : rows.length ? (rows[0].width ?? '—') + '×' + (rows[0].height ?? '—') + ' · ' + (rows[0].fps === null ? '—' : Math.round(rows[0].fps)) + ' FPS · ' + rows[0].route : 'Sem recepção ativa.';
   }
 });
@@ -285,7 +306,8 @@ function showExpiry(expiresAt) {
   $('roomCode').textContent = state.persistent ? 'Sala do grupo' : 'Sala ' + (state.roomId ?? '').slice(0,8);
   if (state.persistent) {
     $('roomCode').title = 'Sala fixa privada';
-    $('roomLifetime').textContent = 'Acesso salvo. Volte quando quiser, mesmo com a sala vazia.';
+    $('roomLifetime').textContent = 'Acesso salvo neste PC';
+    $('roomLifetime').title = 'Volte quando quiser, mesmo com a sala vazia.';
     return;
   }
   $('roomCode').title = 'Próxima renovação antes de ' + new Date(expiresAt).toLocaleString('pt-BR');
@@ -395,8 +417,8 @@ for (const id of ['quality','fps','autoQuality','upload']) $(id).addEventListene
 }));
 $('audio').addEventListener('change', () => { $('audioHint').textContent = $('audio').value === 'system' ? 'WASAPI captura todo o sistema, incluindo Discord e outras gameplays que você estiver ouvindo. Pode causar retorno. Prefira áudio da janela.' : $('audio').value === 'none' ? 'Apenas vídeo.' : 'Escolha a janela do jogo e habilite áudio no seletor. Depende do Windows/WebView2.'; });
 window.streamroom = { shutdown: async () => { state.shuttingDown = true; await rtc.shutdown(); }, diagnostics: () => ({ peers: rtc.peers.size, sending: rtc.subscribers.length, watching: rtc.subscriptions.length }) };
-window.streamroom.shutdown = async () => { zeroTierUi.dispose(); state.shuttingDown = true; await rtc.shutdown(); };
-window.addEventListener('pagehide', () => zeroTierUi.dispose(), { once: true });
+window.streamroom.shutdown = async () => { zeroTierUi.dispose(); uiSounds.dispose(); viewerSounds.reset(); state.shuttingDown = true; await rtc.shutdown(); };
+window.addEventListener('pagehide', () => { zeroTierUi.dispose(); uiSounds.dispose(); }, { once: true });
 $('copyDiagnostics').addEventListener('click', () => busy(async () => {
   // Whitelist only summary fields. No invites, IPs, account names, SDP, or keys.
   const fields = ['direction','state','failed','message','bitrate','fps','width','height','loss','rtt','codec','route','localCandidate','remoteCandidate','transport','direct','tailscale','overlayRelay','tailscaleAttempted','tailscaleCandidates','elapsed','iceState','gathering','candidates','stunError','frames','remoteCandidates','remotePublicCandidates','descriptionReceived'];
@@ -410,13 +432,17 @@ try {
   await refreshGroup();
   await zeroTierUi.start(r);
   for (const [key,value] of Object.entries(r.settings ?? {})) { const input=$(key); if (!input) continue; if(input.type==='checkbox') input.checked=Boolean(value); else input.value=String(value); }
+  profileUi.start(r.profile);
   if (r.settings?.qualityDefaults !== 2) { $('quality').value = '1080'; $('fps').value = '60'; }
   rtc.setOptions(options());
   if (!r.uiPreview) void save().catch(() => {});
   buildVersion = r.version; runtimeVersion = r.runtime;
   $('version').textContent=r.version+(r.installed?'':' · desenvolvimento'); $('runtime').textContent='Motor WebView2 '+r.runtime; $('footerVersion').textContent='StreamRoom '+r.version+(r.installed?'':' · build de desenvolvimento');
   if (!isSecureContext || !navigator.mediaDevices?.getDisplayMedia || !globalThis.RTCPeerConnection) status('Atualize o Microsoft Edge WebView2 Runtime para captura/WebRTC.',true);
-  if (r.uiPreview) {
+  if (r.playerLayoutTest) {
+    const { runPlayerLayoutTest } = await import('./player-layout-test.mjs');
+    void runPlayerLayoutTest({ native, rtc, state, render, showExpiry, profileUi });
+  } else if (r.uiPreview) {
     const preview = new URLSearchParams(location.search).get('preview');
     if (preview === 'settings') openSettings();
     if (preview === 'connections') openSettings('connections');

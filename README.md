@@ -6,6 +6,8 @@ Aplicativo Windows C#/.NET 10 para compartilhar gameplays por **WebRTC P2P diret
 
 A navegação lateral reúne **Sala e telas**, **Minha transmissão** e **Conexões**. O padrão inicial é **1080p · 60 FPS**; resolução e FPS podem ser alterados em Minha transmissão durante a captura, sem parar de compartilhar. O áudio é escolhido antes da captura. O Modo compatível está em **Outras opções** ao lado de Compartilhar tela. [Qualidade ao vivo](docs/LIVE-QUALITY-AND-TABS.md), [organização da interface](docs/WORKSPACE-INTERFACE.md) e [prévias do seletor](docs/SHARP-PREVIEWS.md).
 
+Clique no cartão pessoal da lateral para trocar **nome e foto**. Na sala, os participantes veem a miniatura salva. O vídeo pode ser redimensionado pelo canto inferior direito ou em **Mais opções → Tamanho do vídeo**, sem mudar a qualidade da transmissão. A tela cheia restaura o tamanho escolhido ao sair. [Perfil e tamanho do vídeo](docs/PROFILE-AND-PLAYER.md).
+
 1. Baixe **StreamRoom-win-Setup.exe** na [versão mais recente](https://github.com/BlackGen3ral/StreamRoom/releases/latest). A primeira instalação é manual; depois, o aplicativo verifica novas versões ao iniciar e a cada 30 minutos. Clique em **Atualizar e reiniciar** para aplicar.
 2. Extraia e execute **StreamRoom-win-Setup.exe**. O pacote x64 inclui .NET e declara WebView2 como requisito. O instalador beta ainda não tem assinatura digital.
 3. Informe um nome e escolha **Criar sala fixa**. Compartilhe o convite uma vez: o app de cada amigo salva o acesso e, nas próximas vezes, mostra **Entrar na sala do grupo**. Também é possível criar uma sala temporária. Use a mesma versão em todos os participantes.

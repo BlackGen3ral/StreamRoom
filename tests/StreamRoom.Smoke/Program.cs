@@ -38,6 +38,13 @@ await host.SetWatchingAsync(b.ParticipantId, streamB, subAB, true);
 await friend.SetWatchingAsync(a.ParticipantId, streamA, subBA, true);
 await Wait(() => hostState.GetProperty("subscriptions").GetArrayLength() == 1 && hostState.GetProperty("subscribers").GetArrayLength() == 1);
 Check(true, "Assinaturas cruzadas no mesmo par de participantes");
+if (a.Profiles)
+{
+    var avatar = (await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "fixtures", "avatar.txt"))).Trim();
+    await friend.UpdateProfileAsync("Perfil atualizado", avatar);
+    await Wait(() => hostState.GetProperty("participants").EnumerateArray().Any(p => p.GetProperty("name").GetString() == "Perfil atualizado" && p.GetProperty("avatar").GetString() == avatar));
+    Check(hostState.GetProperty("subscriptions").GetArrayLength() == 1 && hostState.GetProperty("subscribers").GetArrayLength() == 1, "Perfil confirmado chega ao amigo sem modificar assinaturas");
+}
 var received = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 host.SignalReceived += (from,p) => received.TrySetResult(from == b.ParticipantId && p.GetProperty("subscriptionId").GetString() == subAB);
 await friend.SendSignalAsync(a.ParticipantId, new { kind="offer", sdp="contract-test", streamId=streamB, subscriptionId=subAB, session=Guid.NewGuid().ToString() });

@@ -16,6 +16,8 @@ public sealed class SignalingClient : IAsyncDisposable
     private Task? _heartbeat;
     private string? _role;
     private bool _persistent;
+    private bool _profiles;
+    private TaskCompletionSource? _profileReply;
     private readonly TaskCompletionSource _destroyed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _destroyRequested;
     private long _expiresAt;
@@ -52,12 +54,13 @@ public sealed class SignalingClient : IAsyncDisposable
     }
     private static bool ValidToken(string? value) => value is { Length: 64 } && value.All(char.IsAsciiHexDigitLower);
 
-    public async Task<Welcome> ConnectAsync(Uri server, string roomId, string token, string displayName, CancellationToken cancellationToken = default)
+    public async Task<Welcome> ConnectAsync(Uri server, string roomId, string token, string displayName, CancellationToken cancellationToken = default, string? avatar = null)
     {
         if (_receiver is not null || _disposed) throw new InvalidOperationException("Crie uma nova conexão para entrar novamente.");
         if (!Guid.TryParseExact(roomId, "D", out _) || !ValidToken(token)) throw new ArgumentException("Credenciais inválidas.");
         displayName = displayName.Trim();
         if (displayName.Length is < 1 or > 32 || displayName.Any(char.IsControl)) throw new ArgumentException("Seu nome deve ter entre 1 e 32 caracteres.");
+        ProfileData.ValidateAvatar(avatar);
         var socketUri = new UriBuilder(new Uri(server, $"v2/rooms/{roomId}/socket")) { Scheme = server.Scheme == "https" ? "wss" : "ws" };
         _socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
         _socket.Options.KeepAliveTimeout = TimeSpan.FromSeconds(20);
@@ -67,8 +70,9 @@ public sealed class SignalingClient : IAsyncDisposable
         {
             await _socket.ConnectAsync(socketUri.Uri, timeout.Token);
             _receiver = ReceiveAsync();
-            await SendAsync(new { type = "join", token, displayName, protocol = 2 }, timeout.Token);
+            await SendAsync(new { type = "join", token, displayName, avatar, protocol = 2 }, timeout.Token);
             var welcome = await _welcome.Task.WaitAsync(timeout.Token);
+            _profiles = welcome.Profiles;
             _role = welcome.Role; _expiresAt = welcome.ExpiresAt; _persistent = welcome.Persistent;
             _heartbeat = HeartbeatAsync();
             return welcome;
@@ -101,6 +105,18 @@ public sealed class SignalingClient : IAsyncDisposable
         _iceReply = new(TaskCreationOptions.RunContinuationsAsynchronously);
         await SendAsync(new { type = "ice_config" }, cancellationToken);
         return await _iceReply.Task.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken);
+    }
+    public async Task UpdateProfileAsync(string name, string? avatar)
+    {
+        name = ProfileData.Name(name); ProfileData.ValidateAvatar(avatar);
+        if (!_profiles) throw new SignalingException("O servidor desta sala precisa ser atualizado para sincronizar o perfil.");
+        var reply = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); _profileReply = reply;
+        try
+        {
+            await SendAsync(new { type = "profile", displayName = name, avatar }, _lifetime.Token);
+            await reply.Task.WaitAsync(TimeSpan.FromSeconds(10), _lifetime.Token);
+        }
+        finally { if (_profileReply == reply) _profileReply = null; }
     }
     private async Task SendAsync(object value, CancellationToken cancellationToken)
     {
@@ -159,6 +175,7 @@ public sealed class SignalingClient : IAsyncDisposable
                         RoomStateChanged?.Invoke(item.Clone());
                         break;
                     case "pong": _pongPending = false; break;
+                    case "profile_saved": _profileReply?.TrySetResult(); break;
                     case "room_renewed":
                         _expiresAt = item.GetProperty("expiresAt").GetInt64();
                         RoomRenewed?.Invoke(_expiresAt);
@@ -171,6 +188,7 @@ public sealed class SignalingClient : IAsyncDisposable
                         break;
                     case "error":
                         var error = item.GetProperty("message").GetString() ?? "Erro do servidor.";
+                        if (item.TryGetProperty("code", out var code) && code.GetString() is "invalid_profile" or "profile_rate_limited") _profileReply?.TrySetException(new SignalingException(error));
                         _welcome.TrySetException(new SignalingException(error));
                         ServerError?.Invoke(error);
                         break;

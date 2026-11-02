@@ -46,6 +46,17 @@ test('unsubscribing closes only that reception; ongoing publishing is retained',
  s.room.updateRoom({...s.state,subscriptions:[]});assert.equal(receiver.connectionState,'closed');assert.notEqual(sender.connectionState,'closed');
  assert.equal(s.track.stopped,false);await s.room.shutdown();
 });
+test('name and avatar changes retain the same sending and receiving peer connections',async()=>{
+ const s=setup();s.room.updateRoom(s.state);await settle();
+ await s.room.receiveSignal(s.b,{kind:'offer',streamId:s.incomingId,subscriptionId:s.receive,session:id(),sdp:'v=0'});
+ const before=new Map([...s.room.peers].map(([key,peer])=>[key,peer.pc]));
+ const offers=s.calls.filter(c=>c.type==='signal'&&c.payload.payload.kind==='offer').length;
+ s.room.updateRoom({...s.state,participants:s.state.participants.map(p=>({...p,name:'Novo nome',avatar:'thumbnail'}))});await settle();
+ assert.equal(s.room.peers.size,2);
+ for(const [key,pc] of before)assert.equal(s.room.peers.get(key).pc,pc);
+ assert.equal(s.calls.filter(c=>c.type==='signal'&&c.payload.payload.kind==='offer').length,offers);
+ assert.equal(s.track.stopped,false);await s.room.shutdown();
+});
 test('unsubscribe while ICE configuration is pending never creates a sending peer',async()=>{
  let resolve;const pending=new Promise(r=>resolve=r);const s=setup(type=>type==='ice'?pending:undefined);
  s.room.updateRoom({...s.state,subscriptions:[]});s.room.updateRoom({...s.state,subscriptions:[],subscribers:[]});

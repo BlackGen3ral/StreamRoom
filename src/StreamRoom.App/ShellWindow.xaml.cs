@@ -17,6 +17,7 @@ public partial class ShellWindow : Window
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly SemaphoreSlim _previewCommands = new(4, 4);
+    private readonly SemaphoreSlim _profileCommands = new(1, 1);
     private readonly SemaphoreSlim _tailscaleCommands = new(1, 1);
     private readonly SemaphoreSlim _zeroTierStatusCommands = new(1, 1);
     private readonly TailscaleService _tailscale = new();
@@ -48,6 +49,7 @@ public partial class ShellWindow : Window
     private int _pendingAudio;
     private readonly Dictionary<string, SignalingClient> _testClients = new();
     private WindowState _previousState;
+    private bool _browserFullScreen;
     private CaptureTestScene? _mediaTestScene;
     private readonly System.Windows.Threading.DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(30) };
     private static string DataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StreamRoom", App.ZeroTierProof ? "ZeroTierProof" : ".");
@@ -111,7 +113,9 @@ public partial class ShellWindow : Window
             core.WebMessageReceived += MessageAsync;
             core.ContainsFullScreenElementChanged += (_, _) =>
             {
-                if (core.ContainsFullScreenElement) { _previousState = WindowState; WindowStyle = WindowStyle.None; WindowState = WindowState.Maximized; }
+                if (core.ContainsFullScreenElement == _browserFullScreen) return;
+                _browserFullScreen = core.ContainsFullScreenElement;
+                if (_browserFullScreen) { _previousState = WindowState; WindowStyle = WindowStyle.None; WindowState = WindowState.Maximized; }
                 else { WindowStyle = WindowStyle.SingleBorderWindow; WindowState = _previousState; }
             };
             core.ProcessFailed += async (_, _) =>
@@ -161,7 +165,7 @@ public partial class ShellWindow : Window
             id = message.GetProperty("id").GetString();
             if (type?.StartsWith("tailscale", StringComparison.Ordinal) == true)
                 throw new InvalidOperationException("A integração Tailscale foi retirada. Use a opção ZeroTier em Conexões.");
-            commandGate = type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
+            commandGate = type is "profilePhoto" or "profileSave" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
             object? result = null;
@@ -192,8 +196,25 @@ public partial class ShellWindow : Window
                         try { using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(file)); settings = doc.RootElement.Clone(); }
                         catch (JsonException) { }
                     }
-                    result = new { settings, zeroTierProof = App.ZeroTierProof, zeroTierEnabled = App.ZeroTierEnabled, zeroTierContextUnavailable = App.ZeroTierContextUnavailable, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = !App.ZeroTierProof && _updates.IsInstalled, capturePreview = App.PickerPreviewOutput is not null, uiPreview = App.UiPreviewOutput is not null };
+                    result = new { settings, profile = ProfileStore.Load(DataDirectory), zeroTierProof = App.ZeroTierProof, zeroTierEnabled = App.ZeroTierEnabled, zeroTierContextUnavailable = App.ZeroTierContextUnavailable, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = !App.ZeroTierProof && _updates.IsInstalled, capturePreview = App.PickerPreviewOutput is not null, uiPreview = App.UiPreviewOutput is not null, playerLayoutTest = App.PlayerLayoutTestOutput is not null };
                     break;
+                case "playerLayoutReady" when App.PlayerLayoutTestOutput is not null:
+                    await PlayerLayoutSelfTest.Run(this, Browser.CoreWebView2, App.PlayerLayoutTestOutput);
+                    _exitRequested = true; _ = Dispatcher.BeginInvoke(Close); break;
+                case "profilePhoto":
+                    result = new { avatar = ProfileStore.ChoosePhoto(this) }; break;
+                case "profileSave":
+                    var profile = await ProfileStore.SaveAsync(DataDirectory, p.GetProperty("name").GetString() ?? "", p.TryGetProperty("avatar", out var photo) && photo.ValueKind == JsonValueKind.String ? photo.GetString() : null, !p.TryGetProperty("sounds", out var soundPreference) || soundPreference.ValueKind != JsonValueKind.False);
+                    string? profileNotice = null;
+                    if (_connection?.IsConnected == true)
+                    {
+                        try { await _connection.UpdateProfileAsync(profile.Name, profile.Avatar); }
+                        catch (SignalingException error) { profileNotice = "Perfil salvo neste PC. " + error.Message; }
+                        catch (Exception error) when (error is TimeoutException or System.Net.WebSockets.WebSocketException or OperationCanceledException)
+                        { profileNotice = "Perfil salvo neste PC. A atualização na sala não foi confirmada; entre novamente para aplicar aos amigos."; }
+                    }
+                    Title = "StreamRoom · " + profile.Name;
+                    result = new { profile, message = profileNotice }; break;
                 case "retireTailscale":
                     if (App.UiPreviewOutput is not null || App.ZeroTierProof || !_updates.IsInstalled || _updates.IsPortable) break;
                     if (_connection?.IsConnected == true) throw new IOException("Saia da sala antes de remover o Tailscale.");
@@ -444,6 +465,8 @@ public partial class ShellWindow : Window
             : Invitations.ServerFromInvitation(p.GetProperty("invite").GetString()!);
         var name = p.GetProperty("name").GetString()!.Trim();
         if (name.Length is < 1 or > 32 || name.Any(char.IsControl)) throw new ArgumentException("Use um nome de 1 a 32 caracteres.");
+        var previousProfile = ProfileStore.Load(DataDirectory);
+        var localProfile = await ProfileStore.SaveAsync(DataDirectory, name, previousProfile?.Avatar, previousProfile?.Sounds ?? true);
         await DisconnectAsync();
         string roomId, token, invitation;
         if (creating)
@@ -471,7 +494,7 @@ public partial class ShellWindow : Window
         };
         try
         {
-            var welcome = await client.ConnectAsync(server, roomId, token, name);
+            var welcome = await client.ConnectAsync(server, roomId, token, name, avatar: localProfile.Avatar);
             if (welcome.Persistent)
             {
                 var existing = SavedGroupRoom.Load(DataDirectory);
