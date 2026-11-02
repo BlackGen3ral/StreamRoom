@@ -22,6 +22,17 @@ const zeroTierUi = createZeroTierUi(native, rtc, () => state.connected, status);
 function options() { return { quality: Number($('quality').value), fps: Number($('fps').value), audio: $('audio').value, autoQuality: $('autoQuality').checked, upload: Number($('upload').value) }; }
 function node(tag, className, text) { const e = document.createElement(tag); if (className) e.className = className; if (text !== undefined) e.textContent = text; return e; }
 function button(text, action) { const e = node('button', 'quiet', text); e.addEventListener('click', action); return e; }
+function openSettings(tab = 'transmission') {
+  const connections = tab === 'connections';
+  $('settingsTransmission').hidden = connections; $('settingsConnections').hidden = !connections;
+  $('settings').open = true;
+  for (const button of document.querySelectorAll('[data-settings-tab]')) {
+    const selected = button.dataset.settingsTab === tab;
+    button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1;
+  }
+  if (!$('appSettingsDialog').open) $('appSettingsDialog').showModal();
+  $(connections ? 'tabConnections' : 'tabTransmission').focus();
+}
 function quality(card) { const [height, fps] = card.quality.value.split(':').map(Number); return { height, fps }; }
 function createCard(id, streamId) {
   const own = id === rtc.identity?.participantId, card = { id, streamId, own };
@@ -105,6 +116,7 @@ function renderStreams() {
     if (!watched && !card.own) card.metrics.textContent = 'Sem recepção: nenhum vídeo é solicitado.';
   }
   $('streamGrid').hidden = streams.length === 0; $('playerEmpty').hidden = streams.length !== 0;
+  $('streamCount').textContent = streams.length + ' ao vivo';
 }
 function renderProfile() {
   const name = $('name').value.trim() || 'Você';
@@ -129,6 +141,7 @@ function render() {
   if (!rtc.localStream) $('source').textContent = state.connected ? 'Você confirma a fonte no seletor.' : 'Entre em uma sala para começar.';
   $('start').hidden = Boolean(rtc.localStream); $('stop').hidden = !rtc.localStream; $('stop').disabled = state.busy;
   for (const id of ['quality', 'fps', 'audio']) $(id).disabled = Boolean(rtc.localStream);
+  $('showTransmissionSettings').textContent = $('quality').value + 'p · ' + $('fps').value + ' FPS';
   $('networkBadge').textContent = state.connected ? 'Sala conectada' : 'Desconectado'; $('networkBadge').classList.toggle('connected', state.connected);
   $('participantCount').textContent = state.participants.length + '/5'; $('emptyPeers').hidden = state.participants.length > 0;
   $('leave').textContent = state.role === 'host' ? 'Encerrar sala para todos' : 'Sair da sala';
@@ -275,7 +288,17 @@ async function checkUpdates() {
 }
 $('name').addEventListener('input', renderProfile);
 $('showStage').addEventListener('click', () => $('stage').scrollIntoView({ block: 'start' }));
-$('showSettings').addEventListener('click', () => { $('settings').open = true; $('settings').scrollIntoView({ block: 'nearest' }); $('quality').focus(); });
+$('showSettings').addEventListener('click', () => openSettings());
+$('showConnections').addEventListener('click', () => openSettings('connections'));
+$('showTransmissionSettings').addEventListener('click', () => openSettings());
+$('closeSettings').addEventListener('click', () => $('appSettingsDialog').close());
+for (const button of document.querySelectorAll('[data-settings-tab]')) {
+  button.addEventListener('click', () => openSettings(button.dataset.settingsTab));
+  button.addEventListener('keydown', event => {
+    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+    event.preventDefault(); openSettings(event.key === 'Home' ? 'transmission' : event.key === 'End' ? 'connections' : button.dataset.settingsTab === 'transmission' ? 'connections' : 'transmission');
+  });
+}
 $('create').addEventListener('click', () => busy(() => connect('create')));
 $('join').addEventListener('click', () => busy(() => connect('join')));
 $('copy').addEventListener('click', () => busy(async () => { await native('copy',{text:state.invitation}); status('Convite copiado.'); }));
@@ -287,7 +310,7 @@ $('startCompatible').addEventListener('click', () => busy(() => rtc.startCapture
 $('stop').addEventListener('click', () => busy(async () => { await rtc.stopCapture(); status('Sua transmissão parou. As demais continuam.'); }));
 $('updateButton').addEventListener('click', checkUpdates);
 $('installUpdate').addEventListener('click', () => busy(async () => { if (state.connected) throw Error('Saia da sala antes de atualizar.'); await native('installUpdate'); }));
-for (const id of ['quality','fps','autoQuality','upload']) $(id).addEventListener('change', () => { rtc.setOptions(options()); void save().catch(e => status(e.message,true)); });
+for (const id of ['quality','fps','autoQuality','upload']) $(id).addEventListener('change', () => { rtc.setOptions(options()); $('showTransmissionSettings').textContent = $('quality').value + 'p · ' + $('fps').value + ' FPS'; void save().catch(e => status(e.message,true)); });
 $('audio').addEventListener('change', () => { $('audioHint').textContent = $('audio').value === 'system' ? 'WASAPI captura todo o sistema, incluindo Discord e outras gameplays que você estiver ouvindo. Pode causar retorno. Prefira áudio da janela.' : $('audio').value === 'none' ? 'Apenas vídeo.' : 'Escolha a janela do jogo e habilite áudio no seletor. Depende do Windows/WebView2.'; });
 window.streamroom = { shutdown: async () => { state.shuttingDown = true; await rtc.shutdown(); }, diagnostics: () => ({ peers: rtc.peers.size, sending: rtc.subscribers.length, watching: rtc.subscriptions.length }) };
 window.streamroom.shutdown = async () => { tailscaleUi.dispose(); zeroTierUi.dispose(); state.shuttingDown = true; await rtc.shutdown(); };
@@ -308,7 +331,12 @@ try {
   buildVersion = r.version; runtimeVersion = r.runtime; void tailscaleUi.refresh();
   $('version').textContent=r.version+(r.installed?'':' · desenvolvimento'); $('runtime').textContent='Motor WebView2 '+r.runtime; $('footerVersion').textContent='StreamRoom '+r.version+(r.installed?'':' · build de desenvolvimento');
   if (!isSecureContext || !navigator.mediaDevices?.getDisplayMedia || !globalThis.RTCPeerConnection) status('Atualize o Microsoft Edge WebView2 Runtime para captura/WebRTC.',true);
-  if (r.uiPreview) { $('zeroTierPanel').open = true; $('zeroTierDialog').showModal(); setTimeout(() => native('uiPreview'), 2000); }
+  if (r.uiPreview) {
+    const preview = new URLSearchParams(location.search).get('preview');
+    if (preview === 'settings') openSettings();
+    if (preview === 'connections') openSettings('connections');
+    setTimeout(() => native('uiPreview'), 2000);
+  }
   if (r.capturePreview) { capturePicker.open(); setTimeout(() => native('capturePreview'), 6000); }
   if(r.installed) setTimeout(checkUpdates,5000);
 } catch(e) {status('Falha ao iniciar: '+e.message,true);}

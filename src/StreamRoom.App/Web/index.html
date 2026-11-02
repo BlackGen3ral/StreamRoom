@@ -1,48 +1,26 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; media-src 'self' blob: mediastream:; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>StreamRoom</title><link rel="stylesheet" href="app.css"><script type="module" src="app.mjs"></script></head>
-<body>
-<header><button id="showStage" class="brand quiet" title="Ver transmissões">StreamRoom</button><div class="header-location"><span class="screen-symbol" aria-hidden="true">▣</span><span id="headerRoom">Sua sala</span></div><div class="header-right"><span id="version">0.4 · desenvolvimento</span><span class="badge" id="networkBadge">Desconectado</span><button id="showSettings" class="quiet">Configurações</button><button id="updateButton" class="quiet">Atualizações</button></div></header>
+<title>StreamRoom</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="layout.css"><script type="module" src="app.mjs"></script></head>
+<body class="app-shell">
+<header><button id="showStage" class="brand quiet" title="Ver transmissões"><span class="brand-glyph" aria-hidden="true">▣</span>StreamRoom</button><div class="header-location"><span class="screen-symbol" aria-hidden="true">▣</span><span id="headerRoom">Sua sala</span></div><div class="header-right"><span id="version">0.4 · desenvolvimento</span><span class="badge" id="networkBadge">Desconectado</span><button id="showSettings" class="quiet">Configurações</button><button id="updateButton" class="quiet">Atualizações</button></div></header>
 <div id="updateNotice" class="notice" hidden><span id="updateText" role="status" aria-live="polite"></span><progress id="updateDownloadProgress" max="100" value="0" aria-label="Download da atualização" hidden></progress><button id="installUpdate" disabled>Reiniciar e atualizar</button></div>
 <div class="layout"><aside>
   <section class="card room-panel" id="roomPanel"><div class="sidebar-heading"><h2>Sala privada</h2><span class="room-lock" aria-label="Sala por convite">Por convite</span></div><label for="name">Seu nome</label><input id="name" maxlength="32" placeholder="Como seus amigos te chamam?" autocomplete="off">
   <div id="entryControls"><button id="create" class="primary wide">Criar sala</button><div class="divider">ou entre com um convite</div><textarea id="invite" rows="2" aria-label="Convite da sala" placeholder="Cole o convite completo aqui" spellcheck="false"></textarea><div class="row"><button id="paste" class="quiet">Colar</button><button id="join" class="wide">Entrar</button></div></div>
   <div id="roomControls" hidden><p id="roomCode" class="room-code"></p><p id="roomLifetime" class="fine"></p><button id="copy" class="wide">Copiar convite</button><button id="leave" class="danger wide">Sair da sala</button></div></section>
   <section class="card participant-panel"><div class="section-title"><h2>Na sala</h2><span id="participantCount" class="muted">0/5</span></div><ul id="participants"></ul><p id="emptyPeers" class="muted">Convide até quatro amigos para compartilhar e assistir.</p></section>
-  <details class="card" id="settings"><summary>Minha transmissão</summary>
-    <label for="quality">Resolução máxima</label><select id="quality"><option value="1080">1080p</option><option value="720" selected>720p</option><option value="480">480p</option></select>
-    <label for="fps">Taxa de quadros máxima</label><select id="fps"><option value="60">60 FPS</option><option value="30" selected>30 FPS</option></select>
-    <details class="advanced-settings"><summary>Ajustes avançados</summary><label class="checkbox"><input id="autoQuality" type="checkbox" checked> Ajustar qualidade à conexão</label>
-    <label for="upload">Limite total de envio (Mbps)</label><input id="upload" type="number" min="2" max="80" step="1" value="24">
-    <p class="fine">O envio é dividido entre espectadores. Quatro amigos exigem até quatro cópias do vídeo.</p>
-    <label for="server">Servidor de sinalização</label><input id="server" value="https://streamroom.arthostudio.com" spellcheck="false">
-    <p class="fine">STUN gratuito, sem TURN pago. A opção Tailscale pode usar a retransmissão gratuita da rede privada. A sala é renovada automaticamente enquanto o criador permanece conectado.</p></details>
-  </details>
-  <details class="card" id="zeroTierPanel"><summary>ZeroTier <span class="tail-optional">Opcional · em teste</span></summary>
-    <div class="tail-status-row"><div class="tail-connection"><span class="tail-dot" id="zeroTierDot" aria-hidden="true"></span><div><strong id="zeroTierState" role="status">Verificando serviço…</strong><span id="zeroTierMode"></span></div></div><button id="zeroTierRefresh" class="quiet" aria-label="Atualizar estado do ZeroTier">↻</button></div>
-    <button id="zeroTierSetup" class="tail-setup wide">Configurar conexão</button>
-  </details>
-  <details class="card" id="tailscalePanel"><summary>Tailscale <span class="tail-optional">Alternativa</span></summary>
-    <div class="tail-status-row"><div class="tail-connection"><span class="tail-dot" id="tailscaleDot" aria-hidden="true"></span><div><strong>Tailscale</strong><span id="tailscaleStatus" role="status" aria-live="polite">Verificando…</span></div></div><button id="tailscaleRefresh" class="quiet tail-refresh" aria-label="Atualizar status do Tailscale" title="Atualizar status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 11-1l3 3M4 15l3 3a7 7 0 0 0 11-1"/></svg></button></div>
-    <label class="tail-switch"><span>Preferir esta rede<span class="tail-switch-hint" id="tailscaleModeHint">Para conectar com amigos</span></span><input id="tailscaleEnabled" type="checkbox" role="switch"><span class="tail-switch-track" aria-hidden="true"></span></label>
-    <div class="tail-restart" id="tailscaleRestartHint" hidden><p>Reinicie para aplicar a alteração.</p><button id="tailscaleRestart" class="wide">Reiniciar StreamRoom</button></div>
-    <button id="tailscaleSetup" class="tail-setup wide">Conectar amigos</button>
-    <div id="tailscaleDeviceSection" hidden><div class="tail-list-heading"><span>Na rede privada</span><span id="tailscalePeerCount">0</span></div><ul id="tailscalePeers" class="tailscale-peers"></ul><div id="tailscaleNoPeers" class="tail-empty" hidden><span>Nenhum amigo conectado ainda.</span><button id="tailscaleEmptyInvite" class="quiet">Como convidar</button></div></div>
-  </details>
-<div class="sidebar-presence"><span id="profileAvatar" class="avatar">V</span><div><strong id="profileName">Você</strong><span id="profileStatus">Pronto para entrar</span></div><span class="presence-dot" aria-hidden="true"></span></div><p class="tray-note">Ao fechar a janela, o StreamRoom continua na bandeja.</p></aside><main id="stage">
-  <div class="stage-title"><div><span class="eyebrow" id="roomState">TELA COMPARTILHADA</span><h1 id="title">Transmissões</h1></div><span id="directStatus" class="muted">Conexão direta</span></div>
+<button id="showConnections" class="sidebar-settings quiet">Conexões e preferências <span aria-hidden="true">↗</span></button><div class="sidebar-presence"><span id="profileAvatar" class="avatar">V</span><div><strong id="profileName">Você</strong><span id="profileStatus">Pronto para entrar</span></div><span class="presence-dot" aria-hidden="true"></span></div><p class="tray-note">Ao fechar a janela, o StreamRoom continua na bandeja.</p></aside><main id="stage">
+  <div class="stage-title"><div><span class="eyebrow" id="roomState">TELA COMPARTILHADA</span><h1 id="title">Transmissões</h1><span id="streamCount" class="stream-count">0 ao vivo</span></div><span id="directStatus" class="muted">Conexão direta</span></div>
+  <section class="capture-launch" aria-label="Compartilhar tela">
+    <div id="captureSetup" class="capture-setup"><div class="capture-heading"><h2>Sua transmissão</h2><p class="muted">Uma janela ou o monitor inteiro.</p></div></div>
+    <div class="toolbar"><div class="row"><button id="showTransmissionSettings" class="quiet quality-shortcut">Qualidade da transmissão</button><button id="start" class="primary" disabled>Compartilhar tela</button><button id="startCompatible" class="quiet" disabled>Modo compatível</button><button id="stop" class="danger" hidden>Parar transmissão</button><span id="source" class="muted">Entre em uma sala para começar.</span></div></div>
+  </section>
   <div id="streamGrid" class="stream-grid" hidden></div>
   <div class="empty-player" id="playerEmpty"><span class="play-mark" aria-hidden="true"><svg viewBox="0 0 80 64"><rect x="7" y="7" width="66" height="44" rx="7"/><path d="M27 59h26M40 51v8M34 21l17 8-17 9z"/></svg></span><h2 id="emptyTitle">Nenhuma transmissão</h2><p id="emptyDescription">Crie uma sala ou entre com um convite.</p></div>
-  <section class="capture-launch" aria-label="Compartilhar tela">
-    <div id="captureSetup" class="capture-setup"><div class="capture-heading"><h2>Compartilhar tela</h2><p class="muted">Selecione uma janela ou um monitor.</p></div><details class="capture-audio"><summary>Áudio da captura alternativa</summary>    <label for="audio">Áudio no modo compatível</label><select id="audio"><option value="window">Da janela ou jogo</option><option value="system">Todo o som do computador</option><option value="none">Sem áudio</option></select>
-    <p class="fine" id="audioHint">Habilite o áudio no seletor, quando disponível.</p>
-</details></div>
-    <div class="toolbar"><div class="row"><button id="start" class="primary" disabled>Compartilhar tela</button><button id="startCompatible" class="quiet" disabled>Modo compatível</button><button id="stop" class="danger" hidden>Parar transmissão</button><span id="source" class="muted">Entre em uma sala para começar.</span></div></div>
-  </section>
-  <details id="captureInfo" class="info-card"><summary>Sobre captura e áudio</summary><p>Você escolhe o que capturar no seletor do Windows. Jogos em tela cheia exclusiva podem exigir modo janela sem bordas. Nenhum microfone é capturado.</p></details>
+  <div class="support-row"><details id="captureInfo" class="info-card"><summary>Sobre captura e áudio</summary><p>Você escolhe o que capturar no seletor do Windows. Jogos em tela cheia exclusiva podem exigir modo janela sem bordas. Nenhum microfone é capturado.</p></details>
   <details class="card telemetry"><summary>Detalhes da conexão</summary><div id="stats" class="stats-empty">As estatísticas aparecem quando houver uma conexão WebRTC.</div><button id="copyDiagnostics" class="quiet">Copiar diagnóstico</button></details>
-  <div id="status" role="status" aria-live="polite">Pronto para começar.</div>
+  </div><div id="status" role="status" aria-live="polite">Pronto para começar.</div>
 </main></div><footer><span id="runtime"></span><span id="footerVersion">StreamRoom · build de desenvolvimento</span></footer>
 <dialog id="capturePicker" aria-labelledby="pickerTitle">
   <div class="picker-heading"><div><span class="eyebrow">COMPARTILHAR NO STREAMROOM</span><h2 id="pickerTitle">Escolha o que compartilhar</h2><p class="muted">A transmissão começa só depois da sua confirmação.</p></div><button id="cancelCapture" class="quiet" aria-label="Fechar seletor">✕</button></div>
@@ -54,6 +32,32 @@
   <div class="picker-audio"><label for="nativeAudio">Áudio da transmissão</label><select id="nativeAudio"><option value="none">Sem áudio</option><option value="system">Todo o som do computador</option></select><p class="fine">Áudio do sistema inclui Discord e outras transmissões. Para áudio isolado da janela, feche este seletor e use Modo compatível.</p></div>
   <div class="picker-footer"><p class="fine">Você pode parar de compartilhar a qualquer momento.</p><button id="confirmCapture" class="primary" disabled>Compartilhar agora</button></div>
 </dialog>
+<dialog id="appSettingsDialog" class="app-settings-dialog" aria-labelledby="appSettingsTitle">
+  <div class="settings-heading"><div><span class="eyebrow">DO SEU JEITO</span><h2 id="appSettingsTitle">Configurações</h2></div><button id="closeSettings" class="quiet" aria-label="Fechar configurações">✕</button></div>
+  <div class="settings-layout"><div class="settings-tabs" role="tablist" aria-label="Configurações"><button id="tabTransmission" role="tab" aria-selected="true" aria-controls="settingsTransmission" data-settings-tab="transmission">Transmissão</button><button id="tabConnections" role="tab" aria-selected="false" aria-controls="settingsConnections" data-settings-tab="connections">Conexões</button></div><div class="settings-content"><section id="settingsTransmission" role="tabpanel" aria-labelledby="tabTransmission"><p class="settings-description">Defina a qualidade da sua tela e as preferências de captura.</p>  <details class="card" id="settings"><summary>Minha transmissão</summary>
+<details class="capture-audio"><summary>Áudio da captura alternativa</summary>    <label for="audio">Áudio no modo compatível</label><select id="audio"><option value="window">Da janela ou jogo</option><option value="system">Todo o som do computador</option><option value="none">Sem áudio</option></select>
+    <p class="fine" id="audioHint">Habilite o áudio no seletor, quando disponível.</p>
+</details>
+    <label for="quality">Resolução máxima</label><select id="quality"><option value="1080">1080p</option><option value="720" selected>720p</option><option value="480">480p</option></select>
+    <label for="fps">Taxa de quadros máxima</label><select id="fps"><option value="60">60 FPS</option><option value="30" selected>30 FPS</option></select>
+    <details class="advanced-settings"><summary>Ajustes avançados</summary><label class="checkbox"><input id="autoQuality" type="checkbox" checked> Ajustar qualidade à conexão</label>
+    <label for="upload">Limite total de envio (Mbps)</label><input id="upload" type="number" min="2" max="80" step="1" value="24">
+    <p class="fine">O envio é dividido entre espectadores. Quatro amigos exigem até quatro cópias do vídeo.</p>
+    <label for="server">Servidor de sinalização</label><input id="server" value="https://streamroom.arthostudio.com" spellcheck="false">
+    <p class="fine">STUN gratuito, sem TURN pago. A opção Tailscale pode usar a retransmissão gratuita da rede privada. A sala é renovada automaticamente enquanto o criador permanece conectado.</p></details>
+  </details>
+</section><section id="settingsConnections" role="tabpanel" aria-labelledby="tabConnections" hidden><p class="settings-description">O compartilhamento normal funciona sem uma rede privada. Use uma alternativa quando precisar conectar seus amigos.</p>  <details class="card" id="zeroTierPanel"><summary>ZeroTier <span class="tail-optional">Opcional · em teste</span></summary>
+    <div class="tail-status-row"><div class="tail-connection"><span class="tail-dot" id="zeroTierDot" aria-hidden="true"></span><div><strong id="zeroTierState" role="status">Verificando serviço…</strong><span id="zeroTierMode"></span></div></div><button id="zeroTierRefresh" class="quiet" aria-label="Atualizar estado do ZeroTier">↻</button></div>
+    <button id="zeroTierSetup" class="tail-setup wide">Configurar conexão</button>
+  </details>
+  <details class="card" id="tailscalePanel"><summary>Tailscale <span class="tail-optional">Alternativa</span></summary>
+    <div class="tail-status-row"><div class="tail-connection"><span class="tail-dot" id="tailscaleDot" aria-hidden="true"></span><div><strong>Tailscale</strong><span id="tailscaleStatus" role="status" aria-live="polite">Verificando…</span></div></div><button id="tailscaleRefresh" class="quiet tail-refresh" aria-label="Atualizar status do Tailscale" title="Atualizar status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 11-1l3 3M4 15l3 3a7 7 0 0 0 11-1"/></svg></button></div>
+    <label class="tail-switch"><span>Preferir esta rede<span class="tail-switch-hint" id="tailscaleModeHint">Para conectar com amigos</span></span><input id="tailscaleEnabled" type="checkbox" role="switch"><span class="tail-switch-track" aria-hidden="true"></span></label>
+    <div class="tail-restart" id="tailscaleRestartHint" hidden><p>Reinicie para aplicar a alteração.</p><button id="tailscaleRestart" class="wide">Reiniciar StreamRoom</button></div>
+    <button id="tailscaleSetup" class="tail-setup wide">Conectar amigos</button>
+    <div id="tailscaleDeviceSection" hidden><div class="tail-list-heading"><span>Na rede privada</span><span id="tailscalePeerCount">0</span></div><ul id="tailscalePeers" class="tailscale-peers"></ul><div id="tailscaleNoPeers" class="tail-empty" hidden><span>Nenhum amigo conectado ainda.</span><button id="tailscaleEmptyInvite" class="quiet">Como convidar</button></div></div>
+  </details>
+</section></div></div></dialog>
 <dialog id="zeroTierDialog" class="tail-dialog" aria-labelledby="zeroTierTitle">
   <div class="tail-dialog-heading"><div><span class="tail-kicker">REDE PRIVADA · EM TESTE</span><h2 id="zeroTierTitle">Conectar com ZeroTier</h2></div><button id="zeroTierClose" class="quiet tail-close" aria-label="Fechar configuração do ZeroTier">✕</button></div>
   <p id="zeroTierDialogState" class="tail-dialog-intro" role="status"></p>

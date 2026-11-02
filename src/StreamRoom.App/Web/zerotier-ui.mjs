@@ -40,7 +40,7 @@ export function createZeroTierUi(native, rtc, inRoom, message) {
     }
   }
   $('zeroTierSave').addEventListener('click', () => run(async () => { await save(); await refresh(); message('Preferência salva. Reinicie se o aplicativo indicar.'); }));
-  $('zeroTierSetup').addEventListener('click', () => $('zeroTierDialog').showModal());
+  $('zeroTierSetup').addEventListener('click', () => { $('appSettingsDialog')?.close(); $('zeroTierDialog').showModal(); });
   $('zeroTierClose').addEventListener('click', () => $('zeroTierDialog').close());
   $('zeroTierPanel').addEventListener('toggle', () => { if ($('zeroTierPanel').open) void run(refresh); });
   $('zeroTierJoin').addEventListener('click', () => run(async () => { if (!proof) await save(); await native('zeroTierJoin'); await refresh(); }));

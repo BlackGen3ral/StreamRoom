@@ -4,7 +4,7 @@ export function createTailscaleUi(native, rtc, save, isConnected, message) {
   const peerRows = new Map();
   const labels = { direct: 'Direta', relay: 'Relay', disconnected: 'Desconectada', idle: 'Aguardando tráfego', unknown: 'Verificando rota' };
   const setup = $('tailscaleSetupDialog');
-  const openSetup = () => { if (!setup.open) setup.showModal(); };
+  const openSetup = () => { document.getElementById('appSettingsDialog')?.close(); if (!setup.open) setup.showModal(); };
   $('tailscaleSetup').addEventListener('click', openSetup);
   $('tailscaleEmptyInvite').addEventListener('click', openSetup);
   for (const id of ['tailscaleSetupClose', 'tailscaleSetupDone']) $(id).addEventListener('click', () => setup.close());
