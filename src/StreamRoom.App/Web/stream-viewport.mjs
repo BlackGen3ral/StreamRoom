@@ -15,6 +15,15 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
     if (text) node.textContent = text; return node;
   };
   const settings = element('div', 'video-size-settings');
+  const hideControls=element('button','quiet','Ocultar barra');hideControls.type='button';extra.append(hideControls);
+  const revealControls=element('button','stream-reveal-controls','⌃');revealControls.type='button';revealControls.hidden=true;
+  revealControls.title='Mostrar controles';revealControls.setAttribute('aria-label','Mostrar controles da transmissão');frame.append(revealControls);
+  hideControls.addEventListener('click',()=>{
+    more.open=false;root.classList.add('controls-hidden');revealControls.hidden=false;revealControls.focus({preventScroll:true});sync();
+  });
+  revealControls.addEventListener('click',()=>{
+    root.classList.remove('controls-hidden');revealControls.hidden=true;more.querySelector('summary').focus({preventScroll:true});sync();
+  });
   settings.append(element('strong', '', 'Tamanho do vídeo'));
   const inputs = {}, outputs = {};
   for (const [axis, label, min, max] of [['width','Largura',280,1920],['height','Altura',160,2160]]) {
@@ -49,6 +58,7 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
     const outerHeight = element => {
       if(!element || element.hidden)return 0;
       const style=getComputedStyle(element);
+      if(style.display==='none')return 0;
       return element.getBoundingClientRect().height+(parseFloat(style.marginTop)||0)+(parseFloat(style.marginBottom)||0);
     };
     const top=frame.getBoundingClientRect().top-main.getBoundingClientRect().top+main.scrollTop;

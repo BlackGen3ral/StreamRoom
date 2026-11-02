@@ -284,7 +284,7 @@ rtc.addEventListener('connectionError', ({ detail }) => {
 rtc.addEventListener('capture', ({ detail }) => {
   viewerSounds.capture(detail ? rtc.localId : null);
   $('source').textContent = detail ? 'Compartilhando: ' + (detail.source || 'fonte selecionada') + ' · prévia sem som' : 'Nenhuma fonte selecionada';
-  if (detail) status('Captura iniciada' + (detail.settings.width&&detail.settings.height ? ': '+detail.settings.width+'×'+detail.settings.height : '') + '. ' + (detail.audio ? 'Faixa de áudio ativa.' : 'Você pode ativar o som do PC nos controles.'));
+  if (detail) status('');
   render();
 });
 rtc.addEventListener('captureAudio', () => renderStreams());
