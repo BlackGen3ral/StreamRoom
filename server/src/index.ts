@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import legacy from './legacy';
 export { Room } from './legacy';
+export { PeopleDirectory } from './people';
 
 import { ROOM_TTL, SWEEP_INTERVAL, renewalExpiry, stale } from './policy';
 import { validAvatar, validName } from './profile';
@@ -26,6 +27,12 @@ function record(value: unknown): value is Record<string, unknown> {
 export default {
   async fetch(request: Request, env: Env & ClientConfigEnv): Promise<Response> {
     const url = new URL(request.url);
+    if(url.pathname==='/v2/people'){
+      if(!['GET','POST'].includes(request.method))return json({error:'Método inválido.'},405);
+      const key='people:'+request.method+':'+(request.headers.get('CF-Connecting-IP')??'local');
+      if(!(await env.CREATE_LIMITER.limit({key})).success)return json({error:'Muitas tentativas. Aguarde um minuto.'},429);
+      return env.PEOPLE.getByName('public-profiles-v1').fetch(request);
+    }
     if (url.pathname.startsWith('/v1/rooms')) return legacy.fetch(request, env);
     if (url.pathname === '/v2/client-config' && request.method === 'GET') return json(clientConfig(env));
     if (url.pathname === '/v2/google/exchange' && request.method === 'POST') return googleExchange(request, env);

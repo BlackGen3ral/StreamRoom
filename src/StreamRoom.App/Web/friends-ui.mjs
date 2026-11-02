@@ -3,6 +3,7 @@ import { showAvatar } from './profile-ui.mjs';
 export function createFriendsUi(native, changed) {
   const $ = id => document.getElementById(id), dialog = $('friendsDialog');
   let friends = [], peers = [], self, busy = false;
+  let results=[],searching=false;
   const element = (tag, className, text) => { const e = document.createElement(tag); e.className = className; if (text !== undefined) e.textContent = text; return e; };
   const has = id => Boolean(id) && friends.some(f => f.profileId === id);
   function draw() {
@@ -23,6 +24,13 @@ export function createFriendsUi(native, changed) {
       row.append(avatar,copy,actionFor(peer, true)); return row;
     }));
     $('friendsRoomEmpty').hidden = peers.some(p => p.id !== self);
+    $('peopleResults').replaceChildren(...results.map(person=>{
+      const row=element('li','friend-item'),avatar=element('span','avatar'),copy=element('div','friend-copy');showAvatar(avatar,person.name,person.avatar);
+      const identifier=element('small','', 'ID '+person.id.slice(0,8)+'…'+person.id.slice(-4));identifier.title=person.id;
+      copy.append(element('strong','',person.name),identifier);
+      const button=element('button','quiet friend-save',has(person.id)?'Salvo':'Adicionar');button.disabled=busy||has(person.id);
+      button.addEventListener('click',()=>run(async()=>{friends=await native('peopleAdd',{id:person.id});}));row.append(avatar,copy,button);return row;
+    }));
   }
   async function run(action) {
     if (busy) return; busy = true; $('friendsFeedback').textContent = ''; draw();
@@ -39,6 +47,14 @@ export function createFriendsUi(native, changed) {
   }
   $('showFriends').addEventListener('click', () => { draw(); dialog.showModal(); });
   $('friendsClose').addEventListener('click', () => dialog.close());
+  async function search(){
+    if(searching)return;const query=$('peopleQuery').value.trim();if(query.length<2){$('peopleSearchFeedback').textContent='Digite pelo menos 2 caracteres.';return;}
+    searching=true;$('peopleSearch').disabled=true;$('peopleSearchFeedback').textContent='Buscando…';results=[];draw();
+    try{results=await native('peopleSearch',{query});$('peopleSearchFeedback').textContent=results.length?results.length+' pessoa(s) encontrada(s).':'Nenhuma pessoa encontrada. Peça ao amigo para ativar a busca pública no perfil.';}
+    catch(error){$('peopleSearchFeedback').textContent=error.message;}
+    finally{searching=false;$('peopleSearch').disabled=false;draw();}
+  }
+  $('peopleSearch').addEventListener('click',search);$('peopleQuery').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();void search();}});
   return {
     async start() { try { friends = await native('friendsStatus'); } catch (error) { $('friendsFeedback').textContent = error.message; } draw(); },
     update(value, participantId) { peers = value; self = participantId; draw(); }, actionFor

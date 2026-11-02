@@ -13,6 +13,7 @@ export function showAvatar(element, name, avatar) {
 export function createProfileUi(native, onSaved) {
   const $ = id => document.getElementById(id), dialog = $('profileDialog');
   let profile = { name: '', avatar: null }, draft = null, busy = false, google = {}, configured = false, signing = false;
+  let listed=false;
   function drawGoogle() {
     $('googleAccountStatus').textContent = signing ? 'Aguardando você no navegador…' : google.linked ? google.name : configured ? 'Use seu nome e foto do Google.' : 'Indisponível. Verifique a conexão e reabra o app.';
     $('googleLinkedBadge').textContent=google.linked?'Conectada':'Opcional';$('googleLinkedBadge').classList.toggle('linked',Boolean(google.linked));
@@ -26,15 +27,17 @@ export function createProfileUi(native, onSaved) {
   function preview() { showAvatar($('profilePhotoPreview'), $('profileDisplayName').value, draft); $('profilePreviewName').textContent=$('profileDisplayName').value.trim()||'Você';$('profileRemovePhoto').disabled = !draft || busy; }
   async function run(action) {
     if (busy) return; busy = true; feedback('');
-    for (const id of ['profileChoosePhoto','profileRemovePhoto','profileSave','profileDisplayName','profileSounds']) $(id).disabled = true;
+    for (const id of ['profileChoosePhoto','profileRemovePhoto','profileSave','profileDisplayName','profileSounds','profileDiscoverable']) $(id).disabled = true;
     drawGoogle();
     try { await action(); } catch (error) { feedback(error.message, true); }
-    finally { busy = false; for (const id of ['profileChoosePhoto','profileSave','profileDisplayName','profileSounds']) $(id).disabled = false; preview(); drawGoogle(); }
+    finally { busy = false; for (const id of ['profileChoosePhoto','profileSave','profileDisplayName','profileSounds','profileDiscoverable']) $(id).disabled = false; preview(); drawGoogle(); }
   }
-  $('editProfile').addEventListener('click', () => {
+  $('editProfile').addEventListener('click', async () => {
     draft = profile.avatar; $('profileDisplayName').value = $('name').value.trim() || profile.name;
     $('profileSounds').checked = profile.sounds !== false;
     preview(); feedback(''); drawGoogle(); dialog.showModal();
+    $('profileDiscoverable').disabled=true;
+    try{const state=await native('peopleStatus');listed=state.listed;$('profileDiscoverable').checked=listed;}catch(error){feedback(error.message,true);}finally{if(!busy)$('profileDiscoverable').disabled=false;}
   });
   for (const id of ['profileClose','profileCancel']) $(id).addEventListener('click', () => dialog.close());
   const cancelLogin = () => { if (signing) void native('googleCancel').catch(() => {}); };
@@ -60,7 +63,12 @@ export function createProfileUi(native, onSaved) {
     const name = $('profileDisplayName').value.trim();
     if (!name || name.length > 32 || /[\u0000-\u001f\u007f]/.test(name)) throw Error('Use um nome de 1 a 32 caracteres.');
     const result = await native('profileSave', { name, avatar: draft, sounds: $('profileSounds').checked });
-    profile = result.profile; onSaved(profile, result.message); dialog.close();
+    profile = result.profile;
+    if($('profileDiscoverable').checked||listed){
+      try{const published=await native('peoplePublish',{listed:$('profileDiscoverable').checked});profile=published.profile;listed=published.status.listed;}
+      catch(error){onSaved(profile,result.message);throw Error('Perfil salvo neste PC. '+error.message);}
+    }
+    onSaved(profile, result.message); dialog.close();
   }));
   return { start(value, account, available = false) { if (value) { profile = value; $('name').value = value.name; } google = account ?? {}; configured = available; drawGoogle(); }, get avatar() { return profile.avatar; }, get soundsEnabled() { return profile.sounds !== false; } };
 }

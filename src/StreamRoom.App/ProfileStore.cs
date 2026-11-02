@@ -23,11 +23,11 @@ internal static class ProfileStore
         }
         catch (Exception error) when (error is IOException or JsonException or ArgumentException or UnauthorizedAccessException) { return null; }
     }
-    internal static async Task<UserProfile> SaveAsync(string directory, string name, string? avatar, bool sounds = true)
+    internal static async Task<UserProfile> SaveAsync(string directory, string name, string? avatar, bool sounds = true, string? identity = null)
     {
         name = ProfileData.Name(name); ProfileData.ValidateAvatar(avatar);
         var previous = Load(directory);
-        var profile = new UserProfile(name, avatar, sounds, ProfileData.ValidId(previous?.Id) ? previous!.Id : Guid.NewGuid().ToString("D"));
+        var profile = new UserProfile(name, avatar, sounds, ProfileData.ValidId(identity)?identity:ProfileData.ValidId(previous?.Id) ? previous!.Id : Guid.NewGuid().ToString("D"));
         var file = Path.Combine(directory, "profile-v1.json");
         Directory.CreateDirectory(directory);
         await File.WriteAllTextAsync(file + ".tmp", JsonSerializer.Serialize(profile, Json));

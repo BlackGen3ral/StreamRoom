@@ -20,6 +20,8 @@ public partial class App : Application
     public static void Main(string[] args)
     {
         VelopackApp.Build().Run();
+        int peopleTest=Array.IndexOf(args,"--people-self-test");
+        if(peopleTest>=0){PeopleSelfTest.Run(System.IO.Path.GetFullPath(args.ElementAtOrDefault(peopleTest+1)??"people-test.json"),StreamRoom.Core.Invitations.ValidateServer(args.ElementAtOrDefault(peopleTest+2)??"http://127.0.0.1:8787")).GetAwaiter().GetResult();return;}
         int accountTest = Array.IndexOf(args, "--account-self-test");
         if (accountTest >= 0) { AccountSelfTest.Run(System.IO.Path.GetFullPath(args.ElementAtOrDefault(accountTest + 1) ?? "account-self-test.json")).GetAwaiter().GetResult(); return; }
         int profileTest = Array.IndexOf(args, "--profile-self-test");

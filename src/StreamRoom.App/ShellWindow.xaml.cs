@@ -42,6 +42,8 @@ public partial class ShellWindow : Window
     private readonly SemaphoreSlim _updateCommands = new(1, 1);
     private SignalingClient? _connection;
     private Participant[] _participants = [];
+    private DirectoryPerson[] _peopleResults=[];
+    private DateTime _peopleSearchAt;
     private string? _selfParticipantId;
     private Task<ClientConfiguration>? _clientConfiguration;
     private CancellationTokenSource? _googleLogin;
@@ -239,6 +241,17 @@ public partial class ShellWindow : Window
                 case "googleDisconnect":
                     GoogleAccountStore.Remove(DataDirectory); result = GoogleAccountStore.Status(DataDirectory); break;
                 case "friendsStatus": result = FriendBook.Load(DataDirectory); break;
+                case "peopleStatus": result=PeopleService.Status(DataDirectory);break;
+                case "peoplePublish":
+                    var publicProfile=await PeopleService.PublishAsync(DataDirectory,p.GetProperty("listed").GetBoolean(),_connection?.IsConnected==true);
+                    result=new{profile=publicProfile,status=PeopleService.Status(DataDirectory)};break;
+                case "peopleSearch":
+                    _peopleResults=await PeopleService.SearchAsync(p.GetProperty("query").GetString()??"");_peopleSearchAt=DateTime.UtcNow;result=_peopleResults;break;
+                case "peopleAdd":
+                    var person=_peopleResults.FirstOrDefault(item=>item.Id==p.GetProperty("id").GetString());
+                    if(person is null||DateTime.UtcNow-_peopleSearchAt>TimeSpan.FromMinutes(2))throw new IOException("Faça a busca novamente antes de adicionar essa pessoa.");
+                    if(person.Id==ProfileStore.Load(DataDirectory)?.Id)throw new IOException("Esse é seu próprio perfil.");
+                    result=await FriendBook.SavePeerAsync(DataDirectory,new Participant(person.Id,person.Name,"viewer",Avatar:person.Avatar,ProfileId:person.Id));break;
                 case "friendSave":
                     if (_connection?.IsConnected != true) throw new IOException("Entre na sala para salvar um amigo que está nela.");
                     var peer = _participants.FirstOrDefault(peer => peer.Id == p.GetProperty("participantId").GetString());
