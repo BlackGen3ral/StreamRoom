@@ -51,7 +51,14 @@ internal sealed class CaptureSources
         int number = 0;
         EnumDisplayMonitors(0, 0, (nint monitor, nint dc, ref Rect rect, nint data) =>
         { Add("monitor", "Monitor " + ++number + " · " + (rect.Right - rect.Left) + " × " + (rect.Bottom - rect.Top), monitor, 0, rect); return true; }, 0);
-        return _sources.Values.Select(s => (object)new { s.Id, s.Kind, s.Name, s.Thumbnail }).ToArray();
+        int previewBudget = 8_000_000;
+        return _sources.Values.Select(s =>
+        {
+            var thumbnail = s.Thumbnail;
+            if (thumbnail is not null && thumbnail.Length > previewBudget) thumbnail = null;
+            previewBudget -= thumbnail?.Length ?? 0;
+            return (object)new { s.Id, s.Kind, s.Name, Thumbnail = thumbnail };
+        }).ToArray();
     }
     private static bool Protected(nint hwnd) => GetWindowDisplayAffinity(hwnd, out var affinity) && affinity != 0;
     private static bool CanCaptureWindow(nint hwnd)
@@ -83,27 +90,38 @@ internal sealed class CaptureSources
         {
             int width = rect.Right - rect.Left, height = rect.Bottom - rect.Top;
             if (width <= 0 || height <= 0 || (long)width * height > 34_000_000) return null;
+            double scale = Math.Min(1, Math.Min(960d / width, 540d / height));
+            int previewWidth = Math.Max(1, (int)Math.Round(width * scale)), previewHeight = Math.Max(1, (int)Math.Round(height * scale));
             target = CreateCompatibleDC(screen);
-            bitmap = CreateCompatibleBitmap(screen, kind == "monitor" ? 320 : width, kind == "monitor" ? 180 : height);
+            bitmap = CreateCompatibleBitmap(screen, kind == "monitor" ? previewWidth : width, kind == "monitor" ? previewHeight : height);
             if (target == 0 || bitmap == 0) return null;
             previous = SelectObject(target, bitmap);
-            PatBlt(target, 0, 0, kind == "monitor" ? 320 : width, kind == "monitor" ? 180 : height, 0x00000042);
+            PatBlt(target, 0, 0, kind == "monitor" ? previewWidth : width, kind == "monitor" ? previewHeight : height, 0x00000042);
             if (kind == "monitor")
             {
-                if (!StretchBlt(target, 0, 0, 320, 180, screen, rect.Left, rect.Top, width, height, 0x00CC0020)) return null;
+                SetStretchBltMode(target, 4); // HALFTONE: preserve detail while reducing the monitor image.
+                SetBrushOrgEx(target, 0, 0, 0);
+                if (!StretchBlt(target, 0, 0, previewWidth, previewHeight, screen, rect.Left, rect.Top, width, height, 0x00CC0020)) return null;
             }
             else
             {
                 // PW_RENDERFULLCONTENT supports composited applications. Caller bounds worker concurrency/time.
                 if (!PrintWindow(handle, target, 2)) return null;
             }
-            var image = Imaging.CreateBitmapSourceFromHBitmap(bitmap, 0, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(320, 180));
+            var image = Imaging.CreateBitmapSourceFromHBitmap(bitmap, 0, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(previewWidth, previewHeight));
             var rgb = new FormatConvertedBitmap(image, PixelFormats.Bgr24, null, 0);
             var sample = new byte[rgb.PixelWidth * rgb.PixelHeight * 3]; rgb.CopyPixels(sample, rgb.PixelWidth * 3, 0);
             if (!sample.Where((_, i) => i % 97 == 0).Any(value => value > 12)) return null;
-            var encoder = new JpegBitmapEncoder { QualityLevel = 65 }; encoder.Frames.Add(BitmapFrame.Create(image));
+            // Lossless previews keep small text sharp. Bound photos/noise with a high-quality JPEG fallback.
+            BitmapEncoder encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(image));
             using var output = new MemoryStream(); encoder.Save(output);
-            return "data:image/jpeg;base64," + Convert.ToBase64String(output.ToArray());
+            string mime = "png";
+            if (output.Length > 512_000)
+            {
+                output.SetLength(0); output.Position = 0;
+                encoder = new JpegBitmapEncoder { QualityLevel = 92 }; encoder.Frames.Add(BitmapFrame.Create(image)); encoder.Save(output); mime = "jpeg";
+            }
+            return "data:image/" + mime + ";base64," + Convert.ToBase64String(output.ToArray());
         }
         catch { return null; }
         finally { if (previous != 0) SelectObject(target, previous); if (bitmap != 0) DeleteObject(bitmap); if (target != 0) DeleteDC(target); if (screen != 0) ReleaseDC(0, screen); }
@@ -127,6 +145,8 @@ internal sealed class CaptureSources
     [DllImport("user32.dll")] private static extern bool GetWindowDisplayAffinity(nint handle, out uint affinity);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(nint handle, int attribute, out int value, int size);
     [DllImport("user32.dll")] private static extern nint GetDC(nint hwnd);
+    [DllImport("gdi32.dll")] private static extern int SetStretchBltMode(nint dc, int mode);
+    [DllImport("gdi32.dll")] private static extern bool SetBrushOrgEx(nint dc, int x, int y, nint previous);
     [DllImport("user32.dll")] private static extern int ReleaseDC(nint hwnd, nint dc);
     [DllImport("gdi32.dll")] private static extern bool PatBlt(nint dc, int x, int y, int width, int height, uint operation);
     [DllImport("gdi32.dll")] private static extern nint CreateCompatibleDC(nint dc);
