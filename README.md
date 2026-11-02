@@ -41,7 +41,7 @@ Vídeo real por Windows Graphics Capture no seletor próprio, com fallback expl�
 
 Por padrão, STUN público e P2P direto. URLs TURN/credenciais de um servidor antigo são descartadas; candidatos TURN/relay do WebRTC continuam bloqueados. CGNAT/NAT restritivo, VPN, firewall e UDP bloqueado podem impedir a conexão.
 
-**Tailscale opcional:** o painel lateral detecta instalação/conexão, oferece o instalador oficial com autorização e assinatura verificada, orienta contas individuais e convites da rede privada e mostra direta/relay/desconectada. A opção permite candidatos reais da interface Tailscale, tenta priorizar caminhos diretos e preserva o modo normal. Não há TURN pago. **A validação Tailscale audiovisual entre redes diferentes está pendente; não há garantia de 1080p60.** [Configuração, segurança e roteiro do teste](docs/TAILSCALE.md).
+**Tailscale retirado:** a rede privada opcional do cliente agora é ZeroTier. No primeiro início após atualizar, o app oferece remover a instalação MSI oficial do Tailscale, com confirmação local e autorização do Windows, e informa o resultado. Instalações não reconhecidas não são removidas automaticamente. [Barra escura, atualizações e retirada do Tailscale](docs/WINDOW-AND-UPDATES.md).
 
 Salas temporárias começam com 24h. Na última hora, o criador autenticado renova por mais 24h; espectadores não renovam e salas expiradas/encerradas não revivem. Salas fixas v2 preservam o acesso até a exclusão pelo criador. Os dois protocolos usam SQLite, WebSocket Hibernation e ping respondido pelo runtime; salas fixas vazias suspendem a varredura periódica.
 
@@ -86,7 +86,7 @@ Cria cinco sessões, vinte canais de dados diretos por assinaturas, remove uma a
 
 Worker: server/src/index.ts / MultiRoom, API v2. Compatibilidade v1: server/src/legacy.ts / Room. wrangler.jsonc preserva a migração v1 e adiciona MultiRoom SQLite em v2. Nenhum segredo de mídia é necessário.
 
-Após testes e confirmação do plano Free no painel: npm run deploy em server. Não configure TURN ou serviços pagos. A integração Tailscale fica no cliente e não exige alteração do Worker.
+Após testes e confirmação do plano Free no painel: npm run deploy em server. Não configure TURN ou serviços pagos. A retirada do Tailscale é uma mudança do cliente e não exige alteração do Worker.
 
 Velopack verifica Releases públicas oficiais estáveis, avisa e aplica a atualização por ação do usuário após sair da sala. O workflow de main compila, testa e publica o instalador e o feed após sucesso. Commits, drafts, prereleases e artefatos de Actions não são atualizações oficiais. [Aprovação e assinatura](docs/RELEASING.md).
 

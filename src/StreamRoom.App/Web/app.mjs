@@ -1,13 +1,12 @@
 import { RtcRoom } from './rtc-room.mjs';
 import { createCapturePicker } from './capture-picker.mjs';
-import { createTailscaleUi } from './tailscale-ui.mjs';
 import { createZeroTierUi } from './zerotier-ui.mjs';
 const $ = id => document.getElementById(id);
 const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
     const id = String(++sequence);
-    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'zeroTierJoin' ? 180000 : type === 'tailscaleInstall' ? 1800000 : type === 'tailscaleProbe' ? 45000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
+    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
     requests.set(id, { resolve, reject, timer }); window.chrome.webview.postMessage({ id, type, payload });
   });
 }
@@ -17,7 +16,6 @@ let updateBusy = false, updateReady = false;
 let latestStats = [], buildVersion = '', runtimeVersion = '';
 const cards = new Map(), remoteStreams = new Map();
 function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
-const tailscaleUi = createTailscaleUi(native, rtc, save, () => state.connected, status);
 const zeroTierUi = createZeroTierUi(native, rtc, () => state.connected, status);
 function options() { return { quality: Number($('quality').value), fps: Number($('fps').value), audio: $('audio').value, autoQuality: $('autoQuality').checked, upload: Number($('upload').value) }; }
 function node(tag, className, text) { const e = document.createElement(tag); if (className) e.className = className; if (text !== undefined) e.textContent = text; return e; }
@@ -139,7 +137,6 @@ function renderProfile() {
   $('profileStatus').textContent = rtc.localStream ? 'Compartilhando tela' : state.connected ? 'Conectado à sala' : 'Pronto para entrar';
 }
 function render() {
-  tailscaleUi.render();
   renderProfile();
   $('headerRoom').textContent = state.connected ? 'Sala conectada' : 'Sua sala';
   document.body.classList.toggle('in-room', state.connected);
@@ -181,7 +178,7 @@ async function busy(action) {
   try { await action(); } catch (e) { status(e.name === 'NotAllowedError' ? 'Compartilhamento cancelado ou não autorizado. Escolha uma fonte quando quiser.' : e.message, e.name !== 'NotAllowedError'); }
   finally { state.busy = false; render(); }
 }
-async function save() { await native('settings', { server: $('server').value.trim(), name: $('name').value.trim(), tailscaleEnabled: $('tailscaleEnabled').checked, ...options() }); }
+async function save() { await native('settings', { server: $('server').value.trim(), name: $('name').value.trim(), tailscaleEnabled: false, ...options() }); }
 async function refreshGroup() {
   try { const group = await native('groupRoomStatus'); state.groupSaved = group.saved; state.groupInvalid = false; }
   catch { state.groupSaved = false; state.groupInvalid = true; }
@@ -216,7 +213,7 @@ window.chrome.webview.addEventListener('message', ({ data }) => {
   else if (data.type === 'pcm') rtc.pushPcm(data.data);
   else if (data.type === 'roomRenewed') showExpiry(data.expiresAt);
   else if (data.type === 'update') showUpdate(data.result);
-  else if (data.type === 'updateProgress') { $('updateText').textContent = 'Baixando atualização… ' + data.progress + '%'; $('updateDownloadProgress').value = data.progress; }
+  else if (data.type === 'updateProgress') { $('updateText').textContent = 'Baixando arquivos · ' + data.progress + '%'; $('updateDownloadProgress').value = data.progress; }
 });
 rtc.addEventListener('notice', e => status(e.detail));
 rtc.addEventListener('connectionError', ({ detail }) => {
@@ -280,6 +277,7 @@ function showExpiry(expiresAt) {
 function showUpdate(r) {
   if (!r.available) { if (r.message) status(r.message); return; }
   $('updateNotice').hidden = false;
+  $('updateHeading').textContent = r.version ? 'StreamRoom ' + r.version : 'Atualização do StreamRoom';
   if (r.downloaded) { markUpdateReady(); return; }
   if (!updateBusy) void downloadUpdate();
 }
@@ -349,17 +347,24 @@ $('start').addEventListener('click', () => capturePicker.open());
 $('startCompatible').addEventListener('click', () => busy(() => rtc.startCapture(options())));
 $('stop').addEventListener('click', () => busy(async () => { await rtc.stopCapture(); status('Sua transmissão parou. As demais continuam.'); }));
 $('updateButton').addEventListener('click', checkUpdates);
-$('installUpdate').addEventListener('click', () => busy(async () => { if (state.connected) throw Error('Saia da sala antes de atualizar.'); await native('installUpdate'); }));
+$('installUpdate').addEventListener('click', () => busy(async () => {
+  if (state.connected) throw Error('Saia da sala antes de atualizar.');
+  $('updateApplying').showModal();
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  try { await native('installUpdate'); } catch (error) { $('updateApplying').close(); throw error; }
+}));
+$('updateApplying').addEventListener('cancel', event => event.preventDefault());
+$('dismissMaintenance').addEventListener('click', () => { $('maintenanceNotice').hidden = true; });
 for (const id of ['quality','fps','autoQuality','upload']) $(id).addEventListener('change', () => { rtc.setOptions(options()); $('showTransmissionSettings').textContent = $('quality').value + 'p · ' + $('fps').value + ' FPS'; void save().catch(e => status(e.message,true)); });
 $('audio').addEventListener('change', () => { $('audioHint').textContent = $('audio').value === 'system' ? 'WASAPI captura todo o sistema, incluindo Discord e outras gameplays que você estiver ouvindo. Pode causar retorno. Prefira áudio da janela.' : $('audio').value === 'none' ? 'Apenas vídeo.' : 'Escolha a janela do jogo e habilite áudio no seletor. Depende do Windows/WebView2.'; });
 window.streamroom = { shutdown: async () => { state.shuttingDown = true; await rtc.shutdown(); }, diagnostics: () => ({ peers: rtc.peers.size, sending: rtc.subscribers.length, watching: rtc.subscriptions.length }) };
-window.streamroom.shutdown = async () => { tailscaleUi.dispose(); zeroTierUi.dispose(); state.shuttingDown = true; await rtc.shutdown(); };
+window.streamroom.shutdown = async () => { zeroTierUi.dispose(); state.shuttingDown = true; await rtc.shutdown(); };
 window.addEventListener('pagehide', () => zeroTierUi.dispose(), { once: true });
 $('copyDiagnostics').addEventListener('click', () => busy(async () => {
   // Whitelist only summary fields. No invites, IPs, account names, SDP, or keys.
   const fields = ['direction','state','failed','message','bitrate','fps','width','height','loss','rtt','codec','route','localCandidate','remoteCandidate','transport','direct','tailscale','overlayRelay','tailscaleAttempted','tailscaleCandidates','elapsed','iceState','gathering','candidates','stunError','frames','remoteCandidates','remotePublicCandidates','descriptionReceived'];
   fields.push('zeroTier','overlayRoute');
-  const report = { format: 1, version: buildVersion, runtime: runtimeVersion, at: new Date().toISOString(), zeroTier: { ...zeroTierUi.diagnostics(), verifiedMediaConnections: latestStats.filter(row => row.zeroTier).length }, tailscale: tailscaleUi.diagnostics(),
+  const report = { format: 1, version: buildVersion, runtime: runtimeVersion, at: new Date().toISOString(), zeroTier: { ...zeroTierUi.diagnostics(), verifiedMediaConnections: latestStats.filter(row => row.zeroTier).length }, tailscale: { retired: true },
     connections: latestStats.map(row => Object.fromEntries(fields.filter(key => row[key] !== undefined).map(key => [key,row[key]]))) };
   await native('copy', { text: JSON.stringify(report, null, 2) }); status('Diagnóstico copiado, sem convites, IPs ou tokens.');
 }));
@@ -369,7 +374,7 @@ try {
   await zeroTierUi.start(r);
   for (const [key,value] of Object.entries(r.settings ?? {})) { const input=$(key); if (!input) continue; if(input.type==='checkbox') input.checked=Boolean(value); else input.value=String(value); }
   if (r.zeroTierEnabled) { $('quality').value = '720'; $('fps').value = '30'; }
-  buildVersion = r.version; runtimeVersion = r.runtime; void tailscaleUi.refresh();
+  buildVersion = r.version; runtimeVersion = r.runtime;
   $('version').textContent=r.version+(r.installed?'':' · desenvolvimento'); $('runtime').textContent='Motor WebView2 '+r.runtime; $('footerVersion').textContent='StreamRoom '+r.version+(r.installed?'':' · build de desenvolvimento');
   if (!isSecureContext || !navigator.mediaDevices?.getDisplayMedia || !globalThis.RTCPeerConnection) status('Atualize o Microsoft Edge WebView2 Runtime para captura/WebRTC.',true);
   if (r.uiPreview) {
@@ -380,5 +385,13 @@ try {
   }
   if (r.capturePreview) { capturePicker.open(); setTimeout(() => native('capturePreview'), 6000); }
   if(r.installed) setTimeout(checkUpdates,5000);
+  if (r.installed && !r.uiPreview) {
+    const outcome = await native('updateOutcome');
+    if (outcome?.message) status(outcome.message);
+    setTimeout(async () => {
+      try { const result = await native('retireTailscale'); if (result?.message) { $('maintenanceText').textContent = result.message; $('maintenanceNotice').hidden = false; } }
+      catch (error) { $('maintenanceText').textContent = 'Tailscale: ' + error.message; $('maintenanceNotice').hidden = false; }
+    }, 2000);
+  }
 } catch(e) {status('Falha ao iniciar: '+e.message,true);}
 render();

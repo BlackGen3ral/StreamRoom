@@ -33,6 +33,7 @@ public partial class ShellWindow : Window
     private DateTime _nativeSentAt;
     private UpdateInfo? _availableUpdate;
     private bool _updateDownloaded;
+    private bool _retiringTailscale;
     private readonly SemaphoreSlim _updateCommands = new(1, 1);
     private SignalingClient? _connection;
     private bool _closing;
@@ -51,6 +52,8 @@ public partial class ShellWindow : Window
     public ShellWindow()
     {
         InitializeComponent();
+        SourceInitialized += (_, _) => WindowTheme.Apply(this);
+        Activated += (_, _) => WindowTheme.Apply(this);
         Loaded += InitializeAsync;
         _nativeWatchdog.Tick += (_, _) =>
         {
@@ -68,7 +71,7 @@ public partial class ShellWindow : Window
             try
             {
                 using var startupSettings = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(DataDirectory, "settings-v2.json")));
-                _tailscaleWebRtcReady = startupSettings.RootElement.TryGetProperty("tailscaleEnabled", out var enabled) && enabled.ValueKind == JsonValueKind.True;
+                _tailscaleWebRtcReady = false; // Retired integration; ZeroTier is the supported private network.
             }
             catch (Exception ex) when (ex is IOException or JsonException) { }
             if (App.ZeroTierEnabled) _tailscaleWebRtcReady = false;
@@ -153,6 +156,8 @@ public partial class ShellWindow : Window
                 return;
             }
             id = message.GetProperty("id").GetString();
+            if (type?.StartsWith("tailscale", StringComparison.Ordinal) == true)
+                throw new InvalidOperationException("A integração Tailscale foi retirada. Use a opção ZeroTier em Conexões.");
             commandGate = type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
@@ -185,6 +190,24 @@ public partial class ShellWindow : Window
                         catch (JsonException) { }
                     }
                     result = new { settings, zeroTierProof = App.ZeroTierProof, zeroTierEnabled = App.ZeroTierEnabled, zeroTierContextUnavailable = App.ZeroTierContextUnavailable, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = !App.ZeroTierProof && _updates.IsInstalled, capturePreview = App.PickerPreviewOutput is not null, uiPreview = App.UiPreviewOutput is not null };
+                    break;
+                case "retireTailscale":
+                    if (App.UiPreviewOutput is not null || App.ZeroTierProof || !_updates.IsInstalled || _updates.IsPortable) break;
+                    if (_connection?.IsConnected == true) throw new IOException("Saia da sala antes de remover o Tailscale.");
+                    _retiringTailscale = true;
+                    try { result = new { message = await TailscaleRetirement.RunAsync(this, DataDirectory) }; }
+                    finally { _retiringTailscale = false; }
+                    break;
+                case "updateOutcome":
+                    var transition = Path.Combine(DataDirectory, "update-transition.json");
+                    if (File.Exists(transition))
+                    {
+                        using var pending = JsonDocument.Parse(await File.ReadAllTextAsync(transition));
+                        var target = pending.RootElement.GetProperty("target").GetString();
+                        var actual = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0];
+                        result = new { message = actual == target ? $"StreamRoom {actual} atualizado com sucesso." : "A atualização anterior não foi concluída. Verifique as atualizações para tentar novamente." };
+                        File.Delete(transition);
+                    }
                     break;
                 case "zeroTierStatus":
                     var zeroTier = new ZeroTierService(); var zeroTierStatus = await zeroTier.StatusAsync(); var zeroTierConfig = ZeroTierPreferences.Load();
@@ -365,12 +388,18 @@ public partial class ShellWindow : Window
                     result = new { downloaded = true };
                     break;
                 case "installUpdate":
+                    if (_retiringTailscale) throw new InvalidOperationException("Aguarde a remoção do Tailscale terminar antes de reiniciar.");
                     if (App.ZeroTierProof) throw new InvalidOperationException("Atualizações estáveis desativadas neste protótipo.");
                     if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de atualizar.");
                     if (_availableUpdate is null) throw new InvalidOperationException("Nenhuma atualização aprovada disponível.");
                     if (!_updateDownloaded) throw new InvalidOperationException("Aguarde o download da atualização.");
                     _exitRequested = true;
-                    try { _updates.ApplyUpdatesAndRestart(_availableUpdate); }
+                    try
+                    {
+                        await File.WriteAllTextAsync(Path.Combine(DataDirectory, "update-transition.json"), JsonSerializer.Serialize(new { target = _availableUpdate.TargetFullRelease.Version.ToString() }));
+                        _updates.WaitExitThenApplyUpdates(_availableUpdate, silent: true, restart: true);
+                        _ = Dispatcher.BeginInvoke(Close);
+                    }
                     catch { _exitRequested = false; throw; }
                     break;
                 default: throw new ArgumentException("Comando desconhecido.");

@@ -192,3 +192,44 @@
 .app-shell .stream-card:fullscreen .stream-controls { flex-shrink:0; }
 @media(max-width:900px) { .app-shell .stream-grid.has-highlight { grid-template-columns:1fr; }.app-shell .stream-controls { gap:5px; padding:10px; }.app-shell .stream-controls button,.app-shell .stream-controls select { padding:7px; } }
 @media(max-width:600px) { .app-shell .stream-controls .stream-enlarge { margin-left:0; }.app-shell .stream-controls input[type=range] { width:60px; } }
+
+/* Shared-screen stage: a quiet canvas and a compact call-style control bar. */
+.app-shell.in-room main { background:#101115; }
+.app-shell.in-room .stream-grid { padding:8px 0 12px; }
+.app-shell .stream-card { position:relative; border:0; background:transparent; border-radius:10px; }
+.app-shell .stream-card .stream-heading { position:absolute; top:0; left:0; right:0; z-index:2; padding:14px 16px 32px; background:linear-gradient(#090a10db,#090a1000); border-radius:10px 10px 0 0; pointer-events:none; }
+.app-shell .stream-card .player-card,.app-shell .stream-grid>.stream-card:only-child .player-card { border:1px solid #30323d; border-radius:10px; }
+.app-shell .stream-grid>.stream-card:only-child { width:min(100%,max(360px,calc((100dvh - 310px)*16/9))); }
+.app-shell .stream-grid>.stream-card:only-child.expanded { width:100%; }
+.app-shell .stream-grid>.stream-card:fullscreen { width:100%; }
+.app-shell .stream-card.expanded .player-card { border-color:#8a80c5; }
+.app-shell .stream-avatar { border-radius:50%; background:#37304e; }
+.app-shell .live-indicator { background:#bd3f51; color:#fff; padding:4px 6px; border-radius:4px; font-size:9px; }
+.app-shell .live-indicator::before { display:none; }
+.app-shell .stream-caption { color:#c1c4d0; text-shadow:0 1px 4px #000; }
+.app-shell .stream-controls { border:0; justify-content:center; gap:6px; padding:12px 0 8px; }
+.app-shell .stream-controls button,.app-shell .stream-controls select,.app-shell .stream-more>summary { background:#24262f; border:1px solid #343640; border-radius:8px; min-height:36px; }
+.app-shell .stream-controls button:hover,.app-shell .stream-more>summary:hover { background:#343743; }
+.app-shell .stream-controls .stream-enlarge { margin-left:0; }
+.app-shell .stream-controls .stream-stop { background:#a83749; color:#fff; border-color:#a83749; }
+.app-shell .stream-controls .stream-stop:hover { background:#bd4054; }
+.app-shell .stream-card>.fine { padding:0 4px 6px; text-align:center; color:#9196a7; }
+.app-shell .stream-extra { background:#202129; border-color:#3c3d49; box-shadow:0 12px 32px #0008; border-radius:9px; }
+.app-shell .stream-card:fullscreen .player-card { border:0; border-radius:0; }
+.app-shell #updateNotice { margin:12px 24px; padding:16px 18px; border:1px solid #49405e; border-radius:12px; background:#211f2d; color:#e8e5f7; gap:16px; }
+.update-symbol { flex:0 0 40px; width:40px; height:40px; border-radius:12px; background:#38304f; color:#c5b8ff; display:grid; place-items:center; font-size:24px; }
+.update-copy { display:flex; flex-direction:column; gap:5px; min-width:0; flex:1; }
+.update-copy strong { font-size:13px; font-weight:600; }
+.update-copy #updateText { font-size:11px; color:#b4afc7; }
+.app-shell progress { accent-color:#b1a1f1; height:5px; border:0; width:100%; }
+.app-shell progress::-webkit-progress-bar { background:#393347; border-radius:10px; }
+.app-shell progress::-webkit-progress-value { background:#b1a1f1; border-radius:10px; }
+.app-shell #updateDownloadProgress { display:block; flex:none; max-width:360px; height:5px; margin-top:6px; }
+.update-applying { width:min(440px,calc(100vw - 32px)); padding:32px; text-align:center; color:#eeedf7; background:#1b1d26; border:1px solid #494456; border-radius:16px; }
+.update-applying::backdrop { background:#08090dc9; }
+.update-applying .update-symbol { margin:0 auto 22px; }
+.update-applying h2 { margin:0 0 12px; font-size:21px; }
+.update-applying p { color:#a8afc0; font-size:13px; line-height:1.7; }
+.update-applying progress { margin:16px 0; }
+.maintenance-notice { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:12px 24px; background:#1e2a28; color:#c6ded6; font-size:12px; }
+@media(max-width:760px) { .app-shell #updateNotice { margin:10px; padding:12px; flex-wrap:wrap; }.app-shell #installUpdate { margin-left:auto; } }

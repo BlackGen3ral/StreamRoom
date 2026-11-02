@@ -21,7 +21,7 @@ export function createZeroTierUi(native, rtc, inRoom, message) {
     $('zeroTierInstallNote').hidden = z.installed;
     $('zeroTierRestartNote').hidden = value.enabled === active || proof;
     $('zeroTierMode').textContent = unavailable ? 'Este motor não liberou o modo ZeroTier. Compartilhamento normal ativo.' : active ? 'Mídia pela rede ZeroTier · em teste' : 'Compartilhamento normal ativo';
-    $('tailscalePanel').hidden = active;
+    $('tailscalePanel').hidden = true;
   }
   async function refresh() { draw(await native('zeroTierStatus')); }
   async function save() {
