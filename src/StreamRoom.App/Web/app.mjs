@@ -20,7 +20,7 @@ const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
     const id = String(++sequence);
-    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
+    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
     requests.set(id, { resolve, reject, timer }); window.chrome.webview.postMessage({ id, type, payload });
   });
 }

@@ -33,6 +33,22 @@ if (args is ["--verify-installer", var path])
     finally { File.Delete(copy); }
 }
 Console.WriteLine("No software installed and no account credentials used. Cross-network media test still required.");
+if (args is ["--verify-zerotier-download", var officialMsi])
+{
+    var progress = new List<int>();
+    await new ZeroTierDownload().DownloadAsync((percent, bytes) => { if (percent.HasValue) progress.Add(percent.Value); });
+    Check(progress.Count > 1 && progress[^1] == 100 && progress.SequenceEqual(progress.Order()), "official ZeroTier download reports progress and verifies signature");
+    InstallerTrust.Verify(officialMsi, zeroTier: true);
+    var modified = Path.Combine(Path.GetTempPath(), "streamroom-zt-tampered-" + Guid.NewGuid().ToString("N") + ".msi");
+    try
+    {
+        File.Copy(officialMsi, modified);
+        using (var file = File.Open(modified, FileMode.Open, FileAccess.ReadWrite)) { file.Position = file.Length / 2; var b = file.ReadByte(); file.Position--; file.WriteByte((byte)(b ^ 255)); }
+        var rejected = false; try { InstallerTrust.Verify(modified, zeroTier: true); } catch (IOException) { rejected = true; }
+        Check(rejected, "modified ZeroTier installer rejected before launch");
+    }
+    finally { File.Delete(modified); }
+}
 
 var groupDirectory = Path.Combine(Path.GetTempPath(), "streamroom-group-test-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(groupDirectory);

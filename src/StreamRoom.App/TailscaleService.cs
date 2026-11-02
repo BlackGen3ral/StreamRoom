@@ -129,7 +129,7 @@ internal static class InstallerTrust
     }
     [DllImport("wintrust.dll", ExactSpelling = true)]
     private static extern int WinVerifyTrust(IntPtr hwnd, ref Guid action, ref TrustData data);
-    public static void Verify(string path)
+    public static void Verify(string path, bool zeroTier = false)
     {
         var name = Marshal.StringToCoTaskMemUni(path);
         var info = new FileInfo { Size = (uint)Marshal.SizeOf<FileInfo>(), Path = name };
@@ -143,10 +143,12 @@ internal static class InstallerTrust
             // Loader supports certificates, not Authenticode MSI/PE containers.
             // WinVerifyTrust above verifies the file contents and trust chain.
 #pragma warning disable SYSLIB0057
-            using var cert = X509Certificate.CreateFromSignedFile(path);
+            using var signed = X509Certificate.CreateFromSignedFile(path);
+            using var cert = new X509Certificate2(signed);
 #pragma warning restore SYSLIB0057
-            if (!cert.Subject.Split(',').Any(part => part.Trim() is "O=Tailscale Inc." or "O=Tailscale Inc"))
-                throw new IOException("O arquivo não foi assinado pela Tailscale.");
+            bool expected = zeroTier ? cert.GetNameInfo(X509NameType.SimpleName, false).Equals("ZEROTIER, INC.", StringComparison.OrdinalIgnoreCase)
+                : cert.Subject.Split(',').Any(part => part.Trim() is "O=Tailscale Inc." or "O=Tailscale Inc");
+            if (!expected) throw new IOException("O arquivo não foi assinado pelo fornecedor esperado.");
         }
         finally { data.State = 2; WinVerifyTrust(new IntPtr(-1), ref action, ref data); Marshal.FreeCoTaskMem(pointer); Marshal.FreeCoTaskMem(name); }
     }

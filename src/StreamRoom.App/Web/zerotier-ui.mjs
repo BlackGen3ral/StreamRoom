@@ -18,10 +18,19 @@ export function createZeroTierUi(native, rtc, inRoom, message) {
     $('zeroTierDevice').hidden = !z.deviceId;
     $('zeroTierJoin').hidden = !z.installed || z.connected;
     $('zeroTierDownload').hidden = z.installed;
+    if (z.installed) $('zeroTierInstall').hidden = true;
     $('zeroTierInstallNote').hidden = z.installed;
     $('zeroTierRestartNote').hidden = value.enabled === active || proof;
     $('zeroTierMode').textContent = unavailable ? 'Este motor não liberou o modo ZeroTier. Compartilhamento normal ativo.' : active ? 'Mídia pela rede ZeroTier · em teste' : 'Compartilhamento normal ativo';
     $('tailscalePanel').hidden = true;
+    $('connectionModeBadge').textContent = active && !unavailable ? 'ZeroTier ativado' : 'Modo normal';
+    $('connectionModeBadge').classList.toggle('enabled', active && !unavailable);
+    $('connectionService').textContent = z.installed ? 'Instalado' : 'Não instalado';
+    $('connectionNetwork').textContent = z.connected ? 'Conectada' : z.state === 'ACCESS_DENIED' ? 'Aguardando autorização' : 'Não conectada';
+    $('connectionMedia').textContent = active && !unavailable ? 'Rede ZeroTier' : 'Internet direta';
+    $('zeroTierPanel').classList.toggle('network-connected', z.connected);
+    $('connectionNextStep').textContent = unavailable ? 'O modo normal está ativo. Abra as opções para revisar a configuração.' : !z.installed ? 'Primeiro, baixe e instale o ZeroTier. O download é feito aqui no app.' : z.state === 'ACCESS_DENIED' ? 'Peça ao dono da rede para autorizar este computador. Depois, atualize o estado.' : !z.connected ? 'Cole o código da rede dos amigos e clique em Conectar este PC.' : value.enabled !== active && !proof ? 'Preferência salva. Reinicie o StreamRoom para aplicar.' : !active ? 'A rede está conectada. Ative Usar ZeroTier nas opções e reinicie para transmitir por ela.' : inRoom() ? 'Rede pronta. Volte para Sala e telas para compartilhar ou assistir.' : 'Tudo pronto. Entre na sala do grupo para compartilhar ou assistir.';
+    $('zeroTierSetup').textContent = !z.installed ? 'Baixar ZeroTier →' : !z.connected ? 'Conectar este PC →' : !active ? 'Ativar ZeroTier →' : 'Gerenciar conexão ↗';
   }
   async function refresh() { draw(await native('zeroTierStatus')); }
   async function save() {
@@ -31,7 +40,7 @@ export function createZeroTierUi(native, rtc, inRoom, message) {
   async function run(action) {
     if (busy) return;
     busy = true; $('zeroTierPanel').setAttribute('aria-busy', 'true');
-    const controls = ['zeroTierSave','zeroTierJoin','zeroTierRefresh','zeroTierRestart','zeroTierEnabled','zeroTierNetwork'];
+    const controls = ['zeroTierSave','zeroTierJoin','zeroTierRefresh','zeroTierRestart','zeroTierEnabled','zeroTierNetwork','zeroTierDownload','zeroTierInstall'];
     for (const id of controls) $(id).disabled = true;
     try { await action(); } catch (error) { message(error.message, true); }
     finally {
@@ -46,7 +55,22 @@ export function createZeroTierUi(native, rtc, inRoom, message) {
   $('zeroTierJoin').addEventListener('click', () => run(async () => { if (!proof) await save(); await native('zeroTierJoin'); await refresh(); }));
   $('zeroTierRefresh').addEventListener('click', () => run(refresh));
   $('zeroTierRestart').addEventListener('click', () => run(() => native('zeroTierRestart')));
-  $('zeroTierDownload').addEventListener('click', () => run(() => native('zeroTierDownload')));
+  window.chrome.webview.addEventListener('message', ({ data }) => {
+    if (data.type !== 'zeroTierDownloadProgress') return;
+    $('zeroTierDownloadBox').hidden = false;
+    const progress = $('zeroTierDownloadProgress');
+    if (data.percent === null) progress.removeAttribute('value'); else progress.value = data.percent;
+    $('zeroTierDownloadText').textContent = data.percent === 100 ? 'Download concluído · assinatura verificada' : 'Baixando ZeroTier · ' + (data.percent === null ? (data.bytes / 1048576).toFixed(1) + ' MB' : data.percent + '%');
+  });
+  $('zeroTierDownload').addEventListener('click', () => run(async () => {
+    $('zeroTierInstall').hidden = true; $('zeroTierDownloadBox').hidden = false;
+    $('zeroTierDownloadText').textContent = 'Preparando download oficial…'; $('zeroTierDownloadProgress').removeAttribute('value');
+    try { await native('zeroTierDownload'); $('zeroTierInstall').hidden = false; }
+    catch (error) { $('zeroTierDownloadText').textContent = 'Download não concluído. Tente novamente.'; throw error; }
+  }));
+  $('zeroTierInstall').addEventListener('click', () => run(async () => {
+    await native('zeroTierInstall'); $('zeroTierDownloadText').textContent = 'Instalador aberto. Conclua a instalação e atualize o estado da conexão.';
+  }));
   $('zeroTierCopy').addEventListener('click', () => run(async () => {
     const id = $('zeroTierNetwork').value.trim();
     if (!/^[0-9a-f]{16}$/i.test(id)) throw Error('Informe a rede privada primeiro.');

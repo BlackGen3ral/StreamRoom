@@ -35,6 +35,7 @@ public partial class ShellWindow : Window
     private bool _updateDownloaded;
     private bool _retiringTailscale;
     private BackgroundNotice? _backgroundNotice;
+    private readonly ZeroTierDownload _zeroTierDownload = new();
     private readonly SemaphoreSlim _updateCommands = new(1, 1);
     private SignalingClient? _connection;
     private bool _closing;
@@ -225,7 +226,11 @@ public partial class ShellWindow : Window
                     if (App.ZeroTierProof) zRestart.ArgumentList.Add("--zerotier-proof");
                     System.Diagnostics.Process.Start(zRestart); _exitRequested = true; Close(); break;
                 case "zeroTierDownload":
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://www.zerotier.com/download/") { UseShellExecute = true }); break;
+                    await _zeroTierDownload.DownloadAsync((percent, bytes) => Emit(new { type = "zeroTierDownloadProgress", percent, bytes }));
+                    result = new { ready = true }; break;
+                case "zeroTierInstall":
+                    if (_connection?.IsConnected == true) throw new IOException("Saia da sala antes de instalar um serviço de rede.");
+                    _zeroTierDownload.OpenInstaller(); break;
                 case "zeroTierJoin":
                     if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de conectar este PC à rede privada.");
                     if (MessageBox.Show(this, "Conectar este PC à rede privada configurada?\n\nO Windows pedirá autorização. O proprietário deverá autorizar este dispositivo no painel ZeroTier. Não será alterada a rota padrão da internet nem o DNS.", "Conectar ZeroTier", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes)
