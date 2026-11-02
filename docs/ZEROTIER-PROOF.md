@@ -43,6 +43,16 @@ Também foi executado um teste local de compatibilidade da captura existente nes
 
 A repetição final, registrada em `zerotier-ice-20261102-082806.json`, também passou sem as flags Tailscale: **182 frames decodificados e 30 FPS**, com as mesmas dimensões e permissões. Áudio e mídia entre casas continuam marcados como `NOT_TESTED`.
 
+### Continuação: compatibilidade local de áudio
+
+O teste posterior `zerotier-ice-20261102-154239.json` validou também o caminho de áudio: um tom baixo de 991 Hz no dispositivo de saída padrão foi capturado por WASAPI, encaminhado ao `pcm-worklet.js` existente, codificado em Opus, recebido e analisado após decodificação pelo outro par WebRTC local. Não foi usado microfone e nenhum som foi salvo em arquivo. A liberação do comando de áudio sem sala existe apenas na cópia temporária, condicionada ao modo de teste de captura; o aplicativo normal não foi modificado.
+
+Resultado: **103 blocos PCM, 102 com sinal, 311 pacotes recebidos, 298.560 amostras, RMS decodificado 0,00959 e sinal próximo ao tom de teste em −65,72 dB**. Vídeo simultâneo: 181 frames decodificados, aproximadamente 30 FPS, 1102×720. Câmera e microfone permaneceram em `prompt` e as flags Tailscale permaneceram desligadas.
+
+O contador WebRTC `totalAudioEnergy` retornou zero mesmo com sinal medido no receptor. Por isso o teste exige, além dos pacotes, sinal real no analisador do áudio decodificado; não aprova o caminho apenas com contadores de transporte. O analisador recebe a faixa remota e sua saída física é silenciada para evitar realimentação. A escuta humana e o áudio entre casas continuam `NOT_TESTED`.
+
+Isso comprova compatibilidade local do caminho WASAPI/PCM/WebRTC nesse contexto; **não comprova rota ZeroTier, qualidade do áudio de um jogo específico ou conexão entre casas**. O amigo ainda não possui o serviço ZeroTier instalado. O teste externo permanece pendente do pacote experimental e do esclarecimento dos termos de distribuição do instalador oficial; não exigir uma instalação manual separada como se ela atendesse ao requisito de instalador único.
+
 Esse teste de compatibilidade **não mede a rota ZeroTier**, desempenho entre provedores ou funcionamento de áudio. Seu objetivo é verificar se a captura atual pode ser usada nesse contexto. Ainda são necessários áudio, negociação e par selecionado sobre ZeroTier entre dois computadores de casas diferentes.
 
 Durante a preparação desse teste houve timeouts causados por um caminho passado incorretamente pelo script, não por uma falha comprovada da captura. Os argumentos foram corrigidos e o teste de compatibilidade passou. A revisão automática bloqueou uma tentativa de limpar pastas temporárias de execuções antigas; esses resíduos ficaram no disco. A última execução concluída descartou seu próprio perfil. Não confundir esses resíduos com as permissões da versão instalada.
@@ -92,6 +102,8 @@ Esse script não instala software nem entra em redes: consulta a CLI oficial, ex
 Somente após autorização explícita para o diagnóstico, acrescentar `-TemporaryCameraPermission` para a comparação. Essa opção concede câmera apenas ao perfil descartável de teste, consulta a permissão, descobre candidatos reais, revoga e consulta novamente. Não captura câmera/microfone. O script remove os diretórios temporários após conferir que cada alvo é um filho direto do diretório temporário do Windows com o nome exclusivo do teste. A opção não modifica os fontes do aplicativo no checkout nem as permissões do aplicativo instalado.
 
 Para testar a alternativa sem conceder câmera/microfone, acrescentar `-ExtensionContext` em vez de `-TemporaryCameraPermission`. Para a compatibilidade local de vídeo, usar `-ExtensionContext -CaptureBridgeSmokeTest`. Este último captura a própria janela de teste e valida frames decodificados; o relatório deve indicar `success: true`, `chromiumCalled: false` e câmera/microfone em `prompt`. Ele não testa áudio, rede entre casas nem comprova o uso do ZeroTier pelo par ICE local. As duas opções de contexto/permissão são mutuamente exclusivas.
+
+Para incluir WASAPI e áudio recebido, acrescentar `-AudioBridgeSmokeTest` às duas opções anteriores. O script emite um tom baixo por poucos segundos. Fechar outros sons facilita interpretar o resultado, embora nenhum conteúdo de áudio seja salvo. O resultado esperado é `success: true` e `audio.success: true`, com pacotes recebidos e sinal decodificado medido. Esse resultado continua sendo estritamente local.
 
 O resultado `zeroTierCandidates > 0` seria apenas um pré-requisito local. Zero candidatos exige investigação antes de prometer o funcionamento. Nenhum resultado desse script aprova a conexão audiovisual entre casas.
 

@@ -10,10 +10,12 @@ param(
     # Separate diagnostic only: no extension is added to installed app/browser.
     [Parameter(ParameterSetName='Extension')][switch]$ExtensionContext,
     [Parameter(ParameterSetName='Extension')][switch]$CaptureBridgeSmokeTest,
+    [Parameter(ParameterSetName='Extension')][switch]$AudioBridgeSmokeTest,
     [string]$ReportPath=(Join-Path $env:LOCALAPPDATA ('StreamRoom/NetworkDiagnostics/zerotier-ice-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '.json'))
 )
 $ErrorActionPreference='Stop'
 if($CaptureBridgeSmokeTest -and !$ExtensionContext){throw 'The local capture compatibility test requires -ExtensionContext.'}
+if($AudioBridgeSmokeTest -and !$CaptureBridgeSmokeTest){throw 'The local audio compatibility test requires -CaptureBridgeSmokeTest and -ExtensionContext.'}
 $root=Split-Path -Parent $PSScriptRoot
 $bin=Join-Path $env:ProgramData 'ZeroTier/One/zerotier-one_x64.exe'
 if(!(Test-Path -LiteralPath $bin)){throw 'ZeroTier oficial ainda nao instalado. Este diagnostico nao instala software.'}
@@ -38,6 +40,11 @@ if($TemporaryCameraPermission -or $ExtensionContext) {
     $anchor='var core = Browser.CoreWebView2;'
     if(!$source.Contains($anchor)){throw 'Native probe anchor missing.'}
     if($ExtensionContext){
+        if($AudioBridgeSmokeTest){
+            $guard='if (_connection?.IsConnected != true) throw new SignalingException("Entre em uma sala primeiro.");'
+            if(!$source.Contains($guard)){throw 'Native audio diagnostic anchor missing.'}
+            $source=$source.Replace($guard,'if (_connection?.IsConnected != true && App.CaptureTestOutput is null) throw new SignalingException("Entre em uma sala primeiro.");')
+        }
         # Do not rely on the owner's existing Tailscale opt-in during this proof.
         $source=$source.Replace('var browserOptions =','_tailscaleWebRtcReady = false;' + [Environment]::NewLine + '            var browserOptions =')
         $source=$source.Replace('private const string Origin = "https://streamroom.local";','private static string Origin = "https://streamroom.local";')
@@ -111,7 +118,16 @@ try {
         $captureScript=$captureScript.Replace("await native('ready');log('source');","await native('ready');a=new RTCPeerConnection();b=new RTCPeerConnection();bridge=new WgcStream(native,error=>log(error));log('source');")
         $captureScript=$captureScript.Replace('a.close();b.close();await bridge.stop();','a?.close();b?.close();await bridge?.stop();')
         $captureScript=$captureScript.Replace('navigator.mediaDevices.getDisplayMedia=',"log('context secure='+isSecureContext+' mediaDevices='+typeof navigator.mediaDevices+' VideoFrame='+typeof VideoFrame);if(navigator.mediaDevices)navigator.mediaDevices.getDisplayMedia=")
+        if($AudioBridgeSmokeTest){
+            Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'diagnostics/extension-audio-probe.mjs') -Destination (Join-Path $app 'Web/extension-audio-probe.mjs')
+            $captureScript="import { createAudioProbe } from './extension-audio-probe.mjs';let audioProbe;`n"+$captureScript
+            $captureScript=$captureScript.Replace("log('captured');","audioProbe=await createAudioProbe(native);for(const track of audioProbe.stream.getAudioTracks())stream.addTrack(track);log('captured');")
+            $captureScript=$captureScript.Replace('video.srcObject=await remote;await video.play();','const remoteStream=await remote;video.srcObject=remoteStream;audioProbe.attachReceiver(remoteStream);await video.play();')
+            $captureScript=$captureScript.Replace('} catch(e){log(e.stack);',"result.audio=audioProbe.summarize(await b.getStats());result.success=result.success&&result.audio.success;} catch(e){log(e.stack);")
+            $captureScript=$captureScript.Replace('a?.close();b?.close();','await audioProbe?.stop();a?.close();b?.close();')
+        }
         $captureScript=$captureScript.Replace("await native('captureTestResult',result)","await native('captureTestResult',{...result,kind:'LOCAL_EXTENSION_CAPTURE_COMPATIBILITY_ONLY',extensionContextTest:true,existingTailscaleFlagsEnabled:false,crossNetworkMedia:'NOT_TESTED',audio:'NOT_TESTED',permissions:{camera:(await navigator.permissions.query({name:'camera'})).state,microphone:(await navigator.permissions.query({name:'microphone'})).state}})")
+        if($AudioBridgeSmokeTest){$captureScript=$captureScript.Replace("audio:'NOT_TESTED',permissions:","audio:result.audio??'FAILED',permissions:")}
         [IO.File]::WriteAllText($capturePath,$captureScript)
     }
     $dll=Join-Path $app 'StreamRoom.dll'
