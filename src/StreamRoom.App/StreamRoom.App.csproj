@@ -10,6 +10,10 @@
     <PlatformTarget>x64</PlatformTarget>
     <ApplicationIcon>Assets\StreamRoom.ico</ApplicationIcon>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(TurnExperiment)' == 'true'">
+    <AssemblyName>StreamRoom.TurnProof</AssemblyName>
+    <DefineConstants>$(DefineConstants);TURN_EXPERIMENT</DefineConstants>
+  </PropertyGroup>
   <ItemGroup><Resource Include="Assets\StreamRoom.ico" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../StreamRoom.Core/StreamRoom.Core.csproj" /></ItemGroup>
   <ItemGroup>
@@ -20,5 +24,6 @@
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <Page Include="App.xaml" />
     <Content Include="Web\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Remove="Web\turn-proof.html;Web\turn-proof.mjs" Condition="'$(TurnExperiment)' != 'true'" />
   </ItemGroup>
 </Project>

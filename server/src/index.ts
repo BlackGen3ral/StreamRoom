@@ -3,6 +3,8 @@ import legacy from './legacy';
 export { Room } from './legacy';
 
 import { ROOM_TTL, SWEEP_INTERVAL, renewalExpiry, stale } from './policy';
+import { turnExperiment, proofDeadline, proofCredentials, PROOF_MEDIA_MS, hasRelay, relayOnlySignal, type TurnExperimentSettings } from './turn-experiment';
+type RuntimeEnv = Env & TurnExperimentSettings;
 const MAX_MESSAGE = 64 * 1024;
 const json = (body: unknown, status = 200) => Response.json(body, {
   status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
@@ -12,7 +14,7 @@ async function hash(value: string) {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
 }
-type Metadata = { roomId: string; inviteHash: string; hostHash: string; expiresAt: number };
+type Metadata = { roomId: string; inviteHash: string; hostHash: string; expiresAt: number; turnIssued?: string[] };
 type Watch = { publisherId: string; streamId: string; subscriptionId: string; height: number; fps: number };
 type Session = { id: string; name?: string; role?: 'host' | 'viewer'; lastSeen: number; window: number; count: number; streamId?: string; watching?: Watch[] };
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v);
@@ -21,25 +23,37 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: RuntimeEnv): Promise<Response> {
     const url = new URL(request.url);
+    const proof = turnExperiment(env);
+    if (proof && url.pathname === '/health' && request.method === 'GET') {
+      let active = false; try { proofDeadline(env); active = true; } catch { }
+      return json({ protocol: 2, experiment: 'turn-relay-proof', active });
+    }
+    if (proof) {
+      try { proofDeadline(env); } catch { return json({ error: 'Experimento TURN desativado.' }, 503); }
+      if (url.pathname.startsWith('/v1/')) return json({ error: 'Protocolo experimental exige v2.' }, 404);
+    }
     if (url.pathname.startsWith('/v1/rooms')) return legacy.fetch(request, env);
     if (url.pathname === '/health' && request.method === 'GET')
       return json({ service: 'StreamRoom signaling', protocol: 2, version: '0.4.0', mediaPolicy: 'direct-only' });
     if (url.pathname === '/v2/rooms' && request.method === 'POST') {
+      if (proof && await hash(request.headers.get('Authorization') ?? '') !== await hash('Bearer ' + env.TURN_CREATE_KEY)) return json({ error: 'Criação experimental não autorizada.' }, 403);
       if (request.body) await request.body.cancel();
       const key = request.headers.get('CF-Connecting-IP') ?? 'local';
       if (!(await env.CREATE_LIMITER.limit({ key })).success)
         return json({ error: 'Muitas salas criadas. Aguarde um minuto.' }, 429);
-      const roomId = crypto.randomUUID();
+      const roomId = proof ? env.TURN_TEST_ROOM_ID! : crypto.randomUUID();
       const inviteToken = token();
       const hostToken = token();
-      const expiresAt = Date.now() + ROOM_TTL;
-      await env.MULTI_ROOMS.getByName(roomId).initialize({ roomId, inviteHash: await hash(inviteToken), hostHash: await hash(hostToken), expiresAt });
+      const expiresAt = proof ? Math.min(proofDeadline(env), Date.now() + 600_000) : Date.now() + ROOM_TTL;
+      try { await env.MULTI_ROOMS.getByName(roomId).initialize({ roomId, inviteHash: await hash(inviteToken), hostHash: await hash(hostToken), expiresAt }); }
+      catch { return json({ error: 'Esta sala experimental já foi usada ou está indisponível.' }, 409); }
       return json({ roomId, inviteToken, hostToken, expiresAt, protocol: 2 }, 201);
     }
     const match = /^\/v2\/rooms\/([a-f0-9-]{36})\/socket$/.exec(url.pathname);
     if (match && request.method === 'GET') {
+      if (proof && match[1] !== env.TURN_TEST_ROOM_ID) return json({ error: 'Sala fora do experimento.' }, 404);
       if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
         return json({ error: 'WebSocket obrigatório.' }, 426);
       // Tokens are sent in the first WebSocket frame, never in the URL or logs.
@@ -47,17 +61,23 @@ export default {
     }
     return json({ error: 'Rota inexistente.' }, 404);
   }
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<RuntimeEnv>;
 
-export class MultiRoom extends DurableObject<Env> {
+export class MultiRoom extends DurableObject<RuntimeEnv> {
   private metadata: Metadata | undefined;
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState, env: RuntimeEnv) {
     super(ctx, env);
     // Exact JSON matches are answered by the runtime without waking the object.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"type":"ping"}', '{"type":"pong"}'));
     ctx.blockConcurrencyWhile(async () => { this.metadata = await ctx.storage.get<Metadata>('room'); });
   }
   async initialize(metadata: Metadata) {
+    if (turnExperiment(this.env)) return this.ctx.blockConcurrencyWhile(async () => {
+      if (this.metadata || await this.ctx.storage.get('proofUsed')) throw Error('Proof already used');
+      await this.ctx.storage.put('proofUsed', true);
+      await this.ctx.storage.put('room', metadata); this.metadata = metadata;
+      await this.ctx.storage.setAlarm(metadata.expiresAt);
+    });
     if (this.metadata) throw new Error('Room already exists');
     await this.ctx.storage.put('room', metadata);
     this.metadata = metadata;
@@ -105,6 +125,9 @@ export class MultiRoom extends DurableObject<Env> {
     }
   }
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer) {
+    if (turnExperiment(this.env)) {
+      try { proofDeadline(this.env); } catch { await this.end('Janela experimental encerrada.'); return; }
+    }
     if (typeof raw !== 'string' || new TextEncoder().encode(raw).length > MAX_MESSAGE) {
       this.reject(ws, 'invalid_message', 'Mensagem inválida ou muito grande.', true); return;
     }
@@ -131,7 +154,7 @@ export class MultiRoom extends DurableObject<Env> {
       const role = digest === this.metadata.hostHash ? 'host' : digest === this.metadata.inviteHash ? 'viewer' : undefined;
       if (!role) { this.reject(ws, 'unauthorized', 'Convite inválido.', true); return; }
       const peers = this.sessions();
-      if (role === 'host' ? peers.some(x => x.session.role === 'host') : peers.filter(x => x.session.role === 'viewer').length >= 4) {
+      if (role === 'host' ? peers.some(x => x.session.role === 'host') : peers.filter(x => x.session.role === 'viewer').length >= (turnExperiment(this.env) ? 1 : 4)) {
         this.reject(ws, 'room_full', 'Sala cheia ou criador já conectado.', true); return;
       }
       s.role = role; s.name = message.displayName.trim();
@@ -141,6 +164,7 @@ export class MultiRoom extends DurableObject<Env> {
     }
     if (message.type === 'ping') { this.send(ws, { type: 'pong' }); return; }
     if (message.type === 'stream') {
+      if (turnExperiment(this.env) && s.role !== 'host') { this.reject(ws, 'proof_role', 'Neste teste, somente o criador transmite.'); return; }
       if (typeof message.active !== 'boolean' || !uuid(message.streamId)) {
         this.reject(ws, 'invalid_stream', 'Informe o identificador da sua transmissão.'); return;
       }
@@ -154,6 +178,7 @@ export class MultiRoom extends DurableObject<Env> {
       ws.serializeAttachment(current); this.broadcast(); return;
     }
     if (message.type === 'watch') {
+      if (turnExperiment(this.env) && (s.role !== 'viewer' || message.active && (message.height !== 720 || message.fps !== 30))) { this.reject(ws, 'proof_quality', 'Teste limitado a um espectador, 720p30.'); return; }
       if (!uuid(message.publisherId) || !uuid(message.streamId) || !uuid(message.subscriptionId)
         || typeof message.active !== 'boolean' || message.publisherId === s.id) {
         this.reject(ws, 'invalid_watch', 'Seleção de transmissão inválida.'); return;
@@ -177,9 +202,26 @@ export class MultiRoom extends DurableObject<Env> {
       ws.serializeAttachment(s); this.broadcast(); return;
     }
     if (message.type === 'ice_config') {
+      if (turnExperiment(this.env)) {
+        try {
+          const deadline = await this.ctx.blockConcurrencyWhile(async () => {
+            if (!this.metadata || this.sessions().length !== 2 || !this.sessions().some(p => p.session.role === 'host' && p.session.streamId)) throw Error('Aguarde as duas pessoas e a captura.');
+            if (this.metadata.turnIssued?.includes(s.role!)) throw Error('Credenciais deste participante já foram emitidas.');
+            const expiresAt = this.metadata.turnIssued?.length ? this.metadata.expiresAt : Math.min(this.metadata.expiresAt, Date.now() + PROOF_MEDIA_MS);
+            this.metadata = { ...this.metadata, expiresAt, turnIssued: [...this.metadata.turnIssued ?? [], s.role!] };
+            await this.ctx.storage.put('room', this.metadata);
+            await this.ctx.storage.setAlarm(expiresAt);
+            return expiresAt;
+          });
+          const credentials = await proofCredentials(this.env, deadline);
+          if (this.metadata && this.sessions().some(p => p.session.id === s.id)) this.send(ws, credentials);
+        } catch { this.reject(ws, 'turn_unavailable', 'TURN experimental indisponível, expirado ou já utilizado. Nenhuma credencial será renovada automaticamente.'); }
+        return;
+      }
       this.send(ws, { type: 'ice_servers', iceServers: [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }], turnAvailable: false, policy: 'direct-only' }); return;
     }
     if (message.type === 'renew') {
+      if (turnExperiment(this.env)) { this.send(ws, { type: 'room_renewed', expiresAt: this.metadata.expiresAt }); return; }
       if (s.role !== 'host') { this.reject(ws, 'forbidden', 'Somente o criador pode renovar a sala.'); return; }
       const expiresAt = renewalExpiry(this.metadata.expiresAt, now);
       if (expiresAt !== this.metadata.expiresAt) {
@@ -217,7 +259,7 @@ export class MultiRoom extends DurableObject<Env> {
         && (p.sdpMid === null || typeof p.sdpMid === 'string' && p.sdpMid.length <= 256)
         && (p.sdpMLineIndex === null || Number.isInteger(p.sdpMLineIndex) && Number(p.sdpMLineIndex) >= 0 && Number(p.sdpMLineIndex) <= 255);
     if (!valid) { this.reject(ws, 'invalid_signal', 'Sinalização inválida.'); return; }
-    if (p.kind === 'ice' && / typ relay(?: |$)/.test(String(p.candidate)) || typeof p.sdp === 'string' && /a=candidate:[^\r\n]* typ relay(?: |[\r\n]|$)/.test(p.sdp)) {
+    if (!turnExperiment(this.env) && hasRelay(p) || turnExperiment(this.env) && !relayOnlySignal(p)) {
       this.reject(ws, 'relay_disabled', 'Somente P2P direto é permitido. Relay/TURN está desativado.'); return;
     }
     const payload = p.kind === 'ice'
@@ -245,7 +287,8 @@ export class MultiRoom extends DurableObject<Env> {
       ws.close(1000, 'room_closed');
     }
     await this.ctx.storage.deleteAlarm();
-    await this.ctx.storage.deleteAll();
+    if (turnExperiment(this.env)) await this.ctx.storage.delete('room');
+    else await this.ctx.storage.deleteAll();
   }
   async alarm() {
     if (!this.metadata || Date.now() >= this.metadata.expiresAt) { await this.end('Sala expirada.'); return; }

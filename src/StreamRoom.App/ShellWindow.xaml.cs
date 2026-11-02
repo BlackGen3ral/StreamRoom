@@ -44,7 +44,7 @@ public partial class ShellWindow : Window
     private WindowState _previousState;
     private CaptureTestScene? _mediaTestScene;
     private readonly System.Windows.Threading.DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(30) };
-    private static string DataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StreamRoom");
+    private static string DataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), App.TurnExperiment ? "StreamRoom-TurnProof" : "StreamRoom");
 
     public ShellWindow()
     {
@@ -66,7 +66,7 @@ public partial class ShellWindow : Window
             try
             {
                 using var startupSettings = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(DataDirectory, "settings-v2.json")));
-                _tailscaleWebRtcReady = startupSettings.RootElement.TryGetProperty("tailscaleEnabled", out var enabled) && enabled.ValueKind == JsonValueKind.True;
+                _tailscaleWebRtcReady = !App.TurnExperiment && startupSettings.RootElement.TryGetProperty("tailscaleEnabled", out var enabled) && enabled.ValueKind == JsonValueKind.True;
             }
             catch (Exception ex) when (ex is IOException or JsonException) { }
             var browserOptions = new CoreWebView2EnvironmentOptions { Language = "pt-BR", AdditionalBrowserArguments = "--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows" };
@@ -99,13 +99,13 @@ public partial class ShellWindow : Window
                 await DisconnectAsync();
                 MessageBox.Show("O motor de mídia foi interrompido. A sala e a captura de áudio foram encerradas. Feche e reabra o StreamRoom.", "StreamRoom");
             };
-            core.Navigate(Origin + (App.TrayTestOutput is not null ? "/tray-test.html" : App.MediaTestRole is not null ? "/media-room-test.html" : App.CaptureTestOutput is not null ? "/capture-test.html" : App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
+            core.Navigate(Origin + (App.TurnExperiment ? "/turn-proof.html" : App.TrayTestOutput is not null ? "/tray-test.html" : App.MediaTestRole is not null ? "/media-room-test.html" : App.CaptureTestOutput is not null ? "/capture-test.html" : App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
             _updateTimer.Tick += async (_, _) =>
             {
                 if (!await _updateCommands.WaitAsync(0)) return;
                 try { await CheckUpdatesAsync(); } finally { _updateCommands.Release(); }
             };
-            _updateTimer.Start();
+            if (!App.TurnExperiment) _updateTimer.Start();
         }
         catch (WebView2RuntimeNotFoundException)
         { MessageBox.Show("Instale o Microsoft Edge WebView2 Evergreen Runtime oficial e abra o StreamRoom novamente. O instalador do StreamRoom também pode instalar esse requisito.", "WebView2 necessário"); Close(); }
@@ -170,6 +170,10 @@ public partial class ShellWindow : Window
                         catch (JsonException) { }
                     }
                     result = new { settings, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = _updates.IsInstalled, capturePreview = App.PickerPreviewOutput is not null, uiPreview = App.UiPreviewOutput is not null };
+                    break;
+                case "turnProofReady" when App.TurnExperiment:
+                    var proofSettings = await TurnProof.SettingsAsync();
+                    result = new { server = proofSettings?.Server ?? "", canCreate = proofSettings?.CreateKey is { Length: 64 } };
                     break;
                 case "settings":
                     Invitations.ValidateServer(p.GetProperty("server").GetString()!);
@@ -336,10 +340,21 @@ public partial class ShellWindow : Window
         var name = p.GetProperty("name").GetString()!.Trim();
         if (name.Length is < 1 or > 32 || name.Any(char.IsControl)) throw new ArgumentException("Use um nome de 1 a 32 caracteres.");
         await DisconnectAsync();
+        string? experimentKey = null;
+        if (App.TurnExperiment)
+        {
+            await TurnProof.ValidateServerAsync(server);
+            if (creating)
+            {
+                var proofSettings = await TurnProof.SettingsAsync() ?? throw new InvalidOperationException("O teste ainda não foi configurado após a autorização financeira.");
+                if (Invitations.ValidateServer(proofSettings.Server) != server) throw new ArgumentException("Servidor diferente da configuração experimental autorizada.");
+                experimentKey = proofSettings.CreateKey ?? throw new ArgumentException("Criação experimental não autorizada neste PC.");
+            }
+        }
         string roomId, token, invitation;
         if (creating)
         {
-            var room = await SignalingClient.CreateRoomAsync(server);
+            var room = await SignalingClient.CreateRoomAsync(server, experimentCreateKey: experimentKey);
             roomId = room.RoomId; token = room.HostToken;
             invitation = Invitations.Create(server, room.RoomId, room.InviteToken);
         }
@@ -360,7 +375,7 @@ public partial class ShellWindow : Window
         try
         {
             var welcome = await client.ConnectAsync(server, roomId, token, name);
-            Title = "StreamRoom · " + name;
+            Title = (App.TurnExperiment ? "StreamRoom TURN EXPERIMENTAL · " : "StreamRoom · ") + name;
             return new { welcome, invitation, server = server.AbsoluteUri.TrimEnd('/') };
         }
         catch { _connection = null; await client.DisposeAsync(); throw; }
@@ -443,7 +458,7 @@ public partial class ShellWindow : Window
     private async void CloseAsync(object? sender, CancelEventArgs e)
     {
         if (_closing) return;
-        bool testRun = !_testCloseToTray && (App.MediaTestRole is not null || App.CaptureTestOutput is not null || App.NetworkTestOutput is not null || App.PickerPreviewOutput is not null || App.UiPreviewOutput is not null);
+        bool testRun = App.TurnExperiment || !_testCloseToTray && (App.MediaTestRole is not null || App.CaptureTestOutput is not null || App.NetworkTestOutput is not null || App.PickerPreviewOutput is not null || App.UiPreviewOutput is not null);
         if (!_exitRequested && !testRun && _ready && _tray?.IsAvailable == true)
         {
             e.Cancel = true;

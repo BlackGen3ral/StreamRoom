@@ -1,0 +1,32 @@
+name: TURN proof preparation - no deployment or stable release
+on:
+  push:
+    branches: [experiment/turn-relay-proof]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+        working-directory: server
+      - run: npm run check
+        working-directory: server
+      - run: npm run build
+        working-directory: server
+      - run: npx wrangler deploy --config wrangler.turn-test.jsonc --dry-run --outdir dist-turn-proof
+        working-directory: server
+      - run: node --test server/test/turn-proof.test.mjs
+      - run: ./scripts/build-turn-proof.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StreamRoom-TURN-PROOF-EXPERIMENTAL
+          path: artifacts/StreamRoom-TURN-PROOF-*.zip
+          retention-days: 7

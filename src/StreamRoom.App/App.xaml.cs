@@ -3,6 +3,11 @@ using Velopack;
 namespace StreamRoom.App;
 public partial class App : Application
 {
+#if TURN_EXPERIMENT
+    public static bool TurnExperiment => true;
+#else
+    public static bool TurnExperiment => false;
+#endif
     public static string? UiPreviewOutput { get; private set; }
     public static string? TrayTestOutput { get; private set; }
     public static int MediaTestHeight { get; private set; } = 720;

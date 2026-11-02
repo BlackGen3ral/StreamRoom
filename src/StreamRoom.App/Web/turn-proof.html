@@ -1,0 +1,20 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; media-src 'self' blob: mediastream:; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"><title>StreamRoom · TURN experimental</title><link rel="stylesheet" href="app.css"><script type="module" src="turn-proof.mjs"></script></head><body>
+<header><strong>StreamRoom · TURN EXPERIMENTAL</strong><span>720p30 · um transmissor e um espectador · até 3 minutos</span></header>
+<main><p>Teste separado da versão estável. Exige ativação autorizada do servidor. Não exige Tailscale e não tem fallback automático nesta etapa.</p>
+<label for="name">Seu nome neste teste</label><input id="name" maxlength="32" value="Participante">
+<label for="server">Servidor experimental autorizado</label><input id="server" readonly placeholder="Aguardando configuração após autorização financeira">
+<button id="create" disabled>Criar teste (transmissor)</button>
+<label for="invite">Convite experimental recebido do transmissor</label><textarea id="invite" rows="2" spellcheck="false"></textarea><button id="join">Entrar como espectador</button><button id="copy" disabled>Copiar convite para o amigo</button>
+<p id="participants">Nenhuma pessoa conectada.</p>
+<label class="checkbox"><input id="differentNetworks" type="checkbox"> Estamos em computadores de casas e redes de internet diferentes.</label>
+<p>Com os dois conectados: o transmissor escolhe a fonte e habilita o áudio do sistema. O espectador inicia a reprodução e confirma imagem em movimento e som audível. O microfone não é usado.</p>
+<button id="start" disabled>Escolher tela e áudio (720p30)</button><button id="play" disabled>Reproduzir com som</button><button id="finish" disabled>Encerrar teste</button><button id="export">Copiar relatório sem credenciais</button>
+<div class="player-card"><video id="video" autoplay playsinline muted></video></div>
+<label class="checkbox"><input id="mediaConfirmed" type="checkbox"> Como espectador, confirmei imagem com movimento e áudio audível.</label>
+<p id="status" role="status" aria-live="polite">Preparando teste…</p><p id="metrics" role="status">TURN ainda não confirmado.</p><p id="remaining"></p><pre id="summary"></pre></main>
+<dialog id="capturePicker" aria-labelledby="pickerTitle">
+<div class="picker-heading"><h2 id="pickerTitle">Fonte do teste 720p30</h2><button id="cancelCapture" class="quiet" aria-label="Fechar seletor">✕</button></div>
+<div class="picker-navigation"><div class="picker-tabs"><button data-source-kind="window" aria-pressed="true">Janelas e jogos</button><button data-source-kind="monitor" aria-pressed="false">Monitores</button></div><button id="refreshSources">Atualizar lista</button></div>
+<input id="sourceSearch" type="search" placeholder="Buscar fonte" aria-label="Buscar fonte"><p id="pickerStatus" role="status"></p><div id="captureSources" class="capture-sources"></div>
+<label for="nativeAudio">Áudio do teste</label><select id="nativeAudio"><option value="system">Todo o som do computador</option><option value="none">Sem áudio (não valida o teste audiovisual)</option></select><p>O som do sistema inclui outros aplicativos e notificações. Confirme a fonte antes de iniciar.</p><button id="confirmCapture" disabled>Confirmar captura real</button></dialog>
+</body></html>

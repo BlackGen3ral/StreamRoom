@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RtcRoom } from '../../src/StreamRoom.App/Web/rtc-room.mjs';
 class Peer {
-  constructor(){this.connectionState='new';this.signalingState='stable';this.senders=[];this.addedIce=[];}
+  constructor(config){this.config=config;this.connectionState='new';this.signalingState='stable';this.senders=[];this.addedIce=[];}
   addTrack(track){const sender={track,parameters:{encodings:[{}]},getParameters(){return structuredClone(this.parameters);},async setParameters(p){this.parameters=p;}};this.senders.push(sender);}
   getSenders(){return this.senders;}getTransceivers(){return [];}async createOffer(){return {type:'offer',sdp:'v=0'};}
   async createAnswer(){return {type:'answer',sdp:'v=0'};}
@@ -165,4 +165,17 @@ test('Tailscale preserves local socket candidates and defers overlay relay behin
  await s.room.releaseFallback(peer);
  assert.deepEqual(peer.pc.addedIce.slice(1).map(c=>c.candidate),['candidate:2 1 udp 123 100.64.0.2 8888 typ host','']);
  assert.equal(peer.tailCandidates,1);
+});
+
+test('explicit proof accepts relay ICE and measures a selected TURN pair; ordinary client continues blocking relay',async t=>{
+ const config={experiment:'turn-relay-proof',policy:'relay-only',turnAvailable:true,expiresAt:Date.now()+180_000,iceServers:[{urls:['turn:turn.cloudflare.com:3478?transport=udp'],username:'temporary',credential:'temporary'}]};
+ const s=setup(type=>type==='ice'?config:undefined);s.room.relayExperiment=true;t.after(()=>s.room.shutdown());s.room.updateRoom(s.state);await new Promise(r=>setImmediate(r));
+ const peer=s.room.peers.get(s.send);assert.equal(peer.pc.config.iceTransportPolicy,'relay');
+ peer.pc.onicecandidate({candidate:{type:'relay',candidate:'candidate:1 1 udp 1 192.0.2.1 5000 typ relay',toJSON(){return {candidate:this.candidate,sdpMid:'0',sdpMLineIndex:0};}}});await peer.iceSending;
+ assert.equal(peer.candidates.relay,1);assert.match(s.calls.at(-1).payload.payload.candidate,/typ relay/);
+ peer.pc.connectionState='connected';peer.pc.getStats=async()=>new Map([['t',{type:'transport',selectedCandidatePairId:'p'}],['p',{state:'succeeded',localCandidateId:'l',remoteCandidateId:'r'}],['l',{candidateType:'relay'}],['r',{candidateType:'relay'}]]);
+ let rows;s.room.addEventListener('stats',e=>rows=e.detail);await s.room.measure();assert.equal(rows[0].turnConfirmed,true);assert.equal(s.room.peers.has(s.send),true);
+ const normal=setup();t.after(()=>normal.room.shutdown());normal.room.updateRoom(normal.state);await new Promise(r=>setImmediate(r));
+ const ordinary=normal.room.peers.get(normal.send),before=normal.calls.length;
+ ordinary.pc.onicecandidate({candidate:{type:'relay'}});assert.equal(normal.calls.length,before);assert.equal(ordinary.pc.config.iceTransportPolicy,'all');
 });
