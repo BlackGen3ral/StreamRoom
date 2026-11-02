@@ -3,8 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-const source = (await readFile(new URL('../dist/index.js', import.meta.url), 'utf8')).replace('import { DurableObject } from "cloudflare:workers";', 'class DurableObject { constructor(ctx, env) { this.ctx = ctx; this.env = env; } }');
-const { Room } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+const source = (await readFile(new URL('../dist/index.js', import.meta.url), 'utf8')).replaceAll('"cloudflare:workers"', JSON.stringify('data:text/javascript,' + encodeURIComponent('export class DurableObject { constructor(ctx, env) { this.ctx = ctx; this.env = env; } }')));
+const { MultiRoom: Room } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 test('Room handlers preserve a live session beyond 24h, persist renewal across hibernation and expire abandoned rooms', async () => {
   const originalNow = Date.now; let now = 1_800_000_000_000;
   Date.now = () => now;

@@ -1,4 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
+import legacy from './legacy';
+export { Room } from './legacy';
 
 import { ROOM_TTL, SWEEP_INTERVAL, renewalExpiry, stale } from './policy';
 const MAX_MESSAGE = 64 * 1024;
@@ -11,8 +13,9 @@ async function hash(value: string) {
   return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
 }
 type Metadata = { roomId: string; inviteHash: string; hostHash: string; expiresAt: number };
-type Session = { id: string; name?: string; role?: 'host' | 'viewer'; lastSeen: number; window: number; count: number; streaming?: boolean };
-type Peer = { id: string; name: string; role: 'host' | 'viewer' };
+type Watch = { publisherId: string; streamId: string; subscriptionId: string; height: number; fps: number };
+type Session = { id: string; name?: string; role?: 'host' | 'viewer'; lastSeen: number; window: number; count: number; streamId?: string; watching?: Watch[] };
+const uuid = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v);
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -20,9 +23,10 @@ function record(value: unknown): value is Record<string, unknown> {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/v1/rooms')) return legacy.fetch(request, env);
     if (url.pathname === '/health' && request.method === 'GET')
-      return json({ service: 'StreamRoom signaling', protocol: 1, version: '0.3.0', mediaPolicy: 'direct-only' });
-    if (url.pathname === '/v1/rooms' && request.method === 'POST') {
+      return json({ service: 'StreamRoom signaling', protocol: 2, version: '0.4.0', mediaPolicy: 'direct-only' });
+    if (url.pathname === '/v2/rooms' && request.method === 'POST') {
       if (request.body) await request.body.cancel();
       const key = request.headers.get('CF-Connecting-IP') ?? 'local';
       if (!(await env.CREATE_LIMITER.limit({ key })).success)
@@ -31,21 +35,21 @@ export default {
       const inviteToken = token();
       const hostToken = token();
       const expiresAt = Date.now() + ROOM_TTL;
-      await env.ROOMS.getByName(roomId).initialize({ roomId, inviteHash: await hash(inviteToken), hostHash: await hash(hostToken), expiresAt });
-      return json({ roomId, inviteToken, hostToken, expiresAt, protocol: 1 }, 201);
+      await env.MULTI_ROOMS.getByName(roomId).initialize({ roomId, inviteHash: await hash(inviteToken), hostHash: await hash(hostToken), expiresAt });
+      return json({ roomId, inviteToken, hostToken, expiresAt, protocol: 2 }, 201);
     }
-    const match = /^\/v1\/rooms\/([a-f0-9-]{36})\/socket$/.exec(url.pathname);
+    const match = /^\/v2\/rooms\/([a-f0-9-]{36})\/socket$/.exec(url.pathname);
     if (match && request.method === 'GET') {
       if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
         return json({ error: 'WebSocket obrigatório.' }, 426);
       // Tokens are sent in the first WebSocket frame, never in the URL or logs.
-      return env.ROOMS.getByName(match[1]).fetch(request);
+      return env.MULTI_ROOMS.getByName(match[1]).fetch(request);
     }
     return json({ error: 'Rota inexistente.' }, 404);
   }
 } satisfies ExportedHandler<Env>;
 
-export class Room extends DurableObject<Env> {
+export class MultiRoom extends DurableObject<Env> {
   private metadata: Metadata | undefined;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -85,9 +89,20 @@ export class Room extends DurableObject<Env> {
   }
   private broadcast() {
     const sessions = this.sessions();
-    const participants: Peer[] = sessions.map(({ session: s }) => ({ id: s.id, name: s.name!, role: s.role! }));
-    const streaming = sessions.some(x => x.session.role === 'host' && x.session.streaming === true);
-    for (const { ws } of sessions) this.send(ws, { type: 'room', participants, streaming });
+    const participants = sessions.map(({ session: s }) => ({ id: s.id, name: s.name!, role: s.role!, streamId: s.streamId ?? null, streaming: Boolean(s.streamId) }));
+    // Watch lists are private to the receiving publisher/subscriber, not room-wide.
+    for (const { ws, session: s } of sessions) this.send(ws, {
+      type: 'room', participants, subscriptions: s.watching ?? [],
+      subscribers: sessions.flatMap(({ session: viewer }) => (viewer.watching ?? [])
+        .filter(w => w.publisherId === s.id && w.streamId === s.streamId)
+        .map(w => ({ ...w, viewerId: viewer.id })))
+    });
+  }
+  private clearSubscriptions(publisherId: string) {
+    for (const { ws, session } of this.sessions()) {
+      session.watching = (session.watching ?? []).filter(w => w.publisherId !== publisherId);
+      ws.serializeAttachment(session);
+    }
   }
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer) {
     if (typeof raw !== 'string' || new TextEncoder().encode(raw).length > MAX_MESSAGE) {
@@ -104,6 +119,7 @@ export class Room extends DurableObject<Env> {
     try { message = JSON.parse(raw); } catch { this.reject(ws, 'invalid_json', 'JSON inválido.'); return; }
     if (!record(message)) { this.reject(ws, 'invalid_message', 'Objeto obrigatório.'); return; }
     if (!s.role) {
+      if (message.protocol !== 2) { this.reject(ws, 'protocol_mismatch', 'Esta sala exige StreamRoom 0.4 ou mais recente. Atualize todos os participantes.', true); return; }
       if (message.type !== 'join' || typeof message.token !== 'string' || !/^[a-f0-9]{64}$/.test(message.token)
         || typeof message.displayName !== 'string' || !message.displayName.trim() || message.displayName.trim().length > 32
         || /[\u0000-\u001f\u007f]/.test(message.displayName)) {
@@ -120,13 +136,45 @@ export class Room extends DurableObject<Env> {
       }
       s.role = role; s.name = message.displayName.trim();
       ws.serializeAttachment(s);
-      this.send(ws, { type: 'welcome', participantId: s.id, role, roomId: this.metadata.roomId, expiresAt: this.metadata.expiresAt, protocol: 1 });
+      this.send(ws, { type: 'welcome', participantId: s.id, role, roomId: this.metadata.roomId, expiresAt: this.metadata.expiresAt, protocol: 2 });
       this.broadcast(); return;
     }
     if (message.type === 'ping') { this.send(ws, { type: 'pong' }); return; }
     if (message.type === 'stream') {
-      if (s.role !== 'host' || typeof message.active !== 'boolean') { this.reject(ws, 'forbidden', 'Somente o criador pode transmitir.'); return; }
-      s.streaming = message.active; ws.serializeAttachment(s); this.broadcast(); return;
+      if (typeof message.active !== 'boolean' || !uuid(message.streamId)) {
+        this.reject(ws, 'invalid_stream', 'Informe o identificador da sua transmissão.'); return;
+      }
+      if (!message.active && s.streamId !== message.streamId) return; // Ignore delayed stop from an old capture.
+      if (message.active && s.streamId === message.streamId) return;
+      if (message.active && this.sessions().some(p => p.session.id !== s.id && p.session.streamId === message.streamId)) { this.reject(ws, 'duplicate_stream', 'Identificador de transmissão já está em uso.'); return; }
+      this.clearSubscriptions(s.id);
+      // clearSubscriptions may update this socket's watching list.
+      const current = ws.deserializeAttachment() as Session;
+      current.streamId = message.active ? message.streamId : undefined;
+      ws.serializeAttachment(current); this.broadcast(); return;
+    }
+    if (message.type === 'watch') {
+      if (!uuid(message.publisherId) || !uuid(message.streamId) || !uuid(message.subscriptionId)
+        || typeof message.active !== 'boolean' || message.publisherId === s.id) {
+        this.reject(ws, 'invalid_watch', 'Seleção de transmissão inválida.'); return;
+      }
+      s.watching ??= [];
+      if (!message.active) {
+        s.watching = s.watching.filter(w => w.subscriptionId !== message.subscriptionId);
+      } else {
+        const publisher = this.sessions().find(p => p.session.id === message.publisherId);
+        if (!publisher || publisher.session.streamId !== message.streamId) {
+          this.reject(ws, 'stream_unavailable', 'A transmissão já foi encerrada.'); return;
+        }
+        if (![480, 720, 1080].includes(Number(message.height)) || ![30, 60].includes(Number(message.fps))) {
+          this.reject(ws, 'invalid_quality', 'Qualidade inválida.'); return;
+        }
+        if (this.sessions().some(p => (p.session.watching ?? []).some(w => w.subscriptionId === message.subscriptionId && (p.session.id !== s.id || w.publisherId !== message.publisherId)))) { this.reject(ws, 'duplicate_subscription', 'Identificador de assinatura já está em uso.'); return; }
+        // At most one subscription per publisher, up to the other four people.
+        s.watching = s.watching.filter(w => w.publisherId !== message.publisherId);
+        s.watching.push({ publisherId: message.publisherId, streamId: message.streamId, subscriptionId: message.subscriptionId, height: Number(message.height), fps: Number(message.fps) });
+      }
+      ws.serializeAttachment(s); this.broadcast(); return;
     }
     if (message.type === 'ice_config') {
       this.send(ws, { type: 'ice_servers', iceServers: [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }], turnAvailable: false, policy: 'direct-only' }); return;
@@ -149,18 +197,21 @@ export class Room extends DurableObject<Env> {
       this.reject(ws, 'invalid_message', 'Tipo de mensagem desconhecido.'); return;
     }
     const target = this.sessions().find(x => x.session.id === message.to);
-    if (!target || target.session.role === s.role) { this.reject(ws, 'invalid_target', 'Destino inválido.'); return; }
+    if (!target || target.session.id === s.id) { this.reject(ws, 'invalid_target', 'Destino inválido.'); return; }
     const p = message.payload;
-    if (p.session !== undefined && (typeof p.session !== 'string' || !/^[a-f0-9-]{36}$/.test(p.session))) {
-      this.reject(ws, 'invalid_signal', 'Sessão de mídia inválida.'); return;
+    if (!uuid(p.streamId) || !uuid(p.subscriptionId) || !uuid(p.session)) {
+      this.reject(ws, 'invalid_signal', 'Identificadores de mídia inválidos.'); return;
     }
-    if (p.kind === 'restart' && s.role === 'viewer') {
-      this.send(target.ws, { type: 'signal', from: s.id, payload: { kind: 'restart' } }); return;
+    // Direction is defined by the authenticated subscription, never by the room owner's role.
+    const sending = s.streamId === p.streamId
+      && (target.session.watching ?? []).some(w => w.publisherId === s.id && w.streamId === p.streamId && w.subscriptionId === p.subscriptionId);
+    const receiving = target.session.streamId === p.streamId
+      && (s.watching ?? []).some(w => w.publisherId === target.session.id && w.streamId === p.streamId && w.subscriptionId === p.subscriptionId);
+    if (!sending && !receiving) { this.reject(ws, 'not_subscribed', 'Não existe uma assinatura ativa para essa transmissão.'); return; }
+    if (p.kind === 'restart' && receiving) {
+      this.send(target.ws, { type: 'signal', from: s.id, payload: { kind: 'restart', streamId: p.streamId, subscriptionId: p.subscriptionId, session: p.session } }); return;
     }
-    if (p.kind === 'quality' && s.role === 'viewer' && [480, 720, 1080].includes(Number(p.height)) && [30, 60].includes(Number(p.fps))) {
-      this.send(target.ws, { type: 'signal', from: s.id, payload: { kind: 'quality', height: Number(p.height), fps: Number(p.fps) } }); return;
-    }
-    const valid = (p.kind === 'offer' && s.role === 'host' || p.kind === 'answer' && s.role === 'viewer')
+    const valid = (p.kind === 'offer' && sending || p.kind === 'answer' && receiving)
       ? typeof p.sdp === 'string' && p.sdp.length > 0 && p.sdp.length <= 48_000
       : p.kind === 'ice' && typeof p.candidate === 'string' && p.candidate.length <= 4096
         && (p.sdpMid === null || typeof p.sdpMid === 'string' && p.sdpMid.length <= 256)
@@ -172,11 +223,12 @@ export class Room extends DurableObject<Env> {
     const payload = p.kind === 'ice'
       ? { kind: p.kind, candidate: p.candidate, sdpMid: p.sdpMid, sdpMLineIndex: p.sdpMLineIndex }
       : { kind: p.kind, sdp: p.sdp };
-    this.send(target.ws, { type: 'signal', from: s.id, payload: p.session ? { ...payload, session: p.session } : payload });
+    this.send(target.ws, { type: 'signal', from: s.id, payload: { ...payload, streamId: p.streamId, subscriptionId: p.subscriptionId, session: p.session } });
   }
   private async depart(ws: WebSocket) {
     const s = ws.deserializeAttachment() as Session;
-    ws.serializeAttachment({ ...s, role: undefined });
+    this.clearSubscriptions(s.id);
+    ws.serializeAttachment({ ...s, role: undefined, streamId: undefined, watching: [] });
     if (s.role === 'host') await this.end('O criador encerrou a sala.');
     else this.broadcast();
   }

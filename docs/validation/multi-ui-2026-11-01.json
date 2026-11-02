@@ -1,0 +1,23 @@
+{
+  "version": "0.4.0-beta.1",
+  "source": "manual CUA test, two Windows processes on the same PC",
+  "realWindowCaptureBoth": true,
+  "simultaneousPublishAndWatch": true,
+  "codec": "H264",
+  "direct": true,
+  "ice": [
+    "host",
+    "host"
+  ],
+  "observedFpsAToB": 30,
+  "observedFpsBToAWhileMinimized": 1,
+  "gridTwoPlayers": true,
+  "stopOwnCapturePreservesOtherPlayer": true,
+  "audioTracksFromPicker": true,
+  "audioAudibilityValidated": false,
+  "gameplayValidated": false,
+  "differentPhysicalComputersValidated": false,
+  "endurance24HoursValidated": false,
+  "installerSha256": "e002778bb2ff7834a5c8559d4d8bced8c7f523ab418e8a0eeed87468d914a5a4",
+  "limitations": "Own application windows, mostly static/recursive content. Minimized B reduced capture frame rate. Software OpenH264 and decoder fallback observed; NVENC not verified. No screenshots, invitations, SDP or IPs saved."
+}

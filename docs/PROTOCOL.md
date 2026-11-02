@@ -1,57 +1,56 @@
-# Protocolo de sinalização v1
+# Protocolo v2 — múltiplas transmissões
 
-`POST /v1/rooms` retorna HTTP 201 com `roomId`, `inviteToken`, `hostToken`, `expiresAt` (Unix milissegundos) e `protocol: 1`. Não há corpo na requisição. A criação é limitada por IP: configuração de 10 solicitações por 60 segundos, com as características do limitador distribuído da Cloudflare (não é quota global estrita).
+## Compatibilidade
 
-`GET /health` retorna identificação e versão do protocolo.
+API nova: POST /v2/rooms e WebSocket /v2/rooms/{uuid}/socket. Durable Object MultiRoom, binding MULTI_ROOMS. A API v1 permanece em /v1/rooms, classe Room/binding ROOMS, com o comportamento da beta 0.3 sem TURN. Os namespaces e salas são separados. Não misture versões de cliente em uma sala nova.
 
-Conecte a `wss://servidor/v1/rooms/{roomId}/socket`. Nenhum token na URL do WebSocket. Primeiro frame:
+Health informa protocol:2/version:0.4.0. Criar sala retorna roomId, inviteToken, hostToken, expiresAt (Unix ms), protocol:2. TTL inicial 24h. Convites continuam no fragmento # do link e são interpretados localmente; o token não entra na URL WebSocket. O backend armazena hashes SHA-256 dos tokens aleatórios de 256 bits.
+
+## Autenticação e estado
+
+Primeiro frame:
+```json
+{"type":"join","protocol":2,"token":"<host ou invite>","displayName":"Arthur"}
+```
+O token define host/viewer. Esses papéis controlam apenas gestão da sala, não publicação de mídia. Todos os cinco podem publicar. Clientes com protocolo incorreto recebem protocol_mismatch. Nome: 1–32 unidades UTF-16, sem controles. Welcome contém participantId, role, roomId, expiresAt, protocol.
+
+Cada frame room é personalizado:
+- participants: id, name, role, streamId (UUID ou null), streaming.
+- subscriptions: seleções deste receptor, com publisherId, streamId, subscriptionId, height, fps.
+- subscribers: receptores desta publicação, com os mesmos campos e viewerId.
+
+Listas de assinaturas não são divulgadas a terceiros que não participam daquela direção. Estado é serializado nos anexos hibernáveis dos sockets. Sem assinaturas, o servidor só anuncia a existência das fontes.
+
+## Publicar e escolher
 
 ```json
-{"type":"join","token":"<hostToken ou inviteToken>","displayName":"Arthur"}
+{"type":"stream","active":true,"streamId":"<UUID novo por captura>"}
+{"type":"watch","active":true,"publisherId":"<participantId>","streamId":"<captura atual>","subscriptionId":"<UUID>","height":480,"fps":30}
 ```
 
-O papel deriva exclusivamente do token. Nome de 1–32 unidades UTF-16, sem caracteres de controle. Primeiro retorno:
+Somente a própria conexão pode anunciar/parar sua publicação. Cada participante publica no máximo uma fonte. streamId deve ser único entre publicações ativas. Repetir início idêntico é idempotente. Encerramento atrasado de uma captura anterior é ignorado.
 
+Watch exige um publicador ativo diferente de si mesmo e uma assinatura única na sala. Um receptor assina no máximo uma fonte por pessoa, até quatro no total. Qualidades: 480/720/1080 e 30/60 FPS. Repetir watch com o mesmo subscriptionId atualiza somente a qualidade dessa seleção. active:false remove a assinatura correspondente.
+
+Parar/reiniciar uma captura apaga somente assinaturas que apontam para ela. A pessoa mantém as gameplays que está assistindo. Reinício exige seleção explícita dos espectadores; não retoma envio silencioso. Saída de um amigo remove suas seleções e sua publicação. Saída/queda do host encerra a sala inteira.
+
+## Negociação
+
+Cada sinal inclui kind, streamId, subscriptionId e session (UUID de cada negociação), além dos campos SDP ou ICE:
 ```json
-{"type":"welcome","participantId":"<uuid>","role":"host","roomId":"<uuid>","expiresAt":1790000000000,"protocol":1}
+{"type":"signal","to":"<outro participante>","payload":{"kind":"offer","streamId":"<captura>","subscriptionId":"<assinatura>","session":"<negociação>","sdp":"..."}}
 ```
 
-Depois, todo participante autenticado recebe `{"type":"room","participants":[{"id":"...","name":"...","role":"host"}]}` após entradas e saídas. Identidade por conexão; a etapa 1 não possui retomada automática de sessão.
+O servidor valida a assinatura autenticada e sua direção: offer só do publicador ao receptor; answer só do receptor ao publicador; ICE nos dois sentidos; restart do receptor ao publicador. From é determinado pelo servidor. Papéis host/viewer não restringem os pares. Não há broadcast de SDP/ICE.
 
-`{"type":"ping"}` recebe `{"type":"pong"}`. O cliente envia ping JSON exato a cada 20 segundos. O runtime responde sem acordar o DO (setWebSocketAutoResponse). O alarme consulta getWebSocketAutoResponseTimestamp para manter sockets autenticados vivos; ping não prolonga sockets não autenticados. Sessões sem atividade por mais de 90 segundos são removidas no próximo alarme (até cerca de cinco minutos adicionais). Sockets sem autenticação são removidos após 15 segundos no próximo alarme. Máximo de dez sockets simultâneos incluindo pendentes; máximo autenticado de um host e quatro viewers.
+O cliente usa uma conexão separada por subscriptionId e rejeita sinais de stream/session antigos. Duas pessoas transmitindo entre si usam duas negociações unidirecionais, evitando glare. O emissor reutiliza suas faixas locais; encerrar uma recepção não encerra faixas compartilhadas de envio.
 
-`{"type":"leave"}` sai. Se for o host, invalida a sala e envia `{"type":"room_closed","message":"..."}` aos demais. Uma queda do host também encerra a sala quando detectada; até essa detecção pode haver atraso. TTL inicial de 24h; na última hora o host pode renovar para agora +24h. Expiradas e encerradas não reabrem.
+ICE contém candidate, sdpMid e sdpMLineIndex (os dois últimos podem ser null). Candidato vazio encerra coleta. Candidatos relay em ICE/SDP são recusados. ice_config fornece somente STUN público, turnAvailable:false e policy:direct-only; nenhuma credencial de mídia é emitida.
 
-## Sinais reservados para etapa 3
+## Duração, limites e privacidade
 
-```json
-{"type":"signal","to":"<participantId>","payload":{"kind":"offer","sdp":"..."}}
-```
+Ping JSON exato a cada 20s usa setWebSocketAutoResponse para não acordar o DO. Limpeza inicial em até 15s, depois a cada 5min; timestamp de auto-resposta mantém sockets autenticados vivos. Auto-ping não prolonga sockets não autenticados.
 
-Resposta encaminhada: `{"type":"signal","from":"<identidade autenticada>","payload":{...}}`. Somente host envia offer; somente viewer envia answer; ICE é permitido entre host e viewer nos dois sentidos. Viewers não trocam sinais entre si. Não há broadcast de SDP/ICE.
+Host autenticado pode enviar renew. Fora da última hora, validade não muda; dentro dela, persiste agora+24h e informa room_renewed a todos. Expirada/encerrada não revive. O cliente solicita automaticamente perto do vencimento. deleteAll/deleteAlarm liberam a sala encerrada.
 
-ICE usa `{"kind":"ice","candidate":"...","sdpMid":"0","sdpMLineIndex":0}`. `sdpMid` e `sdpMLineIndex` podem ser nulos. `candidate` vazio representa fim de candidatos. Relay é rejeitado em ICE/SDP (relay_disabled).
-
-Mensagens UTF-8 JSON até 64 KiB, SDP até 48.000 unidades, candidate até 4.096. Binário é rejeitado. Limite de 120 mensagens por janela de dez segundos por conexão, incluindo heartbeat. Erros: `{"type":"error","code":"...","message":"..."}`. Falhas de autenticação, excesso de tamanho e de taxa encerram a conexão.
-
-Tokens gerados por CSPRNG de 256 bits, armazenados como SHA-256 no Durable Object. O hostToken nunca entra no convite. O link de convite usa o fragmento `#inviteToken`; o aplicativo o interpreta localmente. Não registrar URLs de convite nem frames, inclusive SDP/ICE, em logs.
-
-## Extensões de mídia 0.2 (protocol 1 compatível)
-
-O host envia `{"type":"stream","active":true}` ao iniciar e false ao parar. Snapshots de sala incluem `streaming`; somente o host pode alterar esse estado.
-
-Após autenticação, ice_config retorna ice_servers com iceServers contendo somente stun:stun.cloudflare.com:3478 e stun:stun.l.google.com:19302, turnAvailable:false e policy:direct-only. Não há fetch externo de credenciais ou segredo TURN. O cliente também filtra a configuração para aceitar apenas STUN.
-
-Offers/answers/ICE podem incluir `session`, UUID da negociação de mídia, preservado no encaminhamento. A versão atual usa esse campo para rejeitar sinais de conexões antigas após uma recuperação. Os testes antigos sem o campo continuam aceitos.
-
-Um viewer pode enviar payload `{"kind":"restart"}` ao host para solicitar uma nova negociação, ou `{"kind":"quality","height":720,"fps":30}` para limitar sua própria recepção. As alturas válidas são 480, 720 e 1080; FPS 30 ou 60. O backend valida direção e valores antes de encaminhar. Pedidos não aumentam a resolução/FPS da captura global do transmissor.
-
-## Renovação 0.3
-
-O host autenticado envia {"type":"renew"}. Fora da última hora, validade não muda. Na última hora, o servidor persiste agora +24h e todos recebem {"type":"room_renewed","expiresAt":...}. Viewer recebe forbidden. Expirada/encerrada não revive. Cliente C# solicita no heartbeat somente perto de vencer. Sem cron global. Alarme inicial em até 15s; depois limpeza a cada 5min. Novos sockets preservam o menor alarme existente. Encerrar apaga metadados e cancela o alarme.
-
-## Persistência e rede
-
-Um Durable Object por sala, SQLite/KV para metadados; anexos de WebSocket preservam identidade e contadores durante hibernação. Salas vazias aguardam a expiração sem wakeup periódico. Não há descoberta pública de salas.
-
-O serviço autentica a posse do convite, sem prova de identidade pessoal. O endereço HTTPS do serviço deve ser confiável. Não há recuperação do criador se o aplicativo perder o hostToken. Rate limiting de criação e de frames reduz abuso, mas não substitui proteção de produção, métricas operacionais ou auditoria de segurança.
+Máximo de 5 autenticados e 10 sockets incluindo pendentes; criação limitada a 10/min por IP. Frames UTF-8 JSON até 64KiB; SDP até 48.000 caracteres; ICE até 4.096. Limite de 120 mensagens/10s por sessão. Rate limiting não é teto global de gastos. Não registrar frames, convites, IPs ou metadados de autenticação.

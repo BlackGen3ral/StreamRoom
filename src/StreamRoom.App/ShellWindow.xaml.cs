@@ -99,6 +99,10 @@ public partial class ShellWindow : Window
                 case "testSignal" when App.NetworkTestOutput is not null:
                     await _testClients[p.GetProperty("side").GetString()!].SendSignalAsync(p.GetProperty("to").GetString()!, p.GetProperty("payload").Clone());
                     break;
+                case "testStream" when App.NetworkTestOutput is not null:
+                    await _testClients[p.GetProperty("side").GetString()!].SetStreamingAsync(p.GetProperty("active").GetBoolean(), p.GetProperty("streamId").GetString()!); break;
+                case "testWatch" when App.NetworkTestOutput is not null:
+                    await _testClients[p.GetProperty("side").GetString()!].SetWatchingAsync(p.GetProperty("publisherId").GetString()!, p.GetProperty("streamId").GetString()!, p.GetProperty("subscriptionId").GetString()!, p.GetProperty("active").GetBoolean()); break;
                 case "testResult" when App.NetworkTestOutput is not null:
                     await File.WriteAllTextAsync(App.NetworkTestOutput, p.GetRawText());
                     foreach (var client in _testClients.Values) await client.DisposeAsync();
@@ -114,7 +118,7 @@ public partial class ShellWindow : Window
                         try { using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(file)); settings = doc.RootElement.Clone(); }
                         catch (JsonException) { }
                     }
-                    result = new { settings, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.3.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = _updates.IsInstalled };
+                    result = new { settings, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = _updates.IsInstalled };
                     break;
                 case "settings":
                     Invitations.ValidateServer(p.GetProperty("server").GetString()!);
@@ -126,7 +130,9 @@ public partial class ShellWindow : Window
                 case "signal":
                     await (_connection ?? throw new SignalingException("Você está desconectado.")).SendSignalAsync(p.GetProperty("to").GetString()!, p.GetProperty("payload").Clone());
                     break;
-                case "stream": await (_connection ?? throw new SignalingException("Você está desconectado.")).SetStreamingAsync(p.GetProperty("active").GetBoolean()); break;
+                case "stream": await (_connection ?? throw new SignalingException("Você está desconectado.")).SetStreamingAsync(p.GetProperty("active").GetBoolean(), p.GetProperty("streamId").GetString()!); break;
+                case "watch":
+                    await (_connection ?? throw new SignalingException("Você está desconectado.")).SetWatchingAsync(p.GetProperty("publisherId").GetString()!, p.GetProperty("streamId").GetString()!, p.GetProperty("subscriptionId").GetString()!, p.GetProperty("active").GetBoolean(), p.GetProperty("height").GetInt32(), p.GetProperty("fps").GetInt32()); break;
                 case "ice": result = await (_connection ?? throw new SignalingException("Você está desconectado.")).GetIceConfigurationAsync(); break;
                 case "copy": Clipboard.SetText(p.GetProperty("text").GetString()!); break;
                 case "paste": result = Clipboard.ContainsText() ? Clipboard.GetText() : ""; break;
@@ -181,9 +187,8 @@ public partial class ShellWindow : Window
             (roomId, token) = Invitations.Parse(server, invitation);
         }
         var client = new SignalingClient(); _connection = client;
-        client.ParticipantsChanged += participants => { if (_connection == client) Emit(new { type = "participants", participants }); };
+        client.RoomStateChanged += state => { if (_connection == client) Emit(new { type = "roomState", state }); };
         client.RoomRenewed += expiresAt => { if (_connection == client) Emit(new { type = "roomRenewed", expiresAt }); };
-        client.StreamStateChanged += active => { if (_connection == client) Emit(new { type = "streamState", active }); };
         client.SignalReceived += (from, payload) => { if (_connection == client) Emit(new { type = "signal", from, payload }); };
         client.ServerError += message => { if (_connection == client) Emit(new { type = "serverError", message }); };
         client.Disconnected += message =>
@@ -193,12 +198,14 @@ public partial class ShellWindow : Window
         try
         {
             var welcome = await client.ConnectAsync(server, roomId, token, name);
+            Title = "StreamRoom · " + name;
             return new { welcome, invitation };
         }
         catch { _connection = null; await client.DisposeAsync(); throw; }
     }
     private async Task DisconnectAsync()
     {
+        Title = "StreamRoom";
         _audio.Dispose();
         var previous = _connection; _connection = null;
         if (previous is not null) await previous.DisposeAsync();
@@ -217,7 +224,7 @@ public partial class ShellWindow : Window
     }
     private async Task<object> CreateNetworkTestAsync()
     {
-        var server = new Uri("https://streamroom-signaling-dev.arthurgabrielfera.workers.dev");
+        var server = Invitations.ValidateServer(Environment.GetEnvironmentVariable("STREAMROOM_TEST_URL") ?? "https://streamroom-signaling-dev.arthurgabrielfera.workers.dev");
         var room = await SignalingClient.CreateRoomAsync(server);
         var clients = new List<object>();
         for (int i = 0; i < 5; i++)
@@ -226,6 +233,7 @@ public partial class ShellWindow : Window
             var client = new SignalingClient();
             _testClients.Add(side, client);
             client.SignalReceived += (from, payload) => Emit(new { type = "testSignal", side, from, payload });
+            client.RoomStateChanged += state => Emit(new { type = "testRoomState", side, state });
             var welcome = await client.ConnectAsync(server, room.RoomId, i == 0 ? room.HostToken : room.InviteToken, "Network test " + side);
             clients.Add(new { side, id = welcome.ParticipantId });
         }

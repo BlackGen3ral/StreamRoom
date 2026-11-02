@@ -24,7 +24,7 @@ public sealed class SignalingClient : IAsyncDisposable
     public event Action<string, JsonElement>? SignalReceived;
     public event Action<string>? Disconnected;
     public event Action<string>? ServerError;
-    public event Action<bool>? StreamStateChanged;
+    public event Action<JsonElement>? RoomStateChanged;
     public bool IsConnected => _socket.State == WebSocketState.Open && _welcome.Task.IsCompletedSuccessfully;
 
     public static async Task<RoomCredentials> CreateRoomAsync(Uri server, CancellationToken cancellationToken = default)
@@ -33,7 +33,7 @@ public sealed class SignalingClient : IAsyncDisposable
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
         cancellationToken = timeout.Token;
         using var http = new HttpClient { BaseAddress = server, Timeout = TimeSpan.FromSeconds(15) };
-        using var request = new HttpRequestMessage(HttpMethod.Post, "v1/rooms");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "v2/rooms");
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw new SignalingException($"Não foi possível criar sala (HTTP {(int)response.StatusCode}).");
@@ -41,7 +41,7 @@ public sealed class SignalingClient : IAsyncDisposable
         await response.Content.LoadIntoBufferAsync(16 * 1024, cancellationToken);
         var credentials = await response.Content.ReadFromJsonAsync<RoomCredentials>(Json, cancellationToken)
             ?? throw new SignalingException("Resposta vazia do serviço.");
-        if (credentials.Protocol != 1 || !Guid.TryParseExact(credentials.RoomId, "D", out _)
+        if (credentials.Protocol != 2 || !Guid.TryParseExact(credentials.RoomId, "D", out _)
             || !ValidToken(credentials.InviteToken) || !ValidToken(credentials.HostToken))
             throw new SignalingException("O serviço retornou credenciais inválidas.");
         return credentials;
@@ -54,7 +54,7 @@ public sealed class SignalingClient : IAsyncDisposable
         if (!Guid.TryParseExact(roomId, "D", out _) || !ValidToken(token)) throw new ArgumentException("Credenciais inválidas.");
         displayName = displayName.Trim();
         if (displayName.Length is < 1 or > 32 || displayName.Any(char.IsControl)) throw new ArgumentException("Seu nome deve ter entre 1 e 32 caracteres.");
-        var socketUri = new UriBuilder(new Uri(server, $"v1/rooms/{roomId}/socket")) { Scheme = server.Scheme == "https" ? "wss" : "ws" };
+        var socketUri = new UriBuilder(new Uri(server, $"v2/rooms/{roomId}/socket")) { Scheme = server.Scheme == "https" ? "wss" : "ws" };
         _socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
         _socket.Options.KeepAliveTimeout = TimeSpan.FromSeconds(20);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
@@ -63,7 +63,7 @@ public sealed class SignalingClient : IAsyncDisposable
         {
             await _socket.ConnectAsync(socketUri.Uri, timeout.Token);
             _receiver = ReceiveAsync();
-            await SendAsync(new { type = "join", token, displayName }, timeout.Token);
+            await SendAsync(new { type = "join", token, displayName, protocol = 2 }, timeout.Token);
             var welcome = await _welcome.Task.WaitAsync(timeout.Token);
             _role = welcome.Role; _expiresAt = welcome.ExpiresAt;
             _heartbeat = HeartbeatAsync();
@@ -76,8 +76,11 @@ public sealed class SignalingClient : IAsyncDisposable
         if (!IsConnected) throw new InvalidOperationException("Entre em uma sala primeiro.");
         return SendAsync(new { type = "signal", to, payload }, cancellationToken);
     }
-    public Task SetStreamingAsync(bool active, CancellationToken cancellationToken = default) =>
-        SendAsync(new { type = "stream", active }, cancellationToken);
+    public Task SetStreamingAsync(bool active, string streamId, CancellationToken cancellationToken = default) =>
+        SendAsync(new { type = "stream", active, streamId }, cancellationToken);
+
+    public Task SetWatchingAsync(string publisherId, string streamId, string subscriptionId, bool active, int height = 480, int fps = 30, CancellationToken cancellationToken = default) =>
+        SendAsync(new { type = "watch", publisherId, streamId, subscriptionId, active, height, fps }, cancellationToken);
 
     public async Task<JsonElement> GetIceConfigurationAsync(CancellationToken cancellationToken = default)
     {
@@ -135,12 +138,12 @@ public sealed class SignalingClient : IAsyncDisposable
                 {
                     case "welcome":
                         var welcome = item.Deserialize<Welcome>(Json) ?? throw new SignalingException("Sessão inválida.");
-                        if (welcome.Protocol != 1) throw new SignalingException("Versão de protocolo incompatível.");
+                        if (welcome.Protocol != 2) throw new SignalingException("Versão de protocolo incompatível.");
                         _welcome.TrySetResult(welcome);
                         break;
                     case "room":
                         ParticipantsChanged?.Invoke(item.GetProperty("participants").Deserialize<Participant[]>(Json) ?? []);
-                        StreamStateChanged?.Invoke(item.TryGetProperty("streaming", out var active) && active.ValueKind == JsonValueKind.True);
+                        RoomStateChanged?.Invoke(item.Clone());
                         break;
                     case "pong": _pongPending = false; break;
                     case "room_renewed":

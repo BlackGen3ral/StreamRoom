@@ -1,70 +1,53 @@
 # StreamRoom
 
-Aplicativo Windows em C#/.NET 10 para compartilhar uma janela, um monitor ou um jogo em modo de janela com até quatro amigos, usando WebRTC P2P. Build atual: **0.3.0-beta.1, desenvolvimento**.
+Aplicativo Windows C#/.NET 10 para compartilhar gameplays por **WebRTC P2P direto**, com até cinco participantes e uma transmissão por pessoa. Build **0.4.0-beta.1**, de desenvolvimento. Não há Release oficial publicada.
 
-Código: [BlackGen3ral/StreamRoom](https://github.com/BlackGen3ral/StreamRoom). Pacotes: [GitHub Actions](https://github.com/BlackGen3ral/StreamRoom/actions). **Nenhuma Release oficial foi publicada.**
+## Instalar e usar
 
-## Instalar e experimentar
+1. Baixe o instalador de desenvolvimento ou o artefato **StreamRoom-installer-development** na execução bem-sucedida do [GitHub Actions](https://github.com/BlackGen3ral/StreamRoom/actions).
+2. Extraia e execute **StreamRoom-win-Setup.exe**. O pacote x64 inclui .NET e declara WebView2 como requisito. O instalador beta ainda não tem assinatura digital.
+3. Informe um nome, crie uma sala ou cole um convite. Use a mesma versão 0.4 em todos os participantes da nova sala.
+4. **Qualquer participante** pode clicar em **Compartilhar minha tela** e selecionar janela, monitor ou jogo em janela. Para áudio isolado, habilite áudio da janela no seletor.
+5. As transmissões disponíveis aparecem na grade. Clique em **Assistir** nas que quiser receber. Não há recepção automática.
+6. Cada player remoto possui qualidade, volume, ativar/silenciar áudio, parar de assistir, ampliar e tela cheia. O áudio começa silenciado para evitar reprodução inesperada e retorno.
+7. Você pode compartilhar e assistir ao mesmo tempo. **Parar minha transmissão** encerra apenas sua captura e seus envios; você continua assistindo aos amigos. **Parar de assistir** fecha aquela conexão e libera o decodificador.
+8. O criador continua responsável por renovar/encerrar a sala. **Encerrar sala para todos**, fechar ou perder a conexão do criador encerra a sala inteira.
 
-1. Abra a execução mais recente bem-sucedida em Actions e baixe **StreamRoom-installer-development** em Artifacts.
-2. Extraia o ZIP e execute **StreamRoom-win-Setup.exe**. O pacote é x64, inclui o runtime .NET e declara o WebView2 como requisito de instalação. Pode precisar de internet para instalar esse requisito.
-3. Abra o StreamRoom, informe seu nome e clique em **Criar sala privada**.
-4. Copie o convite e envie aos amigos. Eles usam o mesmo aplicativo e servidor, colam o convite completo e clicam em **Entrar na sala**.
-5. No aplicativo do criador, abra **Configurações da transmissão**, escolha resolução/FPS/áudio e clique em **Selecionar fonte e transmitir**.
-6. Escolha o jogo/janela ou monitor no seletor. Para áudio do aplicativo, ative a opção de áudio no próprio seletor.
-7. O espectador pode precisar clicar em **Assistir com som**. Volume e tela cheia ficam abaixo do player.
-8. **Parar transmissão** libera a captura e mantém a sala. **Encerrar sala para todos**, fechar o aplicativo do criador ou detectar sua desconexão encerra a sala.
+Servidor de desenvolvimento: https://streamroom-signaling-dev.arthurgabrielfera.workers.dev.
+A rota antiga v1 permanece disponível para os betas anteriores; as salas v1 e v2 são separadas. Convites de uma sala nova exigem clientes novos. Não há migração silenciosa de uma sala ativa.
 
-O servidor de desenvolvimento já está configurado: `https://streamroom-signaling-dev.arthurgabrielfera.workers.dev`.
+A alternativa portátil está no artefato **StreamRoom-win-x64-development**. Extraia todos os arquivos juntos; WebView2 precisa estar instalado. Atualizações Velopack exigem a versão instalada.
 
-O artefato **StreamRoom-win-x64-development** é a alternativa portátil. Extraia **todos os arquivos** juntos; não copie somente o executável. A versão portátil exige WebView2 instalado e não usa o fluxo de atualização da versão instalada.
+## Conexões e consumo
 
-Recomendado: **Windows 11 x64 com WebView2 Evergreen atualizado**. Windows 10 e versões antigas do runtime não foram validados. O áudio isolado depende das APIs disponíveis no Windows/runtime. O instalador de desenvolvimento não possui assinatura digital.
+- Uma captura local compartilhada por até quatro espectadores, com um RTCPeerConnection unidirecional por assinatura. A recepção da mesma pessoa usa outra conexão, evitando conflitos de negociação.
+- Sem espectadores selecionados: nenhuma conexão de envio/encoder WebRTC é criada. A captura/prévia local ainda consome recursos.
+- Somente as gameplays escolhidas são recebidas. Por padrão, cada recepção pede **480p30**, ajustável até 1080p60, limitado pela captura e pelo congestionamento.
+- O teto total de upload de cada publicador é dividido somente entre seus espectadores inscritos. A adaptação continua individual por conexão.
+- Todos assistindo a todos pode gerar 20 envios de mídia na sala; cada PC pode manter quatro envios e quatro recepções. Não é uma arquitetura SFU. Escolha menos gameplays ou qualidades menores quando CPU/GPU/internet estiverem limitadas.
+- Até 1080p60 é uma configuração máxima, não desempenho garantido. Chromium prefere H.264 e escolhe hardware quando disponível; NVENC não é forçado. Estatísticas mostram o motor informado, inclusive fallback de software.
 
-## O que foi implementado
+A grade preserva os elementos de vídeo ao atualizar participantes/estatísticas. Ampliar uma fonte não reinicia as conexões. Parar uma fonte ou sair como participante remove apenas suas assinaturas/publicação; o encerramento da sala pelo criador continua uma ação separada.
 
-| Área | Implementação |
-| --- | --- |
-| Aplicativo | Host nativo WPF/C#, interface local no WebView2, tema escuro |
-| Salas | Convites privados, um criador + quatro espectadores, participantes em tempo real |
-| Captura | Seleção real de janela/monitor pelo Screen Capture do WebView2; prévia local |
-| Áudio do aplicativo | Faixa retornada pelo seletor de captura; modo padrão, quando disponível |
-| Áudio do sistema | WASAPI loopback nativo via NAudio, PCM estéreo para AudioWorklet e Opus/WebRTC |
-| Mídia | Um RTCPeerConnection por espectador; preferência por H.264; áudio negociado pelo motor |
-| Conexões | Somente P2P direto com STUN público gratuito; sem TURN, relay ou credenciais de mídia |
-| Qualidade | Até 1080p60 configuráveis; 720p30 padrão; teto de upload total dividido entre espectadores |
-| Adaptação | Controle de bitrate/FPS/escala por perda, RTT e limitação de banda; controle nativo de congestionamento do WebRTC |
-| Qualidade do espectador | Pedido individual de resolução/FPS máxima ao transmissor |
-| Estatísticas | FPS, resolução, bitrate, perda, RTT, codec, rota direta e tipos ICE dos dois lados e motor de codec quando informados por getStats |
-| Recuperação | Reconstrução da conexão de mídia após falhas, com até três tentativas por episódio |
-| Atualizações | Velopack com consulta automática de Releases oficiais estáveis, aviso, download e aplicação por ação do usuário |
-| Distribuição | Instalador EXE, pacote portátil e feed Velopack; Actions gera artefatos, sem publicar Releases |
+## Captura e áudio
 
-**1080p60 é uma configuração máxima, não um desempenho garantido.** O motor decide se pode usar aceleração por hardware. Não há integração direta que force NVENC, nem indicação de GPU inventada. O campo Motor mostra o que o runtime informa; pode aparecer “Não informado”.
+Vídeo real pelo Screen Capture do WebView2, como alternativa à integração direta WGC/OBS. Não há hook do OBS, nem captura/áudio/vídeo simulados. Jogos protegidos, com anticheat ou em tela cheia exclusiva podem exigir janela sem bordas ou monitor. Minimizar a janela capturada pode pausar ou reduzir os frames.
 
-A captura de vídeo usa o motor mantido do WebView2, como alternativa à integração direta de WGC/OBS. Não há hook de captura de jogo do OBS. Jogos em tela cheia exclusiva, protegidos ou com anticheat podem exigir modo janela sem bordas ou captura do monitor. Não são contornadas proteções de conteúdo.
+**Aplicativo da janela** usa a faixa fornecida pelo seletor, quando disponível. O Windows pode incluir janelas/processos relacionados; confirme isolamento do Discord no seu PC. **WASAPI** captura toda a saída padrão: inclui Discord, notificações e áudio das outras transmissões que você estiver ouvindo, podendo produzir retorno. Esse modo exige escolha explícita. O microfone não é capturado diretamente. Trocar o dispositivo padrão pode exigir reiniciar a captura.
 
-## Áudio sem incluir o Discord
+## STUN gratuito e salas longas
 
-- **Aplicativo da janela:** escolha o jogo e habilite áudio no seletor. O seletor pode incluir todas as janelas e processos relacionados daquele aplicativo. Discord em um processo/aplicativo separado deve ficar fora dessa seleção, mas isso precisa ser confirmado no seu Windows. Se jogo e Discord rodam no mesmo navegador, pode haver mistura de áudio.
-- **Sistema via WASAPI:** transmite a saída de áudio padrão inteira, incluindo Discord, notificações e outros aplicativos. É uma escolha explícita; nunca é ativado silenciosamente como fallback.
-- **Sem áudio:** transmite apenas vídeo.
+Somente STUN público e P2P direto. TURN, relay, Stream e SFU não são configurados. URLs TURN/credenciais de um servidor antigo são descartadas pelo cliente; candidatos relay são bloqueados. CGNAT/NAT restritivo, VPN, firewall e UDP bloqueado podem impedir a conexão. O app mostra erro e não ativa fallback pago.
 
-O microfone não é capturado diretamente. A prévia do transmissor fica muda para evitar retorno. Se o seletor não fornecer uma faixa de áudio, o aplicativo avisa; não adiciona áudio falso. WASAPI usa o dispositivo de saída padrão no início da captura. Trocar de dispositivo pode exigir parar e iniciar novamente.
+Salas começam com 24h. Na última hora, o criador autenticado renova por mais 24h; espectadores não renovam e salas expiradas/encerradas não revivem. Os dois protocolos usam SQLite, WebSocket Hibernation, ping respondido pelo runtime e limpeza a cada cinco minutos.
 
-## Rede, privacidade e custos
+**Confirme Workers Free no painel Cloudflare para obter proteção contra cobrança por excedentes.** A conexão OAuth não permitiu ler faturamento; o plano não foi confirmado. Franquias são compartilhadas com outros projetos e podem ser esgotadas por abuso. O app não altera planos nem configura serviços pagos. Em Workers Paid pode haver cobrança de excedente. [Detalhes de custo e duração](docs/FREE-AND-LONG-SESSIONS.md).
 
-Somente P2P direto, sem retransmissão. Redes com CGNAT/NAT restritivo, firewall, VPN ou UDP bloqueado podem não conectar; o app mostra erro e não ativa fallback pago.
-
-Salas começam com 24 horas e o criador autenticado renova na última hora, por mais 24h. Expiradas/encerradas não reabrem. O backend usa SQLite, WebSocket Hibernation, ping respondido pelo runtime e limpeza a cada cinco minutos.
-
-**Use Workers Free para proteção contra cobranças de excedente.** Nesse plano operações excedentes falham. Franquias são compartilhadas com outros projetos; abuso pode esgotá-las. Em Workers Paid pode haver cobrança por excedente. A API OAuth não permitiu consultar faturamento (HTTP 403); o plano não foi confirmado. O app não altera assinaturas nem configura serviços pagos. Veja [gratuidade, franquias e sessões longas](docs/FREE-AND-LONG-SESSIONS.md).
-
-Vídeo/áudio não passam pelo Worker. Quatro espectadores exigem até quatro envios pelo host. P2P expõe os endereços entre participantes. Convites são segredos; não os publique. Estabilidade por 10–24h e 1080p60 precisam de teste real.
+P2P revela os endereços de rede entre os participantes. Convites são segredos; não publique convites, SDP, IPs ou credenciais.
 
 ## Compilar e testar
 
-Requisitos: SDK .NET 10, Node.js 24 e Windows para o aplicativo.
+Requisitos: Windows x64, SDK .NET 10 e Node.js 24.
 
 ```powershell
 cd server
@@ -74,61 +57,33 @@ npm run build
 npm run dev
 ```
 
-Em outro terminal, na raiz:
+Em outro terminal:
 
 ```powershell
-# Código e testes de sinalização
 cd server
 npm test
 cd ..
 dotnet run --project tests/StreamRoom.Smoke -c Release
-
-# Abrir aplicativo; altere o servidor na interface para localhost se desejar
 dotnet run --project src/StreamRoom.App -c Release
-
-# Gerar instalador e feed de desenvolvimento
-./scripts/build-installer.ps1 -Version 0.3.0-beta.1
+./scripts/build-installer.ps1 -Version 0.4.0-beta.1
 ```
 
-O Worker local retorna exclusivamente STUN. HTTP remoto não é permitido. Não exponha o servidor de desenvolvimento local sem TLS.
+O servidor local usa http://127.0.0.1:8787. HTTP remoto é recusado. Faça npm run build antes dos testes: o ensaio de ciclo de vida usa o bundle real do Worker com relógio/contexto simulados, sem equivaler a uma chamada real de 24h.
 
-Teste nativo de rede, sem capturar tela ou gerar mídia de teste:
+Diagnóstico nativo de rede, sem gerar/capturar mídia:
 
 ```powershell
 dotnet run --project src/StreamRoom.App -c Release -- --network-test ./streamroom-network-test.json
 ```
 
-Esse modo cria cinco sessões no servidor de desenvolvimento e transmite dados reais por quatro pares diretos de canais DTLS/SCTP. O relatório contém somente resultados e tipos de candidato, sem IPs, convites ou credenciais. **Ele não substitui teste audiovisual**. Há instruções de teste entre PCs em [docs/TESTING.md](docs/TESTING.md).
+Cria cinco sessões, vinte canais de dados diretos por assinaturas, remove uma assinatura e uma publicação e verifica as restantes. O relatório não contém IPs/convites. STREAMROOM_TEST_URL pode apontar esse modo ao servidor local. Não substitui teste audiovisual. [Testes manuais](docs/TESTING.md) · [Evidências e limitações](docs/VALIDATION.md).
 
-## Hospedar o próprio backend
+## Backend e distribuição
 
-```powershell
-cd server
-npm ci
-npx wrangler login
-npm run check
-npm run build
-# Teste e confirme Workers Free no painel antes do deploy.
-npm run deploy
-```
+Worker: server/src/index.ts / MultiRoom, API v2. Compatibilidade v1: server/src/legacy.ts / Room. wrangler.jsonc preserva a migração v1 e adiciona MultiRoom SQLite em v2. Nenhum segredo de mídia é necessário.
 
-Não configure TURN/Realtime, Stream ou SFU. Nenhuma chave de mídia é necessária. O deploy não altera o plano da conta.
+Após testes e confirmação do plano Free no painel: npm run deploy em server. Não configure TURN ou serviços pagos.
 
-## Releases e atualizações
+Velopack verifica Releases públicas oficiais estáveis, avisa e aplica a atualização por ação do usuário após sair da sala. Commits, drafts, prereleases e artefatos de Actions não são atualizações oficiais. Os workflows têm contents:read e não publicam Releases. [Aprovação e assinatura](docs/RELEASING.md).
 
-O cliente instalado consulta **somente Releases públicas oficiais estáveis** em GitHub Releases. Commits, artefatos de Actions, drafts e prereleases não entram automaticamente no canal oficial. O usuário recebe um aviso e pode atualizar/reiniciar depois de sair da sala. A versão portátil informa que esse fluxo exige instalação.
-
-O workflow **Build an approved release candidate (no publication)** gera arquivos com versão informada manualmente. Os workflows possuem somente `contents: read` e não publicam Releases. Após aprovação explícita do proprietário, siga [docs/RELEASING.md](docs/RELEASING.md) para publicar o instalador, o feed e o pacote de atualização juntos.
-
-Ainda não houve teste ponta a ponta de atualização instalada A → B, porque nenhuma Release oficial foi autorizada/publicada. Velopack validou o bootstrap da aplicação durante a criação do pacote.
-
-## Organização
-
-- `src/StreamRoom.Core`: convites, HTTP e sinalização WebSocket C#.
-- `src/StreamRoom.App`: host WPF, ponte restrita, WASAPI e atualizador.
-- `src/StreamRoom.App/Web`: interface e motor WebRTC, adaptação e AudioWorklet.
-- `server`: Worker/Durable Objects, política STUN, renovação e testes no workerd.
-- `scripts`: empacotamento reproduzível.
-- `docs`: protocolo, testes, distribuição e evidência de validação.
-
-Consulte [docs/VALIDATION.md](docs/VALIDATION.md) para saber exatamente o que foi testado e o que continua pendente.
+O EXE, a janela e o instalador possuem ícone próprio. **Ícone não remove SmartScreen.** Não há certificado de assinatura de código disponível nesta sessão; mesmo apps assinados podem receber aviso enquanto constroem reputação. [Assinatura e avisos do Windows](docs/WINDOWS-SIGNING.md).

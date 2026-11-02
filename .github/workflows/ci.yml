@@ -61,7 +61,7 @@ jobs:
         run: |
           dotnet tool restore
           if ($LASTEXITCODE -ne 0) { throw 'Velopack CLI restore failed.' }
-          dotnet tool run vpk pack --packId StreamRoom --packVersion 0.3.0-beta.1 --packDir artifacts/publish --mainExe StreamRoom.exe --packTitle StreamRoom --framework webview2 --runtime win-x64 --outputDir artifacts/installer --channel win
+          dotnet tool run vpk pack --packId StreamRoom --packVersion 0.4.0-beta.1 --packDir artifacts/publish --mainExe StreamRoom.exe --packTitle StreamRoom --icon src/StreamRoom.App/Assets/StreamRoom.ico --framework webview2 --runtime win-x64 --outputDir artifacts/installer --channel win
           if ($LASTEXITCODE -ne 0) { throw 'Installer packaging failed.' }
       - uses: actions/upload-artifact@v4
         with:

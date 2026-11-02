@@ -1,5 +1,10 @@
 # Validação — 0.2.0-beta.1
 
+## 0.4.0-beta.1 — múltiplas transmissões
+
+31 resultados Node passaram local/remoto e 11 verificações C# passaram. O diagnóstico real de rede passou 25 verificações, incluindo 20 canais de dados P2P simultâneos. Capturas reais de duas janelas próprias foram recebidas nas duas direções por H264; parar a própria captura manteve a outra recepção. Ver relatórios multi-network-*.json e multi-ui-2026-11-01.json em docs/validation. Não equivale a gameplay entre PCs diferentes, vídeo 1080p60 para quatro receptores ou sessão de 24h. Ícone aplicado; instalador permanece NotSigned. Protocolo v1 preservado em rota separada.
+
+
 ## Atualização 0.3.0-beta.1 — P2P direto e sessões longas (2026-11-01)
 
 - TURN removido do cliente/backend. Chave StreamRoom relay revogada; zero chaves TURN restantes na consulta da conta; secrets TURN_KEY_ID e TURN_API_TOKEN removidos do Worker. Nenhum plano foi contratado ou alterado.
