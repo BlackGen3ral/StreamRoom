@@ -8,6 +8,7 @@
     <Version>0.4.0-beta.1</Version>
     <StartupObject>StreamRoom.App.App</StartupObject>
     <PlatformTarget>x64</PlatformTarget>
+    <DefineConstants Condition="'$(StreamRoomZeroTierProof)' == 'true'">$(DefineConstants);ZEROTIER_PROOF</DefineConstants>
     <ApplicationIcon>Assets\StreamRoom.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup><Resource Include="Assets\StreamRoom.ico" /></ItemGroup>

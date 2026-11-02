@@ -6,7 +6,7 @@ const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
     const id = String(++sequence);
-    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'tailscaleInstall' ? 1800000 : type === 'tailscaleProbe' ? 45000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
+    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'zeroTierJoin' ? 180000 : type === 'tailscaleInstall' ? 1800000 : type === 'tailscaleProbe' ? 45000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
     requests.set(id, { resolve, reject, timer }); window.chrome.webview.postMessage({ id, type, payload });
   });
 }
@@ -197,7 +197,7 @@ rtc.addEventListener('peerState', ({ detail }) => {
 });
 rtc.addEventListener('stats', ({ detail }) => {
   latestStats = detail;
-  $('directStatus').textContent = detail.some(r => r.overlayRelay) ? 'Tailscale · relay em uso' : detail.some(r => r.tailscale) ? 'Rede privada Tailscale' : detail.length && detail.every(r => r.direct) ? 'P2P direto confirmado · sem relay' : 'STUN gratuito · aguardando P2P';
+  $('directStatus').textContent = rtc.zeroTierProof ? detail.some(r => r.zeroTier) ? 'ZeroTier · interface de mídia confirmada' : 'ZeroTier · aguardando mídia' : detail.some(r => r.overlayRelay) ? 'Tailscale · relay em uso' : detail.some(r => r.tailscale) ? 'Rede privada Tailscale' : detail.length && detail.every(r => r.direct) ? 'P2P direto confirmado · sem relay' : 'STUN gratuito · aguardando P2P';
   $('stats').replaceChildren(...detail.map(row => {
     const name = state.participants.find(p => p.id === row.id)?.name ?? 'Participante';
     if (row.failed) return node('p', 'fine', 'Última tentativa com ' + name + ': conexão direta falhou · ICE: ' + row.iceState + ' · descoberta: ' + row.gathering + ' · endereços locais/públicos encontrados: ' + row.candidates.host + '/' + row.candidates.srflx + ' · endereços recebidos do amigo: ' + row.remoteCandidates + ' (públicos: ' + row.remotePublicCandidates + ') · negociação recebida: ' + (row.descriptionReceived ? 'sim' : 'não') + (row.stunError ? ' · houve falha ao consultar STUN' : '') + '. Esses dados permanecem até reconectar ou sair da sala.');
@@ -292,13 +292,43 @@ window.streamroom.shutdown = async () => { tailscaleUi.dispose(); state.shutting
 $('copyDiagnostics').addEventListener('click', () => busy(async () => {
   // Whitelist only summary fields. No invites, IPs, account names, SDP, or keys.
   const fields = ['direction','state','failed','message','bitrate','fps','width','height','loss','rtt','codec','route','localCandidate','remoteCandidate','transport','direct','tailscale','overlayRelay','tailscaleAttempted','tailscaleCandidates','elapsed','iceState','gathering','candidates','stunError','frames','remoteCandidates','remotePublicCandidates','descriptionReceived'];
-  const report = { format: 1, version: buildVersion, runtime: runtimeVersion, at: new Date().toISOString(), tailscale: tailscaleUi.diagnostics(),
+  fields.push('zeroTier','overlayRoute');
+  const report = { format: 1, version: buildVersion, runtime: runtimeVersion, at: new Date().toISOString(), zeroTier: rtc.zeroTierProof ? { proof: true, connected: rtc.zeroTier?.connected === true, state: rtc.zeroTier?.state, assignedAddressCount: rtc.zeroTier?.addresses?.length ?? 0, verifiedMediaConnections: latestStats.filter(row => row.zeroTier).length, crossNetworkValidation: 'PENDING' } : undefined, tailscale: tailscaleUi.diagnostics(),
     connections: latestStats.map(row => Object.fromEntries(fields.filter(key => row[key] !== undefined).map(key => [key,row[key]]))) };
   await native('copy', { text: JSON.stringify(report, null, 2) }); status('Diagnóstico copiado, sem convites, IPs ou tokens.');
 }));
 try {
   const r = await native('ready');
+  if (r.zeroTierProof) {
+    rtc.zeroTierProof = true;
+    $('tailscalePanel').hidden = true; $('updateButton').hidden = true;
+    const panel = node('section', 'card'); panel.append(node('h2', '', 'ZeroTier · experimental'));
+    const label = node('p', 'fine', 'Verificando serviço…');
+    const refresh = button('Atualizar conexão', async () => { await refreshStatus(); });
+    const join = button('Conectar à rede privada', async () => {
+      join.disabled = true;
+      try { await native('zeroTierJoin'); await refreshStatus(); } catch (e) { label.textContent = e.message; } finally { join.disabled = false; }
+    });
+    panel.append(label, refresh, join); $('roomPanel').after(panel);
+    let refreshing = false;
+    async function refreshStatus() {
+      if (refreshing) return; refreshing = true; refresh.disabled = true;
+      try {
+        rtc.zeroTier = await native('zeroTierStatus');
+        const z = rtc.zeroTier;
+        join.hidden = !z.installed || z.connected;
+        label.textContent = z.connected ? 'Rede privada conectada. Este teste usa apenas endereços ZeroTier para a mídia.' :
+          !z.installed ? 'Serviço ZeroTier ausente. O instalador integrado ainda não está liberado neste protótipo.' :
+          z.state === 'REQUESTING_CONFIGURATION' || z.state === 'ACCESS_DENIED' ? 'Autorize no painel ZeroTier o dispositivo: ' + z.deviceId :
+          'Rede não pronta: ' + z.state + '. Confira a configuração e a autorização do dispositivo ' + z.deviceId + '.';
+      } catch (e) { label.textContent = e.message; } finally { refresh.disabled = false; refreshing = false; }
+    }
+    await refreshStatus();
+    const timer = setInterval(refreshStatus, 15000);
+    window.addEventListener('pagehide', () => clearInterval(timer), { once: true });
+  }
   for (const [key,value] of Object.entries(r.settings ?? {})) { const input=$(key); if (!input) continue; if(input.type==='checkbox') input.checked=Boolean(value); else input.value=String(value); }
+  if (r.zeroTierProof) { $('quality').value = '720'; $('fps').value = '30'; }
   buildVersion = r.version; runtimeVersion = r.runtime; void tailscaleUi.refresh();
   $('version').textContent=r.version+' · desenvolvimento'; $('runtime').textContent='Motor WebView2 '+r.runtime; $('footerVersion').textContent='StreamRoom '+r.version+' · build de desenvolvimento';
   if (!isSecureContext || !navigator.mediaDevices?.getDisplayMedia || !globalThis.RTCPeerConnection) status('Atualize o Microsoft Edge WebView2 Runtime para captura/WebRTC.',true);

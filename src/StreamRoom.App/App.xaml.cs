@@ -3,6 +3,7 @@ using Velopack;
 namespace StreamRoom.App;
 public partial class App : Application
 {
+    public static bool ZeroTierProof { get; private set; }
     public static string? UiPreviewOutput { get; private set; }
     public static string? TrayTestOutput { get; private set; }
     public static int MediaTestHeight { get; private set; } = 720;
@@ -15,6 +16,17 @@ public partial class App : Application
     public static void Main(string[] args)
     {
         VelopackApp.Build().Run();
+        ZeroTierProof = args.Contains("--zerotier-proof", StringComparer.Ordinal);
+#if ZEROTIER_PROOF
+        ZeroTierProof = true;
+#endif
+        var zeroTierJoin = Array.IndexOf(args, "--zerotier-join");
+        if (zeroTierJoin >= 0)
+        {
+            try { ZeroTierService.JoinAsync(args.ElementAtOrDefault(zeroTierJoin + 1) ?? "").GetAwaiter().GetResult(); }
+            catch { Environment.ExitCode = 1; }
+            return;
+        }
         int restartParent = Array.IndexOf(args, "--restart-parent");
         if (restartParent >= 0 && int.TryParse(args.ElementAtOrDefault(restartParent + 1), out var parentId) && parentId != Environment.ProcessId)
         {

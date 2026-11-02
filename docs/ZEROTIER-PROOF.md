@@ -2,6 +2,28 @@
 
 Branch experimental: `experiment/zerotier-webrtc-proof`, baseada na versão estável 0.4.24. Nenhum código Tailscale, captura WGC, áudio, WebRTC, servidor de sinalização ou experimento anterior foi removido. Nenhuma atualização estável foi publicada.
 
+## Protótipo executável integrado
+
+O app agora inclui `--zerotier-proof` e uma configuração de build experimental dedicada. Esse modo abre a interface atual em uma extensão local do próprio StreamRoom, sem conceder câmera/microfone e com perfil separado em `StreamRoom/ZeroTierProof`. As atualizações estáveis são desativadas nesse modo. O funcionamento normal continua no contexto HTTPS existente.
+
+O protótipo detecta o serviço pela CLI oficial em caminho fixo, lê a rede privada configurada em `zerotier-proof.json` e mostra o estado dentro do app. O botão de adesão solicita consentimento e UAC; um auxiliar limitado à CLI oficial solicita entrada e desativa rota padrão, rotas globais e DNS. O proprietário continua responsável pela autorização do dispositivo no Central. Não são lidos ou enviados tokens de conta ou arquivos de identidade.
+
+**O protótipo ainda não instala o serviço ZeroTier e não é o instalador único solicitado.** Se o serviço não existe, a interface informa essa pendência. Não apresentar o ZIP como solução pronta para o amigo que ainda não possui o serviço. A exclusão da consulta de licença foi respeitada; nenhum novo contato foi enviado.
+
+No modo experimental, a classe WebRTC atual envia somente candidatos host que correspondem a endereços reais atribuídos à interface ZeroTier. Os candidatos embutidos no SDP são removidos em favor da fila ICE existente; não há candidatos inventados, TURN ou alteração dos frames. Esse isolamento serve exclusivamente para provar a rota ZeroTier. O modo normal preserva STUN e P2P direto existentes.
+
+As estatísticas verificam o endereço local do par selecionado contra a interface real e identificam mídia ZeroTier quando esse par tem sucesso. Não afirmam que o transporte interno do overlay é direto: direta/relay ainda aparece como não verificada. Os diagnósticos exportam contagens e estados, sem IPs/Network ID.
+
+Validações locais: build normal Release sem avisos/erros; dois testes de filtro/rota; teste de captura e áudio usando o novo contexto nativo do app passou em `zerotier-ice-20261102-155931.json`; a interface completa abriu e mostrou a rede privada deste PC conectada; o executável publicado com perfil experimental também abriu. O fluxo UAC/adesão em um PC novo e a mídia entre casas **não foram testados**.
+
+Gerar o ZIP local, sem publicar release estável:
+
+```powershell
+./scripts/build-zerotier-proof.ps1 -NetworkId SEU_ID_DE_16_HEXADECIMAIS -Dotnet CAMINHO_DO_DOTNET
+```
+
+O pacote contém somente StreamRoom e a configuração dessa rede, sem MSI ZeroTier. Não commitar o arquivo de configuração gerado. O executável abre diretamente no modo experimental, sem exigir argumentos do amigo. A configuração da rede não é uma senha; o proprietário ainda precisa autorizar cada dispositivo.
+
 ## Resultado inicial
 
 **Integração ainda não validada e instalador integrado ainda não distribuído.** A rede privada foi indicada pelo proprietário, este PC solicitou entrada e o proprietário confirmou a autorização no Central. A CLI oficial passou a mostrar rede `OK`, `PRIVATE`, com endereço atribuído, e o Windows mostrou o adaptador virtual ativo. `allowDefault`, `allowGlobal` e `allowDNS` foram mantidos desativados para a rede de teste. Nenhuma senha, token de conta, identidade privada ou credencial local de administração foi copiada para o app ou para o repositório.

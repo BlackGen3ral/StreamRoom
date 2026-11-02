@@ -45,16 +45,7 @@ if($TemporaryCameraPermission -or $ExtensionContext) {
             if(!$source.Contains($guard)){throw 'Native audio diagnostic anchor missing.'}
             $source=$source.Replace($guard,'if (_connection?.IsConnected != true && App.CaptureTestOutput is null) throw new SignalingException("Entre em uma sala primeiro.");')
         }
-        # Do not rely on the owner's existing Tailscale opt-in during this proof.
-        $source=$source.Replace('var browserOptions =','_tailscaleWebRtcReady = false;' + [Environment]::NewLine + '            var browserOptions =')
-        $source=$source.Replace('private const string Origin = "https://streamroom.local";','private static string Origin = "https://streamroom.local";')
-        $environmentAnchor='var environment = await CoreWebView2Environment.CreateAsync('
-        if(!$source.Contains($environmentAnchor)){throw 'Native environment anchor missing.'}
-        $source=$source.Replace($environmentAnchor,'browserOptions.AreBrowserExtensionsEnabled = true;' + [Environment]::NewLine + '            ' + $environmentAnchor)
-        $source=$source.Replace($anchor,$anchor + [Environment]::NewLine + '            var probeExtension = await core.Profile.AddBrowserExtensionAsync(Path.Combine(AppContext.BaseDirectory, "Web")); Origin = "chrome-extension://" + probeExtension.Id;')
-        $trustedAnchor='&& uri.Scheme == "https" && uri.Host == "streamroom.local" && uri.Port == 443;'
-        if(!$source.Contains($trustedAnchor)){throw 'Native origin anchor missing.'}
-        $source=$source.Replace($trustedAnchor,'&& ((uri.Scheme == "https" && uri.Host == "streamroom.local" && uri.Port == 443) || (App.NetworkTestOutput is not null && App.UiPreviewOutput is not null && uri.Scheme == "chrome-extension" && uri.Host == new Uri(Origin).Host));')
+        # The experimental app now owns this context; do not patch its origin.
     } else {
         $source=$source.Replace($anchor,$anchor + [Environment]::NewLine + '            if (App.NetworkTestOutput is not null && App.UiPreviewOutput is not null) await core.Profile.SetPermissionStateAsync(CoreWebView2PermissionKind.Camera, Origin, CoreWebView2PermissionState.Allow);')
     $endAnchor='case "testResult" when App.NetworkTestOutput is not null:'
@@ -132,6 +123,7 @@ try {
     }
     $dll=Join-Path $app 'StreamRoom.dll'
     $arguments=@(('"'+$dll+'"'),'--network-test',('"'+$result+'"'),'--ui-preview',('"'+$profile+'"'))
+    if($ExtensionContext){$arguments+='--zerotier-proof'}
     if($CaptureBridgeSmokeTest){$arguments+=@('--wgc-bridge-test',('"'+$result+'"'))}
     $process=Start-Process -FilePath $Dotnet -ArgumentList $arguments -PassThru -WindowStyle Hidden
     if(!$process.WaitForExit(30000)){
