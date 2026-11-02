@@ -14,7 +14,12 @@ internal static class AccountSelfTest
             var directory = Path.Combine(Path.GetTempPath(), "StreamRoom-Accounts-Test-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
             static void Check(bool value, string message) { if (!value) throw new Exception(message); }
+            Check(FirstRunStore.ShouldPresent(directory),"First launch did not present optional entry.");
+            await FirstRunStore.CompleteAsync(directory);
+            Check(!FirstRunStore.ShouldPresent(directory)&&ProfileStore.Load(directory) is null,"Guest entry was not remembered or created an unwanted profile.");
+            File.Delete(Path.Combine(directory,"welcome-v1.json"));
             await File.WriteAllTextAsync(Path.Combine(directory, "profile-v1.json"), "{\"name\":\"Legacy\",\"sounds\":false}");
+            Check(!FirstRunStore.ShouldPresent(directory),"Existing profile was interrupted by onboarding on update.");
             var profile = await ProfileStore.SaveAsync(directory, "Amigo", null, false);
             var renamed = await ProfileStore.SaveAsync(directory, "Outro nome", null, false);
             Check(ProfileData.ValidId(profile.Id) && renamed.Id == profile.Id, "Profile identity changed after editing.");

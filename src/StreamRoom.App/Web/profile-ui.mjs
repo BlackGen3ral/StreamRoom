@@ -14,14 +14,16 @@ export function createProfileUi(native, onSaved) {
   const $ = id => document.getElementById(id), dialog = $('profileDialog');
   let profile = { name: '', avatar: null }, draft = null, busy = false, google = {}, configured = false, signing = false;
   function drawGoogle() {
-    $('googleAccountStatus').textContent = signing ? 'Aguardando você no navegador…' : google.linked ? 'Vinculado neste PC: ' + google.name : configured ? 'Use seu nome e foto do Google.' : 'Login Google indisponível. Verifique a conexão e reabra o app.';
+    $('googleAccountStatus').textContent = signing ? 'Aguardando você no navegador…' : google.linked ? google.name : configured ? 'Use seu nome e foto do Google.' : 'Indisponível. Verifique a conexão e reabra o app.';
+    $('googleLinkedBadge').textContent=google.linked?'Conectada':'Opcional';$('googleLinkedBadge').classList.toggle('linked',Boolean(google.linked));
+    $('googleSignIn').textContent=google.linked?'Trocar conta Google':'Continuar com Google';
     $('googleSignIn').disabled = busy || !configured; $('googleDisconnect').disabled = busy;
     $('googleDisconnect').hidden = !google.linked; $('googleCancel').hidden = !signing;
   }
   function feedback(text, error = false) {
     $('profileFeedback').textContent = text; $('profileFeedback').hidden = !text; $('profileFeedback').classList.toggle('error', error);
   }
-  function preview() { showAvatar($('profilePhotoPreview'), $('profileDisplayName').value, draft); $('profileRemovePhoto').disabled = !draft || busy; }
+  function preview() { showAvatar($('profilePhotoPreview'), $('profileDisplayName').value, draft); $('profilePreviewName').textContent=$('profileDisplayName').value.trim()||'Você';$('profileRemovePhoto').disabled = !draft || busy; }
   async function run(action) {
     if (busy) return; busy = true; feedback('');
     for (const id of ['profileChoosePhoto','profileRemovePhoto','profileSave','profileDisplayName','profileSounds']) $(id).disabled = true;

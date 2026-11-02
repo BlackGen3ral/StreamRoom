@@ -27,3 +27,11 @@ Erros do provedor são mapeados a mensagens fixas. Não mostram conteúdo arbitr
 ## Isolamento dos diagnósticos
 
 Os perfis e configurações dos testes de mídia são separados por diretório de execução e papel (host/viewer). Prévia, teste de player, captura, rede e bandeja usam diretórios de dados próprios ao lado da saída de diagnóstico. O perfil WebView2 também usa o diretório isolado. Testes não devem gravar nomes de participantes de teste no perfil instalado.
+
+## Primeira abertura e perfil
+
+Uma instalação sem perfil salvo apresenta uma tela exclusiva com Continuar com Google e Continuar sem login. A escolha é lembrada neste PC em `welcome-v1.json`. Continuar sem login não cria conta nem exige vincular Google depois. Perfis já existentes não são interrompidos pela apresentação durante atualizações.
+
+Ao escolher Google, o fluxo usa o mesmo navegador externo e validação existentes. Depois do consentimento, o perfil básico importado é salvo e o app abre a sala inicial. Erros permanecem na apresentação com opção de tentar novamente, cancelar a tentativa ou continuar sem login. Nenhuma conta é criada automaticamente e a escolha não inicia captura nem entrada na rede privada.
+
+O editor de perfil agrupa a prévia de foto/nome, o nome de exibição, a conta Google conectada (com troca/desvinculação) e a preferência de sons. A prévia acompanha a edição, enquanto Salvar perfil aplica as mudanças. Os testes de interface usam conta simulada; não refazem o consentimento real do usuário.

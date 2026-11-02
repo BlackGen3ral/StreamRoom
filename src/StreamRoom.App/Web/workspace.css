@@ -211,3 +211,64 @@
   .app-shell .empty-player { animation:streamroom-enter .16s ease-out; }
   @keyframes streamroom-enter { from { opacity:0;transform:translateY(4px); } to { opacity:1;transform:translateY(0); } }
 }
+
+/* A single optional choice on the first launch. */
+.welcome-page { min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:34px 24px;background:#10131b;color:#e9eaf3;overflow-y:auto; }
+.welcome-page[hidden] { display:none; }
+.app-shell.is-onboarding { height:100dvh;overflow:auto; }
+.app-shell.is-onboarding>header,.app-shell.is-onboarding>.layout,.app-shell.is-onboarding>footer,.app-shell.is-onboarding>.notice,.app-shell.is-onboarding>.maintenance-notice { display:none; }
+.welcome-brand { display:flex;align-items:center;gap:10px;font-weight:650;font-size:19px;margin-bottom:32px; }
+.welcome-card { width:min(100%,460px);text-align:center;padding:28px 32px;border:1px solid #353b4e;border-radius:20px;background:#1a1f2b;box-shadow:0 20px 70px #0002; }
+.welcome-card h1 { font-size:36px;line-height:1.13;letter-spacing:-1.4px;margin:13px 0 18px;font-weight:650; }
+.welcome-card>p { font-size:13px;line-height:1.85;color:#a3aec5; }
+.welcome-card .eyebrow { font-size:9px;color:#b9a7e5;letter-spacing:1.4px; }
+.welcome-art { display:flex;align-items:center;justify-content:center;gap:8px;height:92px;position:relative;margin-bottom:24px; }
+.welcome-screen { font-size:68px;line-height:1;color:#b9a6ec;margin-right:15px; }
+.welcome-person { width:39px;height:39px;display:grid;place-items:center;border-radius:13px;background:#32304a;color:#cdc0f6;font-size:13px;font-weight:600;border:1px solid #56506d; }
+.welcome-person:nth-of-type(3) { background:#253e3f;color:#a4d1c4;border-color:#3e615e; }
+.welcome-live { position:absolute;top:0;right:52px;color:#fff;background:#ad4058;padding:4px 7px;font-size:8px;font-weight:600;border-radius:5px;letter-spacing:.5px; }
+.welcome-actions { display:grid;gap:12px;margin-top:26px; }
+.app-shell .welcome-actions>button { min-height:45px;font-size:13px;border-radius:9px; }
+.app-shell .welcome-actions>.google-sign-in { border-radius:24px; }
+.welcome-actions>#welcomeGuest { display:flex;justify-content:center;align-items:center;gap:14px;background:#292b3e;border:1px solid #48455d;color:#ded5f5; }
+.welcome-card>.welcome-note { font-size:10px;line-height:1.8;margin:20px 0 0;color:#8996af; }
+#welcomeFeedback { color:#e8b2bf;font-size:11px;line-height:1.8;margin:14px 0 0; }
+#welcomeFeedback:empty { display:none; }
+.welcome-footer { color:#75819a;font-size:10px;margin-top:28px; }
+.app-shell #profileDialog { width:min(580px,calc(100vw - 32px)); }
+#profileDialog .profile-dialog-header { padding:23px 26px 18px;background:#1a1e2a; }
+#profileDialog .profile-dialog-header h2 { font-size:23px;letter-spacing:-.5px;margin:7px 0; }
+#profileDialog .profile-dialog-body { padding:20px 26px; }
+.profile-identity-card { border:1px solid #3d4058;border-radius:13px;background:#252638;padding:17px 18px 12px; }
+#profileDialog .profile-photo-row { margin:0;gap:17px; }
+.app-shell #profileDialog .profile-photo-preview { width:76px;height:76px;flex-basis:76px;border:2px solid #a69ac4;box-shadow:0 0 0 5px #181c2b; }
+.profile-identity-copy { min-width:0; }
+.profile-identity-copy>strong { display:block;font-size:19px;letter-spacing:-.35px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.profile-identity-copy>span { display:block;font-size:10px;color:#9ea9c2;margin:6px 0 10px; }
+.profile-identity-copy .row { gap:6px; }
+.app-shell #profileChoosePhoto { background:#39354e;border-color:#625778;color:#ede5ff;font-size:10px;min-height:30px;padding:6px 10px; }
+.app-shell #profileRemovePhoto { font-size:10px;padding:6px 10px; }
+.profile-photo-hint { font-size:9px;color:#8794af;margin:14px 0 0;padding-top:11px;border-top:1px solid #3b3c52; }
+.profile-name-field { margin:22px 0; }
+#profileDialog .profile-name-field label { display:block;font-size:12px;color:#ccd2e2; }
+.profile-name-field input { width:100%;min-height:42px;border-radius:8px;font-size:13px; }
+.profile-field-note { display:block;font-size:9px;line-height:1.6;color:#8594ae;margin-top:8px; }
+#profileDialog .profile-google { margin:0;padding:16px 17px;border:1px solid #373e50;border-radius:11px;background:#171d27; }
+.profile-account-heading { display:flex;align-items:center;gap:11px;margin-bottom:14px; }
+.profile-account-icon { display:grid;place-items:center;flex:0 0 32px;height:32px;background:#2c3343;border:1px solid #4b546b;border-radius:9px;color:#c3cbdc;font-size:17px;font-weight:600; }
+.profile-account-heading>div { flex:1;min-width:0; }
+#profileDialog .profile-account-heading p { margin:5px 0 0;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.profile-account-badge { color:#99a7c2;background:#2b3241;padding:5px 7px;border-radius:6px;font-size:9px; }
+.profile-account-badge.linked { color:#9bd2ba;background:#243c36; }
+#profileDialog .profile-google .fine { margin-top:12px;font-size:9px;color:#8593ac; }
+.app-shell #profileDialog .profile-sounds-option { align-items:center;border:1px solid #363e50;border-radius:11px;padding:14px 16px;margin-top:14px;background:#191f2b;gap:12px; }
+.profile-sound-icon { font-size:25px;color:#b5a5dc; }
+.profile-sounds-option>span:nth-child(2) { flex:1; }
+#profileDialog .profile-sounds-option small { font-size:9px;line-height:1.7;margin-top:4px; }
+.app-shell #profileDialog .profile-sounds-option input { appearance:none;width:34px;height:20px;flex:0 0 34px;border:1px solid #50596d;border-radius:20px;background:#3a4252;position:relative;cursor:pointer; }
+.profile-sounds-option input::after { content:'';position:absolute;width:12px;height:12px;left:3px;top:3px;background:#b8c0d2;border-radius:50%; }
+.app-shell #profileDialog .profile-sounds-option input:checked { background:#8270b0;border-color:#a08acb; }
+.profile-sounds-option input:checked::after { left:17px;background:#fff; }
+#profileDialog .profile-privacy { font-size:9px;margin-top:14px;line-height:1.8;color:#8593ab; }
+#profileDialog .profile-dialog-footer { padding:14px 26px; }
+@media(max-height:790px) { #profileDialog .profile-dialog-header { padding:17px 24px 14px; }#profileDialog .profile-dialog-body { padding:17px 24px; }.profile-name-field { margin:17px 0; }.profile-identity-card { padding:14px; }.welcome-page { padding:20px; }.welcome-card { padding:22px 28px; }.welcome-brand { margin-bottom:20px; }.welcome-art { height:64px;margin-bottom:16px; }.welcome-card h1 { font-size:30px; }.welcome-footer { margin-top:18px; } }

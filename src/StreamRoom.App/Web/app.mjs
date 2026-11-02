@@ -4,6 +4,7 @@ import { createZeroTierUi } from './zerotier-ui.mjs';
 import { createStreamViewport } from './stream-viewport.mjs';
 import { createProfileUi, showAvatar } from './profile-ui.mjs';
 import { createFriendsUi } from './friends-ui.mjs';
+import { createWelcomeUi } from './welcome-ui.mjs';
 import { createUiSounds, createViewerNotifications } from './ui-sounds.mjs';
 const $ = id => document.getElementById(id);
 $('transmissionPage').append($('settingsTransmission'));
@@ -42,6 +43,10 @@ const profileUi = createProfileUi(native, (profile, note) => {
   void save().catch(() => {}); status(note || (state.connected ? 'Perfil atualizado na sala.' : 'Perfil salvo neste PC.'));
 });
 const uiSounds = createUiSounds(() => profileUi.soundsEnabled);
+const welcomeUi=createWelcomeUi(native,(profile,account)=>{
+  if(profile)profileUi.start(profile,account,true);
+  render();void save().catch(()=>{});
+});
 const viewerSounds = createViewerNotifications(kind => uiSounds.play(kind));
 function options() { return { quality: Number($('quality').value), fps: Number($('fps').value), audio: $('audio').value, autoQuality: $('autoQuality').checked, upload: Number($('upload').value) }; }
 function node(tag, className, text) { const e = document.createElement(tag); if (className) e.className = className; if (text !== undefined) e.textContent = text; return e; }
@@ -452,6 +457,7 @@ $('copyDiagnostics').addEventListener('click', () => busy(async () => {
 }));
 try {
   const r = await native('ready');
+  welcomeUi.start(r);
   await refreshGroup();
   await zeroTierUi.start(r);
   for (const [key,value] of Object.entries(r.settings ?? {})) { const input=$(key); if (!input) continue; if(input.type==='checkbox') input.checked=Boolean(value); else input.value=String(value); }
