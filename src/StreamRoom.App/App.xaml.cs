@@ -3,6 +3,9 @@ using Velopack;
 namespace StreamRoom.App;
 public partial class App : Application
 {
+    public static int MediaTestHeight { get; private set; } = 720;
+    public static string? MediaTestRole { get; private set; }
+    public static string? MediaTestDirectory { get; private set; }
     public static string? PickerPreviewOutput { get; private set; }
     public static string? CaptureTestOutput { get; private set; }
     public static string? NetworkTestOutput { get; private set; }
@@ -10,6 +13,15 @@ public partial class App : Application
     public static void Main(string[] args)
     {
         VelopackApp.Build().Run();
+        int mediaTest = Array.IndexOf(args, "--media-room-test");
+        if (mediaTest >= 0)
+        {
+            MediaTestRole = args.ElementAtOrDefault(mediaTest + 1);
+            if (MediaTestRole is not ("host" or "viewer")) throw new ArgumentException("Expected host or viewer.");
+            MediaTestDirectory = System.IO.Path.GetFullPath(args.ElementAtOrDefault(mediaTest + 2) ?? "media-room-test");
+            System.IO.Directory.CreateDirectory(MediaTestDirectory);
+            if (int.TryParse(args.ElementAtOrDefault(mediaTest + 3), out var testHeight) && testHeight is 480 or 720 or 1080) MediaTestHeight = testHeight;
+        }
         int pickerPreview = Array.IndexOf(args, "--picker-preview");
         if (pickerPreview >= 0) PickerPreviewOutput = System.IO.Path.GetFullPath(args.ElementAtOrDefault(pickerPreview + 1) ?? "picker-preview.png");
         int bridgeTest = Array.IndexOf(args, "--wgc-bridge-test");

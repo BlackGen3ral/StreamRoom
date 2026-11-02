@@ -29,6 +29,8 @@ A alternativa portátil está no artefato **StreamRoom-win-x64-development**. Ex
 
 A grade preserva os elementos de vídeo ao atualizar participantes/estatísticas. Ampliar uma fonte não reinicia as conexões. Parar uma fonte ou sair como participante remove apenas suas assinaturas/publicação; o encerramento da sala pelo criador continua uma ação separada.
 
+Para maior fluidez ao compartilhar um monitor, comece com **720p e 60 FPS** e selecione 720p60 no player que recebe. A captura nativa reduz fontes maiores pela GPU quando disponível e mantém o envio com o app minimizado. Resultados e limitações dos testes estão em [fluidez da captura de monitor](docs/MONITOR-CAPTURE-PERFORMANCE.md).
+
 ## Captura e áudio
 
 Vídeo real por Windows Graphics Capture no seletor próprio, com fallback explícito para Screen Capture do WebView2. Não há hook do OBS, nem captura/áudio/vídeo simulados. Jogos protegidos, com anticheat ou em tela cheia exclusiva podem exigir janela sem bordas ou monitor. Minimizar a janela capturada pode pausar ou reduzir os frames.

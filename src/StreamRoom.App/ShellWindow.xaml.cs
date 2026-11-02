@@ -35,6 +35,7 @@ public partial class ShellWindow : Window
     private int _pendingAudio;
     private readonly Dictionary<string, SignalingClient> _testClients = new();
     private WindowState _previousState;
+    private CaptureTestScene? _mediaTestScene;
     private readonly System.Windows.Threading.DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(30) };
     private static string DataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StreamRoom");
 
@@ -55,8 +56,8 @@ public partial class ShellWindow : Window
         try
         {
             Directory.CreateDirectory(DataDirectory);
-            var browserOptions = new CoreWebView2EnvironmentOptions { Language = "pt-BR" };
-            var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(DataDirectory, "WebView2"), browserOptions);
+            var browserOptions = new CoreWebView2EnvironmentOptions { Language = "pt-BR", AdditionalBrowserArguments = "--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows" };
+            var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(App.MediaTestDirectory ?? DataDirectory, "WebView2"), browserOptions);
             await Browser.EnsureCoreWebView2Async(environment);
             var core = Browser.CoreWebView2;
             core.Settings.AreDevToolsEnabled = false;
@@ -79,7 +80,7 @@ public partial class ShellWindow : Window
                 await DisconnectAsync();
                 MessageBox.Show("O motor de mídia foi interrompido. A sala e a captura de áudio foram encerradas. Feche e reabra o StreamRoom.", "StreamRoom");
             };
-            core.Navigate(Origin + (App.CaptureTestOutput is not null ? "/capture-test.html" : App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
+            core.Navigate(Origin + (App.MediaTestRole is not null ? "/media-room-test.html" : App.CaptureTestOutput is not null ? "/capture-test.html" : App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
             _updateTimer.Tick += async (_, _) =>
             {
                 if (!await _updateCommands.WaitAsync(0)) return;
@@ -181,6 +182,27 @@ public partial class ShellWindow : Window
                     await File.WriteAllTextAsync(App.CaptureTestOutput, p.GetRawText());
                     _ = Dispatcher.BeginInvoke(Close);
                     break;
+                case "mediaTestSetup" when App.MediaTestRole is not null:
+                    if (App.MediaTestRole == "host") { _mediaTestScene = new CaptureTestScene(); _mediaTestScene.Show(); }
+                    else { MinWidth = 400; MinHeight = 300; Width = 500; Height = 350; Left = SystemParameters.PrimaryScreenWidth - 510; Top = 0; }
+                    result = new { role = App.MediaTestRole, server = "https://streamroom.arthostudio.com", quality = App.MediaTestHeight, fps = 60 };
+                    break;
+                case "mediaTestInvite" when App.MediaTestRole is not null:
+                    var invitationPath = Path.Combine(App.MediaTestDirectory!, "invitation.txt");
+                    if (App.MediaTestRole == "host") await File.WriteAllTextAsync(invitationPath, p.GetProperty("invitation").GetString());
+                    result = File.Exists(invitationPath) ? await File.ReadAllTextAsync(invitationPath) : "";
+                    break;
+                case "mediaTestMonitor" when App.MediaTestRole == "host":
+                    result = new { id = _captureSources.AddTestMonitor(new System.Windows.Interop.WindowInteropHelper(_mediaTestScene!).Handle) };
+                    break;
+                case "mediaTestState" when App.MediaTestRole == "host":
+                    WindowState = p.GetProperty("minimized").GetBoolean() ? WindowState.Minimized : WindowState.Normal;
+                    result = new { mode = _nativeCapture?.TransferMode, failure = _nativeCapture?.ScaleFailure, frames = _nativeCapture?.FrameCount, sourceWidth = _nativeCapture?.SourceWidth, sourceHeight = _nativeCapture?.SourceHeight, arrivals = _nativeCapture?.Arrivals, busy = _nativeCapture?.BusyDrops, backpressure = _nativeCapture?.BackpressureDrops, copyMs = _nativeCapture?.LastCopyMs, ticks = _mediaTestScene?.Ticks };
+                    break;
+                case "mediaTestResult" when App.MediaTestRole is not null:
+                    await File.WriteAllTextAsync(Path.Combine(App.MediaTestDirectory!, App.MediaTestRole + ".json"), p.GetRawText());
+                    _ = Dispatcher.BeginInvoke(Close);
+                    break;
                 case "captureSources":
                     result = new { supported = NativeCapture.Supported, sources = await Task.Run(() => _captureSources.List()) };
                     break;
@@ -199,7 +221,7 @@ public partial class ShellWindow : Window
                         if (_nativeSession != nativeSession) return;
                         StopNativeCapture(); Emit(new { type = "nativeCaptureEnded", session = nativeSession, message = reason });
                     });
-                    try { capture.Start(captureSource, p.GetProperty("fps").GetInt32()); }
+                    try { capture.Start(captureSource, p.GetProperty("fps").GetInt32(), p.TryGetProperty("quality", out var quality) ? quality.GetInt32() : 720); }
                     catch { StopNativeCapture(); throw; }
                     result = new { session = nativeSession, name = captureSource.Name };
                     break;
@@ -358,6 +380,7 @@ public partial class ShellWindow : Window
         if (_closing) return;
         e.Cancel = true;
         _closing = true; _updateTimer.Stop(); StopNativeCapture();
+        _mediaTestScene?.Close();
         try { if (_ready) await Browser.ExecuteScriptAsync("window.streamroom?.shutdown()").WaitAsync(TimeSpan.FromSeconds(2)); } catch { }
         await DisconnectAsync();
         foreach (var client in _testClients.Values) await client.DisposeAsync();

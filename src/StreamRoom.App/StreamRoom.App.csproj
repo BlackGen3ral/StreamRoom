@@ -16,6 +16,7 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="Velopack" Version="1.2.161" />
     <ApplicationDefinition Remove="App.xaml" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <Page Include="App.xaml" />
     <Content Include="Web\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

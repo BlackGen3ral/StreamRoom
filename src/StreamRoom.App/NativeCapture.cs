@@ -17,19 +17,33 @@ internal sealed class NativeCapture : IDisposable
     private int _processing;
     private long _nextFrame;
     private long _interval;
-    private bool _disposed;
+    private volatile bool _disposed;
+    public long Arrivals;
+    public long BackpressureDrops;
+    public long BusyDrops;
+    public double LastCopyMs;
     private Windows.Storage.Streams.Buffer? _readback;
     private byte[]? _pixels;
+    private readonly object _lifetimeGate = new();
+    private CaptureScaler? _scaler;
+    private int _maxHeight;
+    private bool _scaleUnavailable;
+    public long FrameCount { get; private set; }
+    public int SourceWidth { get; private set; }
+    public int SourceHeight { get; private set; }
+    public string? ScaleFailure { get; private set; }
+    public string TransferMode { get; private set; } = "software-readback";
     public Func<bool>? CanDeliver { get; set; }
     public event Action<byte[], int, int>? Frame;
     public event Action<string>? Ended;
     public static bool Supported => GraphicsCaptureSession.IsSupported();
-    public void Start(CaptureSource source, int fps)
+    public void Start(CaptureSource source, int fps, int maxHeight = 1080)
     {
         if (!Supported) throw new NotSupportedException("O Windows não oferece captura WGC neste dispositivo.");
+        _maxHeight = maxHeight is 480 or 720 or 1080 ? maxHeight : 720;
         _interval = Stopwatch.Frequency / Math.Clamp(fps, 15, 60);
         _item = CreateItem(source);
-        _device = CreateDevice();
+        _device = CreateDevice(source);
         _pool = Direct3D11CaptureFramePool.CreateFreeThreaded(_device, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, _item.Size);
         _pool.FrameArrived += OnFrame;
         _item.Closed += OnClosed;
@@ -40,17 +54,46 @@ internal sealed class NativeCapture : IDisposable
     private void OnClosed(GraphicsCaptureItem sender, object args) => Ended?.Invoke("A fonte compartilhada foi fechada.");
     private async void OnFrame(Direct3D11CaptureFramePool pool, object args)
     {
-        if (_disposed || Interlocked.CompareExchange(ref _processing, 1, 0) != 0) return;
+        Interlocked.Increment(ref Arrivals);
+        if (_disposed || Interlocked.CompareExchange(ref _processing, 1, 0) != 0) { Interlocked.Increment(ref BusyDrops); return; }
         try
         {
             using var frame = pool.TryGetNextFrame();
             if (frame is null) return;
             long now = Stopwatch.GetTimestamp();
             // A monotonic deadline tolerates frame-arrival jitter without halving 60 FPS capture.
-            if (now + Stopwatch.Frequency / 500 < _nextFrame || CanDeliver?.Invoke() == false) return;
+            if (CanDeliver?.Invoke() == false) { Interlocked.Increment(ref BackpressureDrops); return; }
+            if (now + Stopwatch.Frequency / 500 < _nextFrame) return;
             _nextFrame = Math.Max(_nextFrame + _interval, now);
             int width = frame.ContentSize.Width, height = frame.ContentSize.Height;
+            SourceWidth = width; SourceHeight = height;
             if (width < 1 || height < 1 || (long)width * height > 34_000_000) return;
+            var surfaceSize = frame.Surface.Description;
+            if (width != surfaceSize.Width || height != surfaceSize.Height)
+            {
+                frame.Dispose();
+                if (!_disposed) pool.Recreate(_device!, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, new Windows.Graphics.SizeInt32 { Width = width, Height = height });
+                return;
+            }
+            if (!_scaleUnavailable && (width > _maxHeight * 16 / 9 || height > _maxHeight))
+            {
+                try
+                {
+                    lock (_lifetimeGate)
+                    {
+                        if (_disposed) return;
+                        _scaler ??= new CaptureScaler();
+                        long copyStart = Stopwatch.GetTimestamp();
+                        var pixels = _scaler.Read(frame.Surface, width, height, _maxHeight, out int outputWidth, out int outputHeight);
+                        LastCopyMs = Stopwatch.GetElapsedTime(copyStart).TotalMilliseconds;
+                        TransferMode = "gpu-scale";
+                        FrameCount++;
+                        Frame?.Invoke(pixels, outputWidth, outputHeight);
+                    }
+                    return;
+                }
+                catch (Exception scaleError) { ScaleFailure = scaleError.ToString(); lock (_lifetimeGate) { _scaler?.Dispose(); _scaler = null; _scaleUnavailable = true; TransferMode = "software-readback"; } }
+            }
             using var bitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(frame.Surface);
             if (_disposed) return;
             // CopyToBuffer packs BGRA pixels. IPC uses shared memory, never base64-encoded video.
@@ -59,6 +102,7 @@ internal sealed class NativeCapture : IDisposable
             bitmap.CopyToBuffer(_readback!);
             using var reader = DataReader.FromBuffer(_readback!);
             reader.ReadBytes(_pixels);
+            FrameCount++;
             Frame?.Invoke(_pixels, bitmap.PixelWidth, bitmap.PixelHeight);
             if (!_disposed && (width != bitmap.PixelWidth || height != bitmap.PixelHeight))
             {
@@ -74,6 +118,7 @@ internal sealed class NativeCapture : IDisposable
         _disposed = true;
         if (_item is not null) _item.Closed -= OnClosed;
         if (_pool is not null) _pool.FrameArrived -= OnFrame;
+        lock (_lifetimeGate) { _scaler?.Dispose(); _scaler = null; }
         _session?.Dispose(); _pool?.Dispose(); _device?.Dispose();
         _session = null; _pool = null; _device = null; _item = null;
     }
@@ -94,13 +139,14 @@ internal sealed class NativeCapture : IDisposable
         }
         finally { if (item != 0) Marshal.Release(item); if (factory != 0) Marshal.Release(factory); WindowsDeleteString(name); }
     }
-    private static IDirect3DDevice CreateDevice()
+    private static IDirect3DDevice CreateDevice(CaptureSource source)
     {
         nint device = 0, context = 0, dxgi = 0, inspectable = 0;
         try
         {
             // D3D_DRIVER_TYPE_HARDWARE; fail explicitly instead of silently using software capture.
-            Marshal.ThrowExceptionForHR(D3D11CreateDevice(0, 1, 0, 0x20, 0, 0, 7, out device, out _, out context));
+            using var adapter = FindAdapter(source);
+            Marshal.ThrowExceptionForHR(D3D11CreateDevice(adapter?.NativePointer ?? 0, adapter is null ? 1u : 0u, 0, 0x20, 0, 0, 7, out device, out _, out context));
             Guid iid = new("54ec77fa-1377-44e6-8c32-88fd5f44c84c");
             Marshal.ThrowExceptionForHR(Marshal.QueryInterface(device, in iid, out dxgi));
             Marshal.ThrowExceptionForHR(CreateDirect3D11DeviceFromDXGIDevice(dxgi, out inspectable));
@@ -108,6 +154,22 @@ internal sealed class NativeCapture : IDisposable
         }
         finally { if (inspectable != 0) Marshal.Release(inspectable); if (dxgi != 0) Marshal.Release(dxgi); if (context != 0) Marshal.Release(context); if (device != 0) Marshal.Release(device); }
     }
+    // Match the display adapter to avoid copying a monitor through the other GPU on hybrid PCs.
+    private static Vortice.DXGI.IDXGIAdapter1? FindAdapter(CaptureSource source)
+    {
+        nint monitor = source.Kind == "monitor" ? source.Handle : MonitorFromWindow(source.Handle, 2);
+        using var factory = Vortice.DXGI.DXGI.CreateDXGIFactory1<Vortice.DXGI.IDXGIFactory1>();
+        for (uint index = 0; factory.EnumAdapters1(index, out var adapter).Success; index++)
+        {
+            for (uint outputIndex = 0; adapter.EnumOutputs(outputIndex, out var output).Success; outputIndex++)
+            {
+                using (output) { if (output.Description.Monitor == monitor) return adapter; }
+            }
+            adapter.Dispose();
+        }
+        return null;
+    }
+    [DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint hwnd, uint flags);
     [ComImport, Guid("3628e81b-3cac-4c60-b7f4-23ce0e0c3356"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface ICaptureInterop
     {

@@ -14,6 +14,15 @@ internal sealed class CaptureSources
     private readonly Dictionary<string, CaptureSource> _sources = new();
     public string AddTestWindow(nint handle)
     { var id = Guid.NewGuid().ToString("N"); _sources.Add(id, new(id, "window", "Teste WGC", null, handle, (uint)Environment.ProcessId)); return id; }
+    public string AddTestMonitor(nint window)
+    {
+        var monitor = MonitorFromWindow(window, 2);
+        var info = new MonitorInfo();
+        if (!GetMonitorInfo(monitor, info)) throw new InvalidOperationException("Test monitor unavailable.");
+        var id = Guid.NewGuid().ToString("N");
+        _sources.Add(id, new(id, "monitor", "Monitor de teste", null, monitor, 0));
+        return id;
+    }
     public CaptureSource Resolve(string id)
     {
         if (!_sources.TryGetValue(id, out var source)) throw new InvalidOperationException("Atualize a lista e selecione a fonte novamente.");
@@ -96,6 +105,7 @@ internal sealed class CaptureSources
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] private sealed class MonitorInfo { public int Size = Marshal.SizeOf<MonitorInfo>(); public Rect Monitor, Work; public uint Flags; }
     private delegate bool WindowCallback(nint handle, nint data);
     private delegate bool MonitorCallback(nint monitor, nint dc, ref Rect rect, nint data);
+    [DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint hwnd, uint flags);
     [DllImport("user32.dll")] private static extern bool EnumWindows(WindowCallback callback, nint data);
     [DllImport("user32.dll")] private static extern bool EnumDisplayMonitors(nint dc, nint clip, MonitorCallback callback, nint data);
     [DllImport("user32.dll")] private static extern bool GetMonitorInfo(nint monitor, [In, Out] MonitorInfo info);

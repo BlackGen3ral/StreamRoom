@@ -77,7 +77,7 @@ export class RtcRoom extends EventTarget {
     try {
       const video = stream.getVideoTracks()[0];
       video.contentHint = 'motion';
-      await video.applyConstraints({ width: { max: config.width }, height: { max: config.height }, frameRate: { max: config.fps } });
+      if (!options.nativeSource) await video.applyConstraints({ width: { max: config.width }, height: { max: config.height }, frameRate: { max: config.fps } });
       video.onended = () => { if (this.localStream === stream) void this.stopCapture(); };
       if (options.audio === 'system') {
         const format = await this.native('audioStart');

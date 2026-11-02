@@ -4,7 +4,7 @@ Status: primeiro caminho WGC funcional implementado. O seletor próprio lista ja
 
 Validação local: compilação sem erros; captura de janela real (185 frames/5 segundos, pixels verificados); teste WGC -> memória compartilhada -> VideoFrame/canvas -> RTCPeerConnection -> vídeo remoto (200 frames decodificados, 49 FPS reportados na recepção adaptada de 311×203, pixels verificados, seletor Chromium não chamado). Isso não certifica 1080p60, vários PCs ou áudio isolado por processo. O modo nativo oferece áudio do sistema/sem áudio; o modo compatível mantém áudio por janela.
 
-Implementação atual: buffers BGRA reutilizados, um frame de IPC em voo com ACK e watchdog, pool WGC de dois frames, descarte sob pressão e ponte canvas. Há readback da GPU e cópias CPU; encoder permanece a cargo do WebRTC/Chromium. Nenhuma garantia de zero-copy ou NVENC forçado.
+Implementação atual: redução pela GPU antes do readback quando a fonte excede a qualidade escolhida; um frame de IPC em voo com ACK e watchdog, pool WGC de dois frames e track gerada diretamente de VideoFrame. Canvas permanece como alternativa para runtimes antigos. Há readback da GPU e cópias CPU; encoder permanece a cargo do WebRTC/Chromium. Nenhuma garantia de zero-copy ou NVENC forçado.
 
 
 ## Arquitetura
@@ -57,3 +57,7 @@ Os testes capturam somente a própria janela de teste. O segundo cria um par Web
 A captura usa relógio monotônico e prazo acumulado com tolerância de 2 ms, evitando descartar frames de 60 FPS por pequenas variações de chegada. O buffer compartilhado é reaproveitado somente depois da confirmação do navegador; mudança de tamanho e parada liberam o buffer. A confirmação de frame não cria mais uma requisição/resposta completa. O encoder só recebe setParameters quando bitrate, FPS ou escala mudarem; falhas continuam sendo tentadas novamente.
 
 Teste local comparativo com H.264, teto de 20 Mbps, preferência por manter resolução e vídeo de 1246×812: a versão anterior decodificou 263–282 frames; a alteração final decodificou 302 frames durante a mesma janela de teste de 6 segundos. O FPS reportado no fim ficou próximo de 50 nas duas versões. A melhora observada foi na entrega total, sem comprovação de 1080p60 ou desempenho pela internet. Treze testes de regressão de mídia/P2P passaram, além do teste real WGC→WebRTC.
+
+## Captura de monitor entre processos
+
+O teste anterior de uma única janela não cobria o caso de monitor inteiro em duas instâncias. A correção, os limites medidos e o teste reproduzível estão em [MONITOR-CAPTURE-PERFORMANCE.md](MONITOR-CAPTURE-PERFORMANCE.md).

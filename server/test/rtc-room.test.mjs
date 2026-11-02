@@ -76,3 +76,14 @@ test('stable sender settings avoid encoder reconfiguration and failed changes ar
  fail=false;await room.configureSender(peer);
  assert.equal(calls,4);assert.equal(last.encodings[0].maxFramerate,60);
 });
+
+test('native tracks keep native size and pacing without unsupported browser constraints',async t=>{
+ const room=new RtcRoom(async()=>{});t.after(()=>room.shutdown());
+ room.enter({participantId:id()});let stopped=false;
+ const track={kind:'video',applyConstraints(){throw Error('Generator constraints are unsupported');},getSettings:()=>({width:1280,height:720}),stop(){stopped=true;}};
+ const stream={getTracks:()=>[track],getVideoTracks:()=>[track],getAudioTracks:()=>[]};
+ const bridge={name:'Monitor',start:async()=>stream,stop:async()=>{}};
+ await room.startCapture({quality:720,fps:60,upload:24,audio:'none',autoQuality:true,nativeSource:{bridge,sourceId:'monitor-test'}});
+ assert.equal(room.localStream,stream);assert.equal(track.contentHint,'motion');
+ await room.stopCapture();assert.equal(stopped,true);
+});
