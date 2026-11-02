@@ -37,7 +37,10 @@ function quality(card) { const [height, fps] = card.quality.value.split(':').map
 function createCard(id, streamId) {
   const own = id === rtc.identity?.participantId, card = { id, streamId, own };
   card.root = node('section', 'stream-card card'); card.root.dataset.publisher = id;
-  const heading = node('div', 'section-title'); card.title = node('h2'); heading.append(card.title, node('span', 'muted', own ? 'Sua transmissão' : 'Ao vivo'));
+  const heading = node('div', 'section-title stream-heading');
+  const identity = node('div', 'stream-identity'); card.avatar = node('span', 'stream-avatar'); card.avatar.setAttribute('aria-hidden', 'true');
+  const labels = node('div'); card.title = node('h2'); labels.append(card.title, node('span', 'stream-caption', own ? 'Sua tela · prévia sem som' : 'Tela compartilhada'));
+  identity.append(card.avatar, labels); heading.append(identity, node('span', 'live-indicator', 'AO VIVO'));
   card.frame = node('div', 'player-card'); card.video = node('video'); card.video.autoplay = true; card.video.playsInline = true; card.video.muted = true;
   card.empty = node('p', 'stream-placeholder', own ? 'Prévia local sem som' : 'Escolha Assistir para receber esta gameplay.');
   card.play = button('▶ Reproduzir', async () => { try { await card.video.play(); card.play.hidden = true; } catch (e) { status(e.message, true); } }); card.play.className = 'overlay-play'; card.play.hidden = true;
@@ -64,7 +67,14 @@ function createCard(id, streamId) {
   card.volume = node('input'); card.volume.type = 'range'; card.volume.min = '0'; card.volume.max = '1'; card.volume.step = '.01'; card.volume.value = '.8'; card.video.volume = .8; card.volume.hidden = own;
   card.volume.setAttribute('aria-label', 'Volume desta transmissão');
   card.volume.addEventListener('input', () => { card.video.volume = Number(card.volume.value); card.video.muted = card.video.volume === 0; card.mute.textContent = card.video.muted ? 'Ativar som' : 'Silenciar'; });
-  const enlarge = button('Destacar', () => { const focused = card.root.classList.toggle('expanded'); enlarge.textContent = focused ? 'Voltar à grade' : 'Destacar'; });
+  const enlarge = button('Destacar', () => {
+    const focused = !card.root.classList.contains('expanded');
+    for (const other of cards.values()) { other.root.classList.remove('expanded'); other.enlarge.textContent = 'Destacar'; other.enlarge.setAttribute('aria-pressed', 'false'); }
+    card.root.classList.toggle('expanded', focused); enlarge.textContent = focused ? 'Voltar à grade' : 'Destacar'; enlarge.setAttribute('aria-pressed', String(focused));
+    $('streamGrid').classList.toggle('has-highlight', focused);
+    if (focused) card.root.scrollIntoView({ block: 'start', behavior: 'instant' });
+  });
+  card.enlarge = enlarge; enlarge.setAttribute('aria-pressed', 'false');
   const fullscreen = button('Tela cheia', async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await card.root.requestFullscreen(); } catch (e) { status(e.message, true); } });
   card.pause = button('Pausar reprodução', async () => {
     if (!card.video.srcObject) return;
@@ -80,8 +90,10 @@ function createCard(id, streamId) {
   }
   fit.addEventListener('change', () => { card.video.style.objectFit = fit.value; });
   const more = node('details', 'stream-more'); more.append(node('summary', '', 'Mais opções'));
-  const extra = node('div', 'stream-extra'); extra.append(card.pause, fit, enlarge); more.append(extra);
-  controls.append(card.watch, card.retry, card.quality, card.mute, card.volume, fullscreen, more);
+  const extra = node('div', 'stream-extra'); extra.append(card.pause, fit); more.append(extra);
+  card.watch.classList.add('stream-action'); if (own) card.watch.classList.add('stream-stop');
+  fullscreen.classList.add('stream-fullscreen'); enlarge.classList.add('stream-enlarge');
+  controls.append(card.watch, card.retry, card.quality, card.mute, card.volume, enlarge, fullscreen, more);
   card.metrics = node('p', 'fine', own ? 'Sem espectadores: nenhum vídeo é enviado.' : 'Sem recepção: nenhum vídeo é solicitado.');
   card.root.append(heading, card.frame, controls, card.metrics); cards.set(id, card); $('streamGrid').append(card.root); return card;
 }
@@ -100,6 +112,7 @@ function renderStreams() {
     const card = cards.get(p.id) ?? createCard(p.id, p.streamId);
     const watched = rtc.subscriptions.some(s => s.publisherId === p.id && s.streamId === p.streamId);
     card.title.textContent = p.name + (card.own ? ' · você' : '');
+    card.avatar.textContent = p.name.slice(0, 1).toUpperCase();
     card.quality.setAttribute('aria-label', 'Qualidade de ' + p.name);
     const stream = card.own ? rtc.localStream : watched && remoteStreams.get(p.id)?.streamId === p.streamId ? remoteStreams.get(p.id).stream : null;
     if (card.video.srcObject !== stream) {
@@ -117,6 +130,7 @@ function renderStreams() {
   }
   $('streamGrid').hidden = streams.length === 0; $('playerEmpty').hidden = streams.length !== 0;
   $('streamCount').textContent = streams.length + ' ao vivo';
+  $('streamGrid').classList.toggle('has-highlight', [...cards.values()].some(card => card.root.classList.contains('expanded')));
 }
 function renderProfile() {
   const name = $('name').value.trim() || 'Você';
@@ -145,7 +159,8 @@ function render() {
   $('startCompatible').disabled = !state.connected || state.busy;
   $('captureSetup').hidden = Boolean(rtc.localStream);
   if (!rtc.localStream) $('source').textContent = state.connected ? 'Você confirma a fonte no seletor.' : 'Entre em uma sala para começar.';
-  $('start').hidden = Boolean(rtc.localStream); $('stop').hidden = !rtc.localStream; $('stop').disabled = state.busy;
+  $('start').hidden = Boolean(rtc.localStream); $('stop').hidden = true; $('stop').disabled = state.busy;
+  document.body.classList.toggle('is-sharing', Boolean(rtc.localStream));
   for (const id of ['quality', 'fps', 'audio']) $(id).disabled = Boolean(rtc.localStream);
   $('showTransmissionSettings').textContent = $('quality').value + 'p · ' + $('fps').value + ' FPS';
   $('networkBadge').textContent = state.connected ? 'Sala conectada' : 'Desconectado'; $('networkBadge').classList.toggle('connected', state.connected);
