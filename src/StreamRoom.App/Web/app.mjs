@@ -79,6 +79,8 @@ function createCard(id, streamId) {
   card.quality.addEventListener('change', () => busy(async () => { if (rtc.subscriptions.some(s => s.publisherId === id)) await rtc.watch(id, true, quality(card).height, quality(card).fps); }));
   card.mute = button('Ativar som', async () => { card.video.muted = !card.video.muted; card.mute.textContent = card.video.muted ? 'Ativar som' : 'Silenciar'; });
   card.mute.hidden = own;
+  card.sendMute = button('Silenciar live', () => { try { rtc.setCaptureAudioMuted(!rtc.captureAudioMuted); } catch(error) { status(error.message,true); } });
+  card.sendMute.classList.add('stream-audio');card.sendMute.hidden = !own;
   card.volume = node('input'); card.volume.type = 'range'; card.volume.min = '0'; card.volume.max = '1'; card.volume.step = '.01'; card.volume.value = '.8'; card.video.volume = .8; card.volume.hidden = own;
   card.volume.setAttribute('aria-label', 'Volume desta transmissão');
   card.volume.addEventListener('input', () => { card.video.volume = Number(card.volume.value); card.video.muted = card.video.volume === 0; card.mute.textContent = card.video.muted ? 'Ativar som' : 'Silenciar'; });
@@ -87,7 +89,7 @@ function createCard(id, streamId) {
     for (const other of cards.values()) { other.root.classList.remove('expanded'); other.enlarge.textContent = 'Destacar'; other.enlarge.setAttribute('aria-pressed', 'false'); }
     card.root.classList.toggle('expanded', focused); enlarge.textContent = focused ? 'Voltar à grade' : 'Destacar'; enlarge.setAttribute('aria-pressed', String(focused));
     $('streamGrid').classList.toggle('has-highlight', focused);
-    if (focused) card.root.scrollIntoView({ block: 'start', behavior: 'instant' });
+    if (focused && $('streamGrid').children.length>1) card.root.scrollIntoView({ block: 'start', behavior: 'instant' });
   });
   card.enlarge = enlarge; enlarge.setAttribute('aria-pressed', 'false');
   const fullscreen = button('Tela cheia', async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await card.root.requestFullscreen(); } catch (e) { status(e.message, true); } });
@@ -111,7 +113,7 @@ function createCard(id, streamId) {
   fullscreen.classList.add('stream-fullscreen'); enlarge.classList.add('stream-enlarge');
   card.retry.classList.add('stream-retry');card.mute.classList.add('stream-audio');
   const primaryActions=node('div','stream-primary-actions'),playbackActions=node('div','stream-playback-actions'),viewActions=node('div','stream-view-actions');
-  primaryActions.append(card.watch,card.retry);playbackActions.append(card.quality,card.mute,card.volume);viewActions.append(enlarge,fullscreen,more);
+  primaryActions.append(card.watch,card.retry,card.sendMute);playbackActions.append(card.quality,card.mute,card.volume);viewActions.append(enlarge,fullscreen,more);
   playbackActions.hidden=own;controls.append(primaryActions,playbackActions,viewActions);
   card.metrics = node('p', 'fine', own ? 'Prévia local · aguardando espectadores' : 'Clique em Assistir para abrir esta tela.');
   card.root.append(heading, card.frame, controls, card.metrics); cards.set(id, card); $('streamGrid').append(card.root);
@@ -147,6 +149,11 @@ function renderStreams() {
     card.retry.hidden = card.own || !watched; card.retry.disabled = state.busy;
     card.watch.disabled = state.busy; card.quality.disabled = state.busy;
     card.mute.disabled = card.volume.disabled = card.pause.disabled = !stream;
+    if(card.own) {
+      const audio = Boolean(rtc.localStream?.getAudioTracks().length);
+      card.sendMute.disabled = !audio; card.sendMute.textContent = !audio ? 'Sem áudio' : rtc.captureAudioMuted ? 'Ativar áudio' : 'Silenciar live';
+      card.sendMute.setAttribute('aria-pressed',String(Boolean(rtc.captureAudioMuted)));
+    }
     if (!watched && !card.own) card.metrics.textContent = 'Sem recepção: nenhum vídeo é solicitado.';
   }
   $('streamGrid').hidden = streams.length === 0; $('playerEmpty').hidden = streams.length !== 0;
@@ -243,6 +250,8 @@ window.chrome.webview.addEventListener('message', ({ data }) => {
   else if (data.type === 'disconnected') void disconnected(data.message);
   else if (data.type === 'serverError' || data.type === 'audioError') status(data.message, true);
   else if (data.type === 'nativeCaptureEnded') { if (rtc.nativeBridge?.session === data.session) { status(data.message, true); void rtc.stopCapture(); } }
+  else if (data.type === 'nativeCaptureDelayed' && rtc.nativeBridge?.session === data.session) status('Aguardando a retomada da ponte de vídeo…');
+  else if (data.type === 'nativeCaptureResumed' && rtc.nativeBridge?.session === data.session) status('Vídeo retomado.');
   else if (data.type === 'pcm') rtc.pushPcm(data.data);
   else if (data.type === 'roomRenewed') showExpiry(data.expiresAt);
   else if (data.type === 'update') showUpdate(data.result);
@@ -261,6 +270,7 @@ rtc.addEventListener('capture', ({ detail }) => {
   if (detail) status('Captura real iniciada: ' + detail.settings.width + '×' + detail.settings.height + '. Vídeo é enviado somente a quem escolher assistir. ' + (detail.audio ? 'Faixa de áudio ativa.' : 'Sem faixa de áudio.'));
   render();
 });
+rtc.addEventListener('captureAudio', () => renderStreams());
 rtc.addEventListener('remote', ({ detail }) => {
   if (detail.stream) remoteStreams.set(detail.id, detail);
   else if (remoteStreams.get(detail.id)?.streamId === detail.streamId) remoteStreams.delete(detail.id);

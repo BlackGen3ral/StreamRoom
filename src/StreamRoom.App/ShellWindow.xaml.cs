@@ -32,7 +32,8 @@ public partial class ShellWindow : Window
     private readonly object _nativeGate = new();
     private long _nativeSequence;
     private readonly System.Windows.Threading.DispatcherTimer _nativeWatchdog = new() { Interval = TimeSpan.FromSeconds(3) };
-    private DateTime _nativeSentAt;
+    private long _nativeSentAt;
+    private bool _nativeDelayed;
     private UpdateInfo? _availableUpdate;
     private bool _updateDownloaded;
     private bool _retiringTailscale;
@@ -62,9 +63,15 @@ public partial class ShellWindow : Window
         Loaded += InitializeAsync;
         _nativeWatchdog.Tick += (_, _) =>
         {
-            if (_nativePending == 0 || DateTime.UtcNow - _nativeSentAt < TimeSpan.FromSeconds(3)) return;
+            // Queued frames have not reached the browser yet. A slow consumer is
+            // allowed to recover without reusing any unacknowledged shared bytes.
+            if (Volatile.Read(ref _nativePending) != 2) return;
+            var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_nativeSentAt);
+            if (elapsed < TimeSpan.FromSeconds(3)) return;
+            if (!_nativeDelayed) { _nativeDelayed = true; Emit(new { type = "nativeCaptureDelayed", session = _nativeSession }); }
+            if (elapsed < TimeSpan.FromSeconds(20)) return;
             var session = _nativeSession; StopNativeCapture();
-            Emit(new { type = "nativeCaptureEnded", session, message = "A ponte de vídeo parou de responder. Tente novamente ou use o modo compatível." });
+            Emit(new { type = "nativeCaptureEnded", session, message = "A ponte de vídeo ficou sem resposta por 20 segundos. Tente novamente ou use o modo compatível." });
         };
         Closing += CloseAsync;
     }
@@ -159,7 +166,10 @@ public partial class ShellWindow : Window
             {
                 var ack = message.GetProperty("payload");
                 if (_nativeSession == ack.GetProperty("session").GetString() && _nativeSequence == ack.GetProperty("frame").GetInt64())
+                {
                     Volatile.Write(ref _nativePending, 0);
+                    if (_nativeDelayed) { _nativeDelayed = false; Emit(new { type = "nativeCaptureResumed", session = _nativeSession }); }
+                }
                 return;
             }
             id = message.GetProperty("id").GetString();
@@ -538,7 +548,8 @@ public partial class ShellWindow : Window
                 if (_nativeBuffer is null || _nativeBuffer.Size != (ulong)pixels.Length)
                 { _nativeBuffer?.Dispose(); _nativeBuffer = Browser.CoreWebView2.Environment.CreateSharedBuffer((ulong)pixels.Length); }
                 using (var stream = _nativeBuffer.OpenStream()) stream.Write(pixels);
-                _nativeSentAt = DateTime.UtcNow;
+                _nativeSentAt = System.Diagnostics.Stopwatch.GetTimestamp();
+                Volatile.Write(ref _nativePending, 2);
                 Browser.CoreWebView2.PostSharedBufferToScript(_nativeBuffer, CoreWebView2SharedBufferAccess.ReadOnly,
                     JsonSerializer.Serialize(new { type = "wgcFrame", session, frame = ++_nativeSequence, width, height }));
                 _nativeWatchdog.Start();
@@ -549,6 +560,7 @@ public partial class ShellWindow : Window
     }
     private void StopNativeCapture()
     {
+        _nativeDelayed = false;
         lock (_nativeGate) { _nativeSession = null; Volatile.Write(ref _nativePending, 0); }
         _nativeCapture?.Dispose(); _nativeCapture = null;
         _nativeBuffer?.Dispose(); _nativeBuffer = null;

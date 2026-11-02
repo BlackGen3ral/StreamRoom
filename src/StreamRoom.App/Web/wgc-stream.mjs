@@ -44,17 +44,26 @@ export class WgcStream {
   async frame(e) {
     const meta = e.additionalData;
     if (meta?.type !== 'wgcFrame') return;
-    const buffer = e.getBuffer();
-    let frame, resized;
+    let buffer, frame, resized, returned = false;
+    const release = () => {
+      if (returned) return; returned = true;
+      try { if (buffer) window.chrome.webview.releaseBuffer(buffer); }
+      finally { window.chrome.webview.postMessage({ type: 'nativeFrameAck', payload: { session: meta.session, frame: meta.frame } }); }
+    };
     try {
+      buffer = e.getBuffer();
       // Frames can arrive before the native start reply; the native session is unique per capture.
       if (!this.active || (this.session && meta.session !== this.session)) return;
       this.session ??= meta.session;
+      if (this.writing || this.writer && this.writer.desiredSize <= 0) return;
       const scale = Math.min(1, this.options.quality / meta.height, (this.options.quality * 16 / 9) / meta.width);
       const width = Math.max(2, Math.floor(meta.width * scale / 2) * 2);
       const height = Math.max(2, Math.floor(meta.height * scale / 2) * 2);
       if (this.canvas.width !== width || this.canvas.height !== height) { this.canvas.width = width; this.canvas.height = height; }
       frame = new VideoFrame(buffer, { format: 'BGRA', codedWidth: meta.width, codedHeight: meta.height, timestamp: Math.round(performance.now() * 1000) });
+      // The raw-data VideoFrame constructor copies the bytes. Return the native
+      // credit now; an unconsumed writable track must not retain shared memory.
+      release();
       if (this.writer) {
         // No animation-frame/canvas capture clock: a hidden sender must keep delivering video.
         if (this.writer.desiredSize <= 0) return;
@@ -62,16 +71,17 @@ export class WgcStream {
           this.context.drawImage(frame, 0, 0, width, height);
           resized = new VideoFrame(this.canvas, { timestamp: frame.timestamp });
         }
-        await this.writer.write(resized ?? frame);
+        const writer = this.writer; this.writing = writer;
+        try { const write = writer.write(resized ?? frame); this.resolveFirst?.(); await write; }
+        finally { if (this.writing === writer) this.writing = null; }
       } else {
         this.context.drawImage(frame, 0, 0, width, height);
         this.stream?.getVideoTracks()[0]?.requestFrame?.();
       }
-      this.resolveFirst();
-    } catch (error) { this.rejectFirst(error); this.ended(error.message); }
+      this.resolveFirst?.();
+    } catch (error) { if (this.active) { this.rejectFirst?.(error); this.ended(error.message); } }
     finally {
-      resized?.close(); frame?.close(); window.chrome.webview.releaseBuffer(buffer);
-      window.chrome.webview.postMessage({ type: 'nativeFrameAck', payload: { session: meta.session, frame: meta.frame } });
+      resized?.close(); frame?.close(); release();
     }
   }
   async stop() {
@@ -79,7 +89,10 @@ export class WgcStream {
     this.rejectFirst?.(Error('Captura encerrada.'));
     window.chrome.webview.removeEventListener('sharedbufferreceived', this.listener);
     for (const track of this.stream?.getTracks() ?? []) track.stop();
-    if (this.writer) { try { await this.writer.abort(); } catch { } this.writer.releaseLock(); this.writer = null; }
+    if (this.writer) {
+      const writer = this.writer; this.writer = null;
+      try { void writer.abort().catch(() => {}).finally(() => { try { writer.releaseLock(); } catch { } }); } catch { }
+    }
     if (this.session) await this.native('nativeCaptureStop', { session: this.session });
     this.session = null;
   }

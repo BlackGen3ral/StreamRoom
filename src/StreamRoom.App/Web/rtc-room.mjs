@@ -104,6 +104,7 @@ export class RtcRoom extends EventTarget {
     this.localId = crypto.randomUUID();
     this.run++; const run = this.run;
     this.localStream = stream;
+    this.captureAudioMuted = false;
     try {
       const video = stream.getVideoTracks()[0];
       video.contentHint = 'motion';
@@ -130,6 +131,13 @@ export class RtcRoom extends EventTarget {
     const raw = atob(data); const bytes = new Uint8Array(raw.length);
     for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
     this.audioNode.port.postMessage(bytes.buffer, [bytes.buffer]);
+  }
+  setCaptureAudioMuted(muted) {
+    const tracks = this.localStream?.getAudioTracks() ?? [];
+    if (!tracks.length) throw Error('Esta captura foi iniciada sem áudio. Escolha uma fonte com áudio na próxima transmissão.');
+    this.captureAudioMuted = Boolean(muted);
+    for (const track of tracks) track.enabled = !this.captureAudioMuted;
+    this.event('captureAudio', { muted:this.captureAudioMuted });
   }
   ensureViewers() {
     if (!this.localStream) return;

@@ -1,8 +1,9 @@
-export function boundedVideoSize(width, height, availableWidth) {
+export function boundedVideoSize(width, height, availableWidth, availableHeight = 2160) {
   const maxWidth = Math.max(1, Math.floor(availableWidth));
+  const maxHeight = Math.max(1, Math.min(2160, Math.floor(availableHeight)));
   return {
     width: Math.round(Math.max(Math.min(280, maxWidth), Math.min(maxWidth, Number(width) || 280))),
-    height: Math.round(Math.max(160, Math.min(2160, Number(height) || 160)))
+    height: Math.round(Math.max(Math.min(160,maxHeight), Math.min(maxHeight, Number(height) || 160)))
   };
 }
 
@@ -30,7 +31,19 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
   handle.setAttribute('aria-label', 'Redimensionar vídeo. Use as setas para ajustar; Home restaura o tamanho.');
   frame.append(handle);
   const available = () => root.parentElement?.clientWidth || 280;
+  function heightLimit() {
+    const main=root.closest('main');if(!main || document.fullscreenElement===root)return 2160;
+    const top=frame.getBoundingClientRect().top-main.getBoundingClientRect().top+main.scrollTop;
+    const controls=root.querySelector('.stream-controls')?.getBoundingClientRect().height ?? 60;
+    const metrics=root.querySelector(':scope>.fine')?.getBoundingClientRect().height ?? 20;
+    return Math.max(160,Math.floor(main.clientHeight-top-controls-metrics-100));
+  }
   function sync() {
+    if(document.fullscreenElement!==root) {
+      const limit=heightLimit();root.style.setProperty('--video-height-limit',limit+'px');
+      root.style.setProperty('--auto-video-width',Math.min(available(),limit*16/9)+'px');
+      inputs.height.max=limit;
+    }
     const width = Math.round(root.getBoundingClientRect().width), height = Math.round(frame.getBoundingClientRect().height);
     inputs.width.max = Math.floor(available()); inputs.width.min = Math.min(280, Number(inputs.width.max));
     inputs.width.value = width; inputs.height.value = height;
@@ -48,7 +61,7 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
       highlight.textContent = 'Destacar'; highlight.setAttribute('aria-pressed', 'false');
       root.parentElement.classList.toggle('has-highlight', Boolean(root.parentElement.querySelector('.expanded')));
     }
-    custom = boundedVideoSize(size.width, size.height, available());
+    custom = boundedVideoSize(size.width, size.height, available(), heightLimit());
     root.style.setProperty('--video-width', custom.width + 'px'); root.style.setProperty('--video-height', custom.height + 'px');
     root.classList.add('custom-size'); sync();
   }
@@ -87,8 +100,10 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
   function fullscreenChanged() { endDrag(); more.open = false; sync(); }
   document.addEventListener('fullscreenchange', fullscreenChanged);
   const observer = new ResizeObserver(sync); observer.observe(root); observer.observe(frame);
+  if(root.closest('main'))observer.observe(root.closest('main'));
+  window.addEventListener('resize',sync);
   return { sync, dispose() {
-    endDrag(); observer.disconnect(); document.removeEventListener('fullscreenchange', fullscreenChanged);
+    endDrag(); observer.disconnect(); document.removeEventListener('fullscreenchange', fullscreenChanged);window.removeEventListener('resize',sync);
     document.removeEventListener('pointermove', pointerMove); document.removeEventListener('pointerup', pointerEnd); document.removeEventListener('pointercancel', pointerEnd); window.removeEventListener('blur', endDrag);
   } };
 }

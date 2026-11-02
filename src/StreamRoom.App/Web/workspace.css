@@ -113,6 +113,11 @@
 @media(max-width:760px) { .app-shell aside .room-panel { margin-inline:2px; }.network-dialog-footer>span { display:none; }.network-dialog-footer { justify-content:flex-end; }.network-dialog-header,.network-dialog-body { padding:18px; }.profile-photo-row { gap:14px; }.profile-photo-row button { margin-bottom:3px; } }
 @media(prefers-reduced-motion:reduce) { .preference-switch::after { transition:none; } }
 /* Stream actions form one compact toolbar with clear action groups. */
+.app-shell .stream-grid>.stream-card:only-child:where(:not(:fullscreen):not(.custom-size)) { width:min(100%,var(--auto-video-width,100%)); }
+.app-shell .stream-grid>.stream-card:only-child.expanded:where(:not(:fullscreen)) { width:100%; }
+.app-shell .stream-grid>.stream-card:where(:not(:fullscreen)) .player-card { max-height:var(--video-height-limit,calc(100dvh - 360px)); }
+.app-shell .stream-grid>.stream-card:only-child:where(:not(:fullscreen)) .player-card { max-height:var(--video-height-limit,calc(100dvh - 360px)); }
+.app-shell .stream-grid>.stream-card.custom-size:where(:not(.expanded):not(:fullscreen)) .player-card { height:min(var(--video-height),var(--video-height-limit)); }
 .app-shell .stream-controls { width:fit-content;max-width:100%;margin:12px auto 7px;padding:7px;gap:6px;border:1px solid #343b4b;border-radius:13px;background:#1a1e29;box-shadow:0 5px 18px #0003; }
 .stream-primary-actions,.stream-playback-actions,.stream-view-actions { display:flex;align-items:center;gap:5px;flex-wrap:wrap; }
 .stream-view-actions { padding-left:6px;margin-left:1px;border-left:1px solid #363d4c; }

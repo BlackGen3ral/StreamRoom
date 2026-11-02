@@ -19,4 +19,5 @@ test('video resizing clamps to the available width while allowing independent he
   assert.deepEqual(boundedVideoSize(640,340,1200),{width:640,height:340});
   assert.deepEqual(boundedVideoSize(-30,-1,700),{width:280,height:160});
   assert.deepEqual(boundedVideoSize(800,5000,200),{width:200,height:2160});
+  assert.deepEqual(boundedVideoSize(640,900,1200,430),{width:640,height:430});
 });
