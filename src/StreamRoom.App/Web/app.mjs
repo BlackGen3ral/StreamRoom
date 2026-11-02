@@ -33,7 +33,7 @@ function createCard(id, streamId) {
     await rtc.watch(id, !watching, quality(card).height, quality(card).fps);
   }));
   card.quality = node('select'); card.quality.setAttribute('aria-label', 'Qualidade de ' + id);
-  for (const [value, label] of [['480:30','480p · 30 FPS'],['720:30','720p · 30 FPS'],['1080:30','1080p · 30 FPS'],['1080:60','1080p · 60 FPS']]) {
+  for (const [value, label] of [['480:30','480p · 30 FPS'],['720:30','720p · 30 FPS'],['720:60','720p · 60 FPS'],['1080:30','1080p · 30 FPS'],['1080:60','1080p · 60 FPS']]) {
     const option = node('option', '', label); option.value = value; card.quality.append(option);
   }
   card.quality.hidden = own;
@@ -79,7 +79,16 @@ function renderStreams() {
   }
   $('streamGrid').hidden = streams.length === 0; $('playerEmpty').hidden = streams.length !== 0;
 }
+function renderProfile() {
+  const name = $('name').value.trim() || 'Você';
+  $('profileName').textContent = name;
+  $('profileAvatar').textContent = name.slice(0, 1).toUpperCase();
+  $('profileStatus').textContent = rtc.localStream ? 'Compartilhando tela' : state.connected ? 'Conectado à sala' : 'Pronto para entrar';
+}
 function render() {
+  renderProfile();
+  $('headerRoom').textContent = state.connected ? 'Sala conectada' : 'Sua sala';
+  document.body.classList.toggle('in-room', state.connected);
   $('installUpdate').disabled = !updateReady || state.connected;
   if (updateReady) $('installUpdate').textContent = state.connected ? 'Saia da sala para atualizar' : 'Reiniciar e atualizar';
   $('entryControls').hidden = state.connected; $('roomControls').hidden = !state.connected;
@@ -95,9 +104,9 @@ function render() {
   $('networkBadge').textContent = state.connected ? 'Sala conectada' : 'Desconectado'; $('networkBadge').classList.toggle('connected', state.connected);
   $('participantCount').textContent = state.participants.length + '/5'; $('emptyPeers').hidden = state.participants.length > 0;
   $('leave').textContent = state.role === 'host' ? 'Encerrar sala para todos' : 'Sair da sala';
-  $('roomState').textContent = state.connected ? 'Sala privada' : 'Gameplay entre amigos';
-  $('title').textContent = state.connected ? 'Sua sala, suas partidas.' : 'O jogo fica melhor junto.';
-  $('emptyTitle').textContent = state.connected ? 'Compartilhe sua próxima partida.' : 'A próxima partida começa aqui.';
+  $('roomState').textContent = 'COMPARTILHE O MOMENTO';
+  $('title').textContent = 'Transmissões';
+  $('emptyTitle').textContent = state.connected ? 'Sua sala está pronta.' : 'Uma tela compartilhada. Todo mundo junto.';
   $('emptyDescription').textContent = state.connected ? 'Compartilhe sua tela ou escolha uma transmissão para assistir.' : 'Crie uma sala ou entre com um convite.';
   $('participants').replaceChildren(...state.participants.map(p => {
     const li = node('li'), details = node('div'); details.append(node('div','peer-name',p.name + (p.id === rtc.identity?.participantId ? ' (você)' : '')), node('div','peer-role',(p.role === 'host' ? 'Criador da sala' : 'Amigo') + (p.streamId ? ' · transmitindo' : '')));
@@ -170,7 +179,11 @@ rtc.addEventListener('stats', ({ detail }) => {
       : rows.length ? (rows[0].width ?? '—') + '×' + (rows[0].height ?? '—') + ' · ' + (rows[0].fps === null ? '—' : Math.round(rows[0].fps)) + ' FPS · ' + rows[0].route : 'Sem recepção ativa.';
   }
 });
-function showExpiry(expiresAt) { $('roomCode').textContent = 'Sala ' + (state.roomId ?? '').slice(0,8) + ' · válida até ' + new Date(expiresAt).toLocaleString('pt-BR') + ' · renovação pelo criador'; }
+function showExpiry(expiresAt) {
+  $('roomCode').textContent = 'Sala ' + (state.roomId ?? '').slice(0,8);
+  $('roomCode').title = 'Próxima renovação antes de ' + new Date(expiresAt).toLocaleString('pt-BR');
+  $('roomLifetime').textContent = state.role === 'host' ? 'Renovação automática enquanto você estiver conectado. Sem limite total de duração.' : 'A sala continua ativa enquanto o criador estiver conectado.';
+}
 function showUpdate(r) {
   if (!r.available) { if (r.message) status(r.message); return; }
   $('updateNotice').hidden = false;
@@ -213,6 +226,9 @@ async function checkUpdates() {
   finally { updateBusy = false; $('updateButton').disabled = false; $('updateButton').textContent = 'Verificar atualização'; }
   if (result) showUpdate(result);
 }
+$('name').addEventListener('input', renderProfile);
+$('showStage').addEventListener('click', () => $('stage').scrollIntoView({ block: 'start' }));
+$('showSettings').addEventListener('click', () => { $('settings').open = true; $('settings').scrollIntoView({ block: 'nearest' }); $('quality').focus(); });
 $('create').addEventListener('click', () => busy(() => connect('create')));
 $('join').addEventListener('click', () => busy(() => connect('join')));
 $('copy').addEventListener('click', () => busy(async () => { await native('copy',{text:state.invitation}); status('Convite copiado.'); }));
@@ -232,6 +248,7 @@ try {
   for (const [key,value] of Object.entries(r.settings ?? {})) { const input=$(key); if (!input) continue; if(input.type==='checkbox') input.checked=Boolean(value); else input.value=String(value); }
   $('version').textContent=r.version+' · desenvolvimento'; $('runtime').textContent='Motor WebView2 '+r.runtime; $('footerVersion').textContent='StreamRoom '+r.version+' · build de desenvolvimento';
   if (!isSecureContext || !navigator.mediaDevices?.getDisplayMedia || !globalThis.RTCPeerConnection) status('Atualize o Microsoft Edge WebView2 Runtime para captura/WebRTC.',true);
+  if (r.uiPreview) setTimeout(() => native('uiPreview'), 1500);
   if (r.capturePreview) { capturePicker.open(); setTimeout(() => native('capturePreview'), 6000); }
   if(r.installed) setTimeout(checkUpdates,5000);
 } catch(e) {status('Falha ao iniciar: '+e.message,true);}

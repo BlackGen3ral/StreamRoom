@@ -3,13 +3,14 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; media-src 'self' blob: mediastream:; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>StreamRoom</title><link rel="stylesheet" href="app.css"><script type="module" src="app.mjs"></script></head>
 <body>
-<header><div class="brand"><span class="brand-icon">S</span><div>StreamRoom<small>Gameplay entre amigos</small></div></div><div class="header-right"><span id="version">0.4.0 · desenvolvimento</span><span class="badge" id="networkBadge">Desconectado</span><button id="updateButton" class="quiet">Atualizações</button></div></header>
+<nav class="app-rail" aria-label="StreamRoom"><div class="rail-logo" title="StreamRoom">S</div><div class="rail-divider"></div><button id="showStage" class="rail-button active" aria-label="Ver transmissões" title="Transmissões"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="3"/><path d="M8 21h8m-4-4v4m-2-9 5-3v6z"/></svg></button><div class="rail-bottom"><button id="showSettings" class="rail-button" aria-label="Abrir configurações de transmissão" title="Configurações"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 3-1 3-3 1-3 3 2 2-1 3 3 3 3-1 2 3 3-1 1-3 3-1 1-4-3-2V7l-3-2-3 1z"/><circle cx="12" cy="12" r="3"/></svg></button></div></nav>
+<header><div class="brand">StreamRoom<small>Compartilhamento de tela</small></div><div class="header-location"><span class="screen-symbol" aria-hidden="true">▣</span><span id="headerRoom">Sua sala</span></div><div class="header-right"><span id="version">0.4 · desenvolvimento</span><span class="badge" id="networkBadge">Desconectado</span><button id="updateButton" class="quiet">Atualizações</button></div></header>
 <div id="updateNotice" class="notice" hidden><span id="updateText" role="status" aria-live="polite"></span><progress id="updateDownloadProgress" max="100" value="0" aria-label="Download da atualização" hidden></progress><button id="installUpdate" disabled>Reiniciar e atualizar</button></div>
 <div class="layout"><aside>
-  <section class="card"><h2>Sua sala</h2><label for="name">Seu nome</label><input id="name" maxlength="32" placeholder="Como seus amigos te chamam?" autocomplete="off">
+  <section class="card room-panel" id="roomPanel"><div class="sidebar-heading"><h2>Sala privada</h2><span class="room-lock" aria-label="Sala por convite">Por convite</span></div><label for="name">Seu nome</label><input id="name" maxlength="32" placeholder="Como seus amigos te chamam?" autocomplete="off">
   <div id="entryControls"><button id="create" class="primary wide">Criar sala</button><div class="divider">ou entre com um convite</div><textarea id="invite" rows="2" aria-label="Convite da sala" placeholder="Cole o convite completo aqui" spellcheck="false"></textarea><div class="row"><button id="paste" class="quiet">Colar</button><button id="join" class="wide">Entrar</button></div></div>
-  <div id="roomControls" hidden><p id="roomCode" class="muted"></p><button id="copy" class="wide">Copiar convite</button><button id="leave" class="danger wide">Sair da sala</button></div></section>
-  <section class="card"><div class="section-title"><h2>Participantes</h2><span id="participantCount" class="muted">0/5</span></div><ul id="participants"></ul><p id="emptyPeers" class="muted">Até cinco pessoas podem transmitir e escolher o que assistir.</p></section>
+  <div id="roomControls" hidden><p id="roomCode" class="room-code"></p><p id="roomLifetime" class="fine"></p><button id="copy" class="wide">Copiar convite</button><button id="leave" class="danger wide">Sair da sala</button></div></section>
+  <section class="card participant-panel"><div class="section-title"><h2>Na sala</h2><span id="participantCount" class="muted">0/5</span></div><ul id="participants"></ul><p id="emptyPeers" class="muted">Convide até quatro amigos para compartilhar e assistir.</p></section>
   <details class="card" id="settings"><summary>Minha transmissão</summary>
     <label for="quality">Resolução máxima</label><select id="quality"><option value="1080">1080p</option><option value="720" selected>720p</option><option value="480">480p</option></select>
     <label for="fps">Taxa de quadros máxima</label><select id="fps"><option value="60">60 FPS</option><option value="30" selected>30 FPS</option></select>
@@ -17,17 +18,17 @@
     <label for="upload">Limite total de envio (Mbps)</label><input id="upload" type="number" min="2" max="80" step="1" value="24">
     <p class="fine">O envio é dividido entre espectadores. Quatro amigos exigem até quatro cópias do vídeo.</p>
     <label for="server">Servidor de sinalização</label><input id="server" value="https://streamroom.arthostudio.com" spellcheck="false">
-    <p class="fine">Apenas P2P direto com STUN gratuito. Redes incompatíveis não conectam; nenhum relay é ativado. Salas de 24h com renovação pelo criador.</p></details>
+    <p class="fine">Apenas P2P direto com STUN gratuito. Redes incompatíveis não conectam; nenhum relay é ativado. A sala é renovada automaticamente enquanto o criador permanece conectado.</p></details>
   </details>
-</aside><main>
-  <div class="stage-title"><div><span class="eyebrow" id="roomState">Gameplay entre amigos</span><h1 id="title">O jogo fica melhor junto.</h1></div><span id="directStatus" class="muted">Conexão direta</span></div>
+<div class="sidebar-presence"><span id="profileAvatar" class="avatar">V</span><div><strong id="profileName">Você</strong><span id="profileStatus">Pronto para entrar</span></div><span class="presence-dot" aria-hidden="true"></span></div><p class="tray-note">Ao fechar a janela, o StreamRoom continua na bandeja.</p></aside><main id="stage">
+  <div class="stage-title"><div><span class="eyebrow" id="roomState">COMPARTILHE O MOMENTO</span><h1 id="title">Transmissões</h1></div><span id="directStatus" class="muted">Conexão direta</span></div>
   <div id="streamGrid" class="stream-grid" hidden></div>
-  <div class="empty-player" id="playerEmpty"><span class="play-mark">▷</span><h2 id="emptyTitle">A próxima partida começa aqui.</h2><p id="emptyDescription">Crie uma sala ou entre com um convite.</p></div>
+  <div class="empty-player" id="playerEmpty"><span class="play-mark" aria-hidden="true"><svg viewBox="0 0 80 64"><rect x="7" y="7" width="66" height="44" rx="7"/><path d="M27 59h26M40 51v8M34 21l17 8-17 9z"/></svg></span><h2 id="emptyTitle">Uma tela compartilhada. Todo mundo junto.</h2><p id="emptyDescription">Crie uma sala ou entre com um convite.</p></div>
   <section class="capture-launch" aria-label="Compartilhar tela">
-    <div id="captureSetup" class="capture-setup"><div class="capture-heading"><h2>Compartilhe sua partida</h2><p class="muted">Escolha uma janela ou monitor no seletor do StreamRoom.</p></div><div class="capture-audio">    <label for="audio">Áudio no modo compatível</label><select id="audio"><option value="window">Da janela ou jogo</option><option value="system">Todo o som do computador</option><option value="none">Sem áudio</option></select>
+    <div id="captureSetup" class="capture-setup"><div class="capture-heading"><h2>Sua tela na sala</h2><p class="muted">Uma janela, um jogo ou seu monitor. Você escolhe.</p></div><details class="capture-audio"><summary>Áudio da captura alternativa</summary>    <label for="audio">Áudio no modo compatível</label><select id="audio"><option value="window">Da janela ou jogo</option><option value="system">Todo o som do computador</option><option value="none">Sem áudio</option></select>
     <p class="fine" id="audioHint">Habilite o áudio no seletor, quando disponível.</p>
-</div></div>
-    <div class="toolbar"><div class="row"><button id="start" class="primary" disabled>Escolher o que compartilhar</button><button id="startCompatible" class="quiet" disabled>Modo compatível</button><button id="stop" class="danger" hidden>Parar transmissão</button><span id="source" class="muted">Entre em uma sala para começar.</span></div></div>
+</details></div>
+    <div class="toolbar"><div class="row"><button id="start" class="primary" disabled>Compartilhar tela</button><button id="startCompatible" class="quiet" disabled>Modo compatível</button><button id="stop" class="danger" hidden>Parar transmissão</button><span id="source" class="muted">Entre em uma sala para começar.</span></div></div>
   </section>
   <details id="captureInfo" class="info-card"><summary>Sobre captura e áudio</summary><p>Você escolhe o que capturar no seletor do Windows. Jogos em tela cheia exclusiva podem exigir modo janela sem bordas. Nenhum microfone é capturado.</p></details>
   <details class="card telemetry"><summary>Detalhes da conexão</summary><div id="stats" class="stats-empty">As estatísticas aparecem quando houver uma conexão WebRTC.</div></details>
@@ -40,6 +41,6 @@
   <p id="pickerStatus" class="fine" role="status" aria-live="polite"></p>
   <div id="captureSources" class="capture-sources" aria-label="Fontes disponíveis"></div>
   <div class="picker-audio"><label for="nativeAudio">Áudio da transmissão</label><select id="nativeAudio"><option value="none">Sem áudio</option><option value="system">Todo o som do computador</option></select><p class="fine">Áudio do sistema inclui Discord e outras transmissões. Para áudio isolado da janela, feche este seletor e use Modo compatível.</p></div>
-  <div class="picker-footer"><p class="fine">O Windows mantém o indicador de captura. WGC em validação: desempenho 1080p60 ainda não certificado.</p><button id="confirmCapture" class="primary" disabled>Compartilhar agora</button></div>
+  <div class="picker-footer"><p class="fine">Você pode parar de compartilhar a qualquer momento.</p><button id="confirmCapture" class="primary" disabled>Compartilhar agora</button></div>
 </dialog>
 </body></html>

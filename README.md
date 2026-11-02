@@ -11,7 +11,7 @@ Aplicativo Windows C#/.NET 10 para compartilhar gameplays por **WebRTC P2P diret
 5. As transmissões disponíveis aparecem na grade. Clique em **Assistir** nas que quiser receber. Não há recepção automática.
 6. Cada player remoto possui qualidade, volume, ativar/silenciar áudio, parar de assistir, ampliar e tela cheia. O áudio começa silenciado para evitar reprodução inesperada e retorno.
 7. Você pode compartilhar e assistir ao mesmo tempo. **Parar minha transmissão** encerra apenas sua captura e seus envios; você continua assistindo aos amigos. **Parar de assistir** fecha aquela conexão e libera o decodificador.
-8. O criador continua responsável por renovar/encerrar a sala. **Encerrar sala para todos**, fechar ou perder a conexão do criador encerra a sala inteira.
+8. A sala é renovada automaticamente enquanto o criador permanece conectado, sem limite total fixo de duração. O **X** mantém o StreamRoom aberto na bandeja e preserva a sala e a transmissão. Clique no ícone para reabrir; escolha **Sair do StreamRoom** no menu da bandeja para encerrar o aplicativo. **Encerrar sala para todos**, sair pelo menu da bandeja, desligar o PC ou perder a conexão do criador encerra a sala inteira.
 
 Servidor de desenvolvimento: https://streamroom.arthostudio.com.
 A rota antiga v1 permanece disponível para os betas anteriores; as salas v1 e v2 são separadas. Convites de uma sala nova exigem clientes novos. Não há migração silenciosa de uma sala ativa.
@@ -89,3 +89,9 @@ Após testes e confirmação do plano Free no painel: npm run deploy em server. 
 Velopack verifica Releases públicas oficiais estáveis, avisa e aplica a atualização por ação do usuário após sair da sala. Commits, drafts, prereleases e artefatos de Actions não são atualizações oficiais. Os workflows têm contents:read e não publicam Releases. [Aprovação e assinatura](docs/RELEASING.md).
 
 O EXE, a janela e o instalador possuem ícone próprio. **Ícone não remove SmartScreen.** Não há certificado de assinatura de código disponível nesta sessão; mesmo apps assinados podem receber aviso enquanto constroem reputação. [Assinatura e avisos do Windows](docs/WINDOWS-SIGNING.md).
+
+## Bandeja e duração da sala
+
+O X oculta a janela e mantém o processo, a captura e o heartbeat ativos. O menu do ícone na bandeja oferece Abrir e Sair. Sair encerra a participação e, no caso do criador, encerra a sala. A renovação automática de 24h se repete enquanto o criador estiver conectado; não existe um limite total fixo. Isso não mantém a sala ativa se o computador desligar, dormir ou perder a conexão.
+
+Teste local de duas instâncias após a integração da bandeja: fechar o transmissor no X, mantê-lo oculto por oito segundos e reabrir preservou a conexão e o vídeo; o receptor manteve pelo menos 54 FPS nas amostras em 720p após aquecimento. O teste separado de ocultar/reabrir a janela também passou.

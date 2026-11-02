@@ -31,6 +31,10 @@ public partial class ShellWindow : Window
     private readonly SemaphoreSlim _updateCommands = new(1, 1);
     private SignalingClient? _connection;
     private bool _closing;
+    private bool _exitRequested;
+    private bool _testCloseToTray;
+    private bool _backgroundExplained;
+    private TrayIcon? _tray;
     private bool _ready;
     private int _pendingAudio;
     private readonly Dictionary<string, SignalingClient> _testClients = new();
@@ -60,6 +64,8 @@ public partial class ShellWindow : Window
             var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(App.MediaTestDirectory ?? DataDirectory, "WebView2"), browserOptions);
             await Browser.EnsureCoreWebView2Async(environment);
             var core = Browser.CoreWebView2;
+            try { _tray = new TrayIcon(this, OpenFromTray, () => { _exitRequested = true; Close(); }); }
+            catch (Win32Exception) { /* Keep normal close behavior if the Windows tray is unavailable. */ }
             core.Settings.AreDevToolsEnabled = false;
             core.Settings.AreDefaultContextMenusEnabled = false;
             core.Settings.IsStatusBarEnabled = false;
@@ -80,7 +86,7 @@ public partial class ShellWindow : Window
                 await DisconnectAsync();
                 MessageBox.Show("O motor de mídia foi interrompido. A sala e a captura de áudio foram encerradas. Feche e reabra o StreamRoom.", "StreamRoom");
             };
-            core.Navigate(Origin + (App.MediaTestRole is not null ? "/media-room-test.html" : App.CaptureTestOutput is not null ? "/capture-test.html" : App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
+            core.Navigate(Origin + (App.TrayTestOutput is not null ? "/tray-test.html" : App.MediaTestRole is not null ? "/media-room-test.html" : App.CaptureTestOutput is not null ? "/capture-test.html" : App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
             _updateTimer.Tick += async (_, _) =>
             {
                 if (!await _updateCommands.WaitAsync(0)) return;
@@ -150,7 +156,7 @@ public partial class ShellWindow : Window
                         try { using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(file)); settings = doc.RootElement.Clone(); }
                         catch (JsonException) { }
                     }
-                    result = new { settings, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = _updates.IsInstalled, capturePreview = App.PickerPreviewOutput is not null };
+                    result = new { settings, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = _updates.IsInstalled, capturePreview = App.PickerPreviewOutput is not null, uiPreview = App.UiPreviewOutput is not null };
                     break;
                 case "settings":
                     Invitations.ValidateServer(p.GetProperty("server").GetString()!);
@@ -171,6 +177,10 @@ public partial class ShellWindow : Window
                 case "captureTestSource" when App.CaptureTestOutput is not null:
                     result = new { id = _captureSources.AddTestWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle) };
                     break;
+                case "uiPreview" when App.UiPreviewOutput is not null:
+                    using (var preview = File.Create(App.UiPreviewOutput)) await Browser.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, preview);
+                    _ = Dispatcher.BeginInvoke(Close);
+                    break;
                 case "capturePreview" when App.PickerPreviewOutput is not null:
                     using (var preview = File.Create(App.PickerPreviewOutput)) await Browser.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, preview);
                     _ = Dispatcher.BeginInvoke(Close);
@@ -181,6 +191,16 @@ public partial class ShellWindow : Window
                 case "captureTestResult" when App.CaptureTestOutput is not null:
                     await File.WriteAllTextAsync(App.CaptureTestOutput, p.GetRawText());
                     _ = Dispatcher.BeginInvoke(Close);
+                    break;
+                case "trayTestClose" when App.TrayTestOutput is not null:
+                    Close(); result = new { hidden = !IsVisible, tray = _tray?.IsAvailable, ready = _ready, closing = _closing };
+                    break;
+                case "trayTestOpen" when App.TrayTestOutput is not null:
+                    OpenFromTray(); result = new { visible = IsVisible, tray = _tray?.IsAvailable };
+                    break;
+                case "trayTestFinish" when App.TrayTestOutput is not null:
+                    await File.WriteAllTextAsync(App.TrayTestOutput, p.GetRawText());
+                    _exitRequested = true; _ = Dispatcher.BeginInvoke(Close);
                     break;
                 case "mediaTestSetup" when App.MediaTestRole is not null:
                     if (App.MediaTestRole == "host") { _mediaTestScene = new CaptureTestScene(); _mediaTestScene.Show(); }
@@ -196,8 +216,13 @@ public partial class ShellWindow : Window
                     result = new { id = _captureSources.AddTestMonitor(new System.Windows.Interop.WindowInteropHelper(_mediaTestScene!).Handle) };
                     break;
                 case "mediaTestState" when App.MediaTestRole == "host":
-                    WindowState = p.GetProperty("minimized").GetBoolean() ? WindowState.Minimized : WindowState.Normal;
-                    result = new { mode = _nativeCapture?.TransferMode, failure = _nativeCapture?.ScaleFailure, frames = _nativeCapture?.FrameCount, sourceWidth = _nativeCapture?.SourceWidth, sourceHeight = _nativeCapture?.SourceHeight, arrivals = _nativeCapture?.Arrivals, busy = _nativeCapture?.BusyDrops, backpressure = _nativeCapture?.BackpressureDrops, copyMs = _nativeCapture?.LastCopyMs, ticks = _mediaTestScene?.Ticks };
+                    if (p.GetProperty("minimized").GetBoolean())
+                    {
+                        _testCloseToTray = true;
+                        try { Close(); } finally { _testCloseToTray = false; }
+                    }
+                    else OpenFromTray();
+                    result = new { hidden = !IsVisible, connected = _connection?.IsConnected, closing = _closing, tray = _tray?.IsAvailable, mode = _nativeCapture?.TransferMode, failure = _nativeCapture?.ScaleFailure, frames = _nativeCapture?.FrameCount, sourceWidth = _nativeCapture?.SourceWidth, sourceHeight = _nativeCapture?.SourceHeight, arrivals = _nativeCapture?.Arrivals, busy = _nativeCapture?.BusyDrops, backpressure = _nativeCapture?.BackpressureDrops, copyMs = _nativeCapture?.LastCopyMs, ticks = _mediaTestScene?.Ticks };
                     break;
                 case "mediaTestResult" when App.MediaTestRole is not null:
                     await File.WriteAllTextAsync(Path.Combine(App.MediaTestDirectory!, App.MediaTestRole + ".json"), p.GetRawText());
@@ -260,7 +285,9 @@ public partial class ShellWindow : Window
                     if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de atualizar.");
                     if (_availableUpdate is null) throw new InvalidOperationException("Nenhuma atualização aprovada disponível.");
                     if (!_updateDownloaded) throw new InvalidOperationException("Aguarde o download da atualização.");
-                    _updates.ApplyUpdatesAndRestart(_availableUpdate);
+                    _exitRequested = true;
+                    try { _updates.ApplyUpdatesAndRestart(_availableUpdate); }
+                    catch { _exitRequested = false; throw; }
                     break;
                 default: throw new ArgumentException("Comando desconhecido.");
             }
@@ -375,9 +402,25 @@ public partial class ShellWindow : Window
         var ice = await _testClients["host"].GetIceConfigurationAsync();
         return new { clients, ice, runtime = Browser.CoreWebView2.Environment.BrowserVersionString };
     }
+    private void OpenFromTray()
+    {
+        if (_closing) return;
+        ShowInTaskbar = true;
+        Show();
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
+    }
     private async void CloseAsync(object? sender, CancelEventArgs e)
     {
         if (_closing) return;
+        bool testRun = !_testCloseToTray && (App.MediaTestRole is not null || App.CaptureTestOutput is not null || App.NetworkTestOutput is not null || App.PickerPreviewOutput is not null || App.UiPreviewOutput is not null);
+        if (!_exitRequested && !testRun && _ready && _tray?.IsAvailable == true)
+        {
+            e.Cancel = true;
+            Hide(); ShowInTaskbar = false;
+            if (!_backgroundExplained) { _tray.ExplainBackground(); _backgroundExplained = true; }
+            return;
+        }
         e.Cancel = true;
         _closing = true; _updateTimer.Stop(); StopNativeCapture();
         _mediaTestScene?.Close();
@@ -385,6 +428,7 @@ public partial class ShellWindow : Window
         await DisconnectAsync();
         foreach (var client in _testClients.Values) await client.DisposeAsync();
         _testClients.Clear();
+        _tray?.Dispose(); _tray = null;
         Browser.Dispose(); Close();
     }
 }

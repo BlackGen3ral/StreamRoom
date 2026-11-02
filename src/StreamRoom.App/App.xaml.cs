@@ -3,6 +3,8 @@ using Velopack;
 namespace StreamRoom.App;
 public partial class App : Application
 {
+    public static string? UiPreviewOutput { get; private set; }
+    public static string? TrayTestOutput { get; private set; }
     public static int MediaTestHeight { get; private set; } = 720;
     public static string? MediaTestRole { get; private set; }
     public static string? MediaTestDirectory { get; private set; }
@@ -13,6 +15,10 @@ public partial class App : Application
     public static void Main(string[] args)
     {
         VelopackApp.Build().Run();
+        int uiPreview = Array.IndexOf(args, "--ui-preview");
+        if (uiPreview >= 0) UiPreviewOutput = System.IO.Path.GetFullPath(args.ElementAtOrDefault(uiPreview + 1) ?? "ui-preview.png");
+        int trayTest = Array.IndexOf(args, "--tray-self-test");
+        if (trayTest >= 0) TrayTestOutput = System.IO.Path.GetFullPath(args.ElementAtOrDefault(trayTest + 1) ?? "tray-self-test.json");
         int mediaTest = Array.IndexOf(args, "--media-room-test");
         if (mediaTest >= 0)
         {

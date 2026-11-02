@@ -14,7 +14,7 @@ The original window-only, single-process bridge test did not cover monitor-sized
 
 ## Measured locally
 
-Monitor source: 1920x1080, moving WPF scene, two separate app instances in a private room, real monitor WGC capture and real WebRTC encoding/decoding. The sender is minimized for eight seconds between two visible phases. Both processes use the same test WebView2 profile, independent of the normal user profile. The scene stays visible on the captured monitor throughout the test.
+Monitor source: 1920x1080, moving WPF scene, two separate app instances in a private room, real monitor WGC capture and real WebRTC encoding/decoding. The sender is closed to the tray for eight seconds between two visible phases (earlier measurements used minimization). This invokes the real Close handler and verifies that the native connection remains alive. Both processes use the same test WebView2 profile, independent of the normal user profile. The scene stays visible on the captured monitor throughout the test.
 
 | Scenario | Previous build | Updated build |
 | --- | --- | --- |

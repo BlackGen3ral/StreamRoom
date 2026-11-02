@@ -31,12 +31,12 @@ try{
   bridge=new WgcStream(native,message=>{throw Error(message);});
   await rtc.startCapture({quality:setup.quality,fps:setup.fps,audio:'none',upload:24,autoQuality:true,nativeSource:{bridge,sourceId:source.id}});
   await wait(()=>rtc.subscribers.length>0);
-  await delay(6000);await native('mediaTestState',{minimized:true});
+  await delay(6000);const background=await native('mediaTestState',{minimized:true});
   await delay(8000);const transfer=await native('mediaTestState',{minimized:false});
   await delay(6000);
   const connectedAt=rows.find(r=>r.direction==='send'&&r.state==='connected')?.time??Infinity;
   const stable=rows.filter(r=>r.direction==='send'&&r.time>=connectedAt+4000);
-  result={success:stable.length>=6&&stable.every(r=>r.fps>=20),role:setup.role,transfer,transport:bridge.transport,rows};
+  result={success:stable.length>=6&&stable.every(r=>r.fps>=20)&&background.hidden&&background.connected&&!background.closing&&!transfer.hidden,role:setup.role,background,transfer,transport:bridge.transport,rows};
  }else{
   await wait(()=>state?.participants.some(p=>p.streamId));
   const publisher=state.participants.find(p=>p.streamId);
