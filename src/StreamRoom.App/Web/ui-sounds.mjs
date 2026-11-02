@@ -1,7 +1,7 @@
 export function createViewerNotifications(play) {
-  let stream = null, viewers = new Set();
+  let stream = null, captureId = null, viewers = new Set();
   return {
-    capture(id) { if (id && stream !== id) play('share'); else if (!id && stream) play('stop'); stream = id; viewers = new Set(); },
+    capture(id) { if (id && captureId !== id) play('share'); else if (!id && captureId) play('stop'); captureId = stream = id; viewers = new Set(); },
     update(subscribers) {
       if (!stream) return;
       const next = new Set(subscribers.filter(s => s.streamId === stream).map(s => s.viewerId));

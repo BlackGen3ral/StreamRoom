@@ -18,3 +18,8 @@ test('disabled app sounds do not create an output context or request media devic
   try{const sounds=createUiSounds(()=>false);sounds.play('share');sounds.refresh();sounds.dispose();assert.equal(contexts,0);}
   finally{globalThis.document=previous;delete globalThis.AudioContext;}
 });
+test('room updates during shutdown cannot consume or duplicate the capture stop cue',()=>{
+ const heard=[],cues=createViewerNotifications(type=>heard.push(type));
+ cues.capture('live');cues.reset();cues.capture(null);cues.capture(null);cues.reset();
+ assert.deepEqual(heard,['share','stop']);
+});
