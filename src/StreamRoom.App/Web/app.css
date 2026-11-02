@@ -198,7 +198,7 @@ main { background:#18191c; padding:28px 32px 18px; }
 .stream-grid { gap:20px; }.stream-card { padding:0; border:0; border-radius:0; background:transparent; }.stream-card .section-title { margin-bottom:10px; }.stream-card h2 { font-size:13px; font-weight:500; }
 .player-card { border:1px solid #303136; border-radius:5px; background:#08090b; }.stream-controls { margin-top:8px; gap:5px; }.stream-controls button,.stream-controls select { font-size:11px; padding:7px 8px; }.stream-controls input[type=range] { width:70px; }
 .stream-more { position:relative; margin-left:auto; }.stream-more>summary { padding:7px 8px; border-radius:4px; font-size:11px; color:#b9bbc4; }.stream-more[open]>summary { margin-bottom:0; background:#292a30; }
-.stream-extra { position:absolute; right:0; top:100%; z-index:5; min-width:180px; padding:8px; display:grid; gap:5px; background:#222329; border:1px solid #404149; border-radius:5px; }.stream-extra button,.stream-extra select { width:100%; text-align:left; }.stream-card:fullscreen .stream-extra { top:auto; bottom:100%; }
+.stream-extra { position:absolute; right:0; bottom:calc(100% + 6px); z-index:5; min-width:180px; padding:8px; display:grid; gap:5px; background:#222329; border:1px solid #404149; border-radius:5px; }.stream-extra button,.stream-extra select { width:100%; text-align:left; }.stream-card:fullscreen .stream-extra { top:auto; bottom:100%; }
 .stream-card>.fine { font-size:10px; margin-top:8px; color:#9497a1; }
 footer { margin:0; padding:9px 24px; width:100%; max-width:none; border-top:1px solid var(--border); color:#858894; background:#1b1c20; font-size:9px; }#runtime { display:none; }#footerVersion { margin-left:auto; }
 .notice { background:#262c3b; color:#d8dfef; padding:12px 24px; }
