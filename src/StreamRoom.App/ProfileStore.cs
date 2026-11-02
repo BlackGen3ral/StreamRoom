@@ -16,7 +16,7 @@ internal static class ProfileStore
         try
         {
             var file = new FileInfo(Path.Combine(directory, "profile-v1.json"));
-            if (!file.Exists || file.Length > 16_384) return null;
+            if (!file.Exists || file.Length > 65_536) return null;
             var profile = JsonSerializer.Deserialize<UserProfile>(File.ReadAllText(file.FullName), Json);
             if (profile is null) return null;
             ProfileData.Name(profile.Name); ProfileData.ValidateAvatar(profile.Avatar); return profile;
@@ -33,11 +33,14 @@ internal static class ProfileStore
         await File.WriteAllTextAsync(file + ".tmp", JsonSerializer.Serialize(profile, Json));
         File.Move(file + ".tmp", file, true); return profile;
     }
-    internal static string? ChoosePhoto(Window owner)
+    internal static async Task<string?> ChoosePhotoAsync(Window owner)
     {
-        var picker = new OpenFileDialog { Title = "Escolher foto do perfil", Filter = "Imagens (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg", Multiselect = false, CheckFileExists = true };
+        var picker = new OpenFileDialog { Title = "Escolher foto ou GIF do perfil", Filter = "Imagens (*.png;*.jpg;*.jpeg;*.gif)|*.png;*.jpg;*.jpeg;*.gif", Multiselect = false, CheckFileExists = true };
         if (picker.ShowDialog(owner) != true) return null;
-        return EncodePhoto(picker.FileName);
+        var selectedPath=picker.FileName;
+        var completion=new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var worker=new Thread(()=>{try{completion.TrySetResult(EncodePhoto(selectedPath));}catch(Exception error){completion.TrySetException(error);}}){IsBackground=true};
+        worker.SetApartmentState(ApartmentState.STA);worker.Start();return await completion.Task;
     }
     internal static string EncodePhoto(string path)
     {
@@ -47,6 +50,7 @@ internal static class ProfileStore
     internal static string EncodePhoto(Stream file)
     {
         if (file.Length > 10 * 1024 * 1024) throw new IOException("Escolha uma imagem de até 10 MB.");
+        if(file.Length>=13){var signature=new byte[6];file.ReadExactly(signature);file.Position=0;if(System.Text.Encoding.ASCII.GetString(signature) is "GIF87a" or "GIF89a")return AnimatedProfile.Encode(file);}
         var decoder = BitmapDecoder.Create(file, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
         var frame = decoder.Frames[0];
         if ((long)frame.PixelWidth * frame.PixelHeight > 40_000_000) throw new IOException("Escolha uma imagem de até 40 megapixels.");

@@ -2,6 +2,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validAvatar, validName } from '../src/profile.ts';
 import { boundedVideoSize } from '../../src/StreamRoom.App/Web/stream-viewport.mjs';
+import {readFileSync} from 'node:fs';
+const animated=readFileSync(new URL('../../tests/fixtures/animated-avatar.txt',import.meta.url),'utf8').trim();
+test('animated avatars validate the complete bounded GIF structure',()=>{
+  assert.equal(validAvatar(animated),true);
+  const bytes=Buffer.from(animated.slice(22),'base64');
+  for(const bad of [bytes.subarray(0,-1),Buffer.concat([bytes,Buffer.from([0])]),Buffer.from(bytes)]){
+    if(bad.length===bytes.length)bad.writeUInt16LE(2048,6);
+    assert.equal(validAvatar('data:image/gif;base64,'+bad.toString('base64')),false);
+  }
+  assert.equal(validAvatar('data:image/gif;base64,'+'A'.repeat(12000)),false);
+});
 
 test('profile images reject URLs, SVG, oversized payloads and oversized JPEG dimensions', () => {
   for (const value of ['https://example.com/image.jpg','data:image/svg+xml;base64,PHN2Zy8+','data:image/jpeg;base64,'+'A'.repeat(8192),{},'data:image/jpeg;base64,abc?']) assert.equal(validAvatar(value),false);

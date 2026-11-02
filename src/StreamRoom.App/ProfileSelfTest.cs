@@ -21,6 +21,23 @@ internal static class ProfileSelfTest
             var photo = Path.Combine(directory, "test-photo.png");
             using (var file = File.Create(photo)) encoder.Save(file);
             var avatar = ProfileStore.EncodePhoto(photo);
+            var animation=new GifBitmapEncoder();
+            foreach(var color in new[]{Brushes.Red,Brushes.Blue,Brushes.Lime})
+            {
+                var scene=new DrawingVisual();using(var draw=scene.RenderOpen()){draw.DrawRectangle(color,null,new System.Windows.Rect(0,0,256,256));}
+                var picture=new RenderTargetBitmap(256,256,96,96,PixelFormats.Pbgra32);picture.Render(scene);animation.Frames.Add(BitmapFrame.Create(picture));
+            }
+            var gifPath=Path.Combine(directory,"animation.gif");using(var gif=File.Create(gifPath))animation.Save(gif);
+            var animated=ProfileStore.EncodePhoto(gifPath);ProfileData.ValidateAvatar(animated);
+            if(!animated.StartsWith("data:image/gif;base64,")||animated.Length>GifAvatar.MaxDataLength)throw new Exception("Animated avatar was flattened or unbounded.");
+            using(var bytes=new MemoryStream(Convert.FromBase64String(animated[22..])))
+            {
+                var decoded=new GifBitmapDecoder(bytes,BitmapCreateOptions.None,BitmapCacheOption.OnLoad);
+                if(decoded.Frames.Count!=3||decoded.Frames[0].PixelWidth!=64)throw new Exception("Animation frames were not preserved.");
+            }
+            await ProfileStore.SaveAsync(directory,"GIF",animated);
+            if(ProfileStore.Load(directory)?.Avatar!=animated)throw new Exception("GIF profile did not persist.");
+            await File.WriteAllTextAsync(output+".gif.txt",animated);
             await File.WriteAllTextAsync(Path.Combine(directory, "avatar.txt"), avatar);
             using var pixels = new MemoryStream(Convert.FromBase64String(avatar[(avatar.IndexOf(',') + 1)..]));
             var frame = BitmapDecoder.Create(pixels, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];

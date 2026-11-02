@@ -46,14 +46,14 @@
 .app-shell #participants { display:grid;gap:5px;margin-top:12px; }
 .app-shell #participants li { padding:10px 8px;border:0;gap:10px;border-radius:9px;min-height:56px;background:#1c2029; }
 .app-shell #participants li:last-child { padding-bottom:10px; }
-.app-shell #participants .avatar { width:32px;height:32px;flex:0 0 32px;border-radius:50%; }
+.app-shell #participants .avatar { width:42px;height:42px;flex:0 0 42px;border-radius:50%; }
 .participant-copy { flex:1;min-width:0; }.app-shell .peer-name { max-width:none;font-size:11px;font-weight:550; }
 .app-shell .peer-role { font-size:9px;color:#8d9ab2;margin-top:5px;line-height:1.4; }
 .peer-presence { width:6px;height:6px;border-radius:50%;background:#7cbd9f;flex-shrink:0; }
 .peer-presence.streaming { background:#b89af4;box-shadow:0 0 0 3px #b89af41a; }
 .app-shell .sidebar-presence { display:flex;align-items:center;gap:10px;text-align:left;flex-shrink:0;margin:0;padding:12px 10px;width:100%;border:1px solid #313744;border-radius:10px;background:#20242e; }
 .app-shell .sidebar-presence:hover { background:#292c3b;border-color:#5b5074; }
-.app-shell .sidebar-presence .avatar { width:36px;height:36px;flex:0 0 36px;border-radius:50%; }
+.app-shell .sidebar-presence .avatar { width:42px;height:42px;flex:0 0 42px;border-radius:50%; }
 .profile-copy { flex:1;min-width:0; }.app-shell .sidebar-presence strong { font-size:12px;font-weight:600; }
 .profile-edit-mark { font-size:20px;color:#9f94ba; }
 .app-shell #profileStatus { display:flex;align-items:center;gap:5px;font-size:9px;color:#98a5bd;margin-top:5px; }

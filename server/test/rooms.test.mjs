@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { readFile } from 'node:fs/promises';
 const avatar = (await readFile(new URL('../../tests/fixtures/avatar.txt', import.meta.url), 'utf8')).trim();
+const animatedAvatar = (await readFile(new URL('../../tests/fixtures/animated-avatar.txt', import.meta.url), 'utf8')).trim();
 const base = process.env.STREAMROOM_TEST_URL ?? 'http://127.0.0.1:8787';
 const uuid = () => crypto.randomUUID();
 async function createRoom() { const r=await fetch(base+'/v2/rooms',{method:'POST'}); assert.equal(r.status,201); return r.json(); }
@@ -91,6 +92,9 @@ test('salas e múltiplas publicações reais no workerd',async t=>{
     await guests[0].wait('profile_saved');
     const removed=await host.wait('room',m=>m.participants.some(p=>p.id===ids[1]&&p.name==='Sem foto'));
     assert.equal(removed.participants.find(p=>p.id===ids[1]).avatar,null);
+    await delay(1050);guests[0].send({type:'profile',displayName:'GIF animado',avatar:animatedAvatar});await guests[0].wait('profile_saved');
+    const animated=await host.wait('room',m=>m.participants.some(p=>p.id===ids[1]&&p.avatar===animatedAvatar));
+    for(let i=0;i<ids.length;i++)assert.equal(animated.participants.find(p=>p.id===ids[i]).streamId,streams[i]);
   });
   await t.test('isolamento de direção, transmissão e identificadores',async()=>{
     signal(0,1,subAB,1,'offer',{sdp:'bad'});assert.equal((await host.wait('error')).code,'invalid_signal');

@@ -14,7 +14,7 @@ internal static class FriendBook
         if (!file.Exists) return [];
         try
         {
-            if (file.Length > 1_048_576) throw new IOException("A lista de amigos salva é muito grande.");
+            if (file.Length > 2_097_152) throw new IOException("A lista de amigos salva é muito grande.");
             var friends = JsonSerializer.Deserialize<SavedFriend[]>(File.ReadAllText(file.FullName), Json) ?? [];
             if (friends.Length > 100) throw new IOException("Lista de amigos inválida.");
             foreach (var friend in friends)

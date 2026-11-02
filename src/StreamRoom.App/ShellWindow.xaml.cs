@@ -249,7 +249,7 @@ public partial class ShellWindow : Window
                     await PlayerLayoutSelfTest.Run(this, Browser.CoreWebView2, App.PlayerLayoutTestOutput);
                     _exitRequested = true; _ = Dispatcher.BeginInvoke(Close); break;
                 case "profilePhoto":
-                    result = new { avatar = ProfileStore.ChoosePhoto(this) }; break;
+                    result = new { avatar = await ProfileStore.ChoosePhotoAsync(this) }; break;
                 case "profileSave":
                     var profile = await ProfileStore.SaveAsync(DataDirectory, p.GetProperty("name").GetString() ?? "", p.TryGetProperty("avatar", out var photo) && photo.ValueKind == JsonValueKind.String ? photo.GetString() : null, !p.TryGetProperty("sounds", out var soundPreference) || soundPreference.ValueKind != JsonValueKind.False);
                     string? profileNotice = null;

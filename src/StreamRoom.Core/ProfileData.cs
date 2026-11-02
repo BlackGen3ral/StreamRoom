@@ -13,6 +13,12 @@ public static class ProfileData
     public static void ValidateAvatar(string? avatar)
     {
         if (avatar is null) return;
+        const string gifPrefix="data:image/gif;base64,";
+        if(avatar.StartsWith(gifPrefix,StringComparison.Ordinal))
+        {
+            try{if(avatar.Length<=GifAvatar.MaxDataLength&&GifAvatar.Valid(Convert.FromBase64String(avatar[gifPrefix.Length..])))return;}catch(FormatException){}
+            throw new ArgumentException("GIF de perfil inválido ou muito grande.");
+        }
         const string prefix = "data:image/jpeg;base64,";
         if (avatar.Length > 8192 || !avatar.StartsWith(prefix, StringComparison.Ordinal)) throw new ArgumentException("Foto de perfil inválida.");
         byte[] bytes;

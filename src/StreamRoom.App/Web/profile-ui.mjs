@@ -1,6 +1,6 @@
 const avatars = new WeakMap();
 export function showAvatar(element, name, avatar) {
-  const valid = typeof avatar === 'string' && avatar.length <= 8192 && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar);
+  const valid = typeof avatar === 'string' && avatar.length <= (avatar.startsWith('data:image/gif;')?12000:8192) && /^data:image\/(?:jpeg|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar);
   const key = valid ? avatar : (name || 'Você').slice(0, 1).toUpperCase();
   if (avatars.get(element) === key) return;
   avatars.set(element, key);
