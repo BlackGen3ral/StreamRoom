@@ -139,9 +139,11 @@ async function connect(mode) {
   state.participants = []; state.room = null; await save();
   status(mode === 'create' ? 'Criando sala...' : 'Entrando na sala...');
   const response = await native('connect', { mode, server: $('server').value.trim(), name: $('name').value.trim(), invite: $('invite').value.trim() });
+  if (response.server) $('server').value = response.server;
   state.connected = true; state.role = response.welcome.role; state.invitation = response.invitation; state.roomId = response.welcome.roomId;
   rtc.setOptions(options()); rtc.enter(response.welcome); if (state.room) rtc.updateRoom(state.room);
   showExpiry(response.welcome.expiresAt); $('invite').value = '';
+  void save().catch(() => status('Sala conectada. Não foi possível salvar o endereço para a próxima sessão.', true));
   status('Sala pronta. Você pode transmitir e escolher quais gameplays assistir.'); void rtc.ice().catch(e => status(e.message, true));
 }
 async function disconnected(message) {

@@ -303,12 +303,15 @@ public partial class ShellWindow : Window
     }
     private async Task<object> ConnectAsync(JsonElement p)
     {
-        var server = Invitations.ValidateServer(p.GetProperty("server").GetString()!);
+        bool creating = p.GetProperty("mode").GetString() == "create";
+        var server = creating
+            ? Invitations.ValidateServer(p.GetProperty("server").GetString()!)
+            : Invitations.ServerFromInvitation(p.GetProperty("invite").GetString()!);
         var name = p.GetProperty("name").GetString()!.Trim();
         if (name.Length is < 1 or > 32 || name.Any(char.IsControl)) throw new ArgumentException("Use um nome de 1 a 32 caracteres.");
         await DisconnectAsync();
         string roomId, token, invitation;
-        if (p.GetProperty("mode").GetString() == "create")
+        if (creating)
         {
             var room = await SignalingClient.CreateRoomAsync(server);
             roomId = room.RoomId; token = room.HostToken;
@@ -332,7 +335,7 @@ public partial class ShellWindow : Window
         {
             var welcome = await client.ConnectAsync(server, roomId, token, name);
             Title = "StreamRoom · " + name;
-            return new { welcome, invitation };
+            return new { welcome, invitation, server = server.AbsoluteUri.TrimEnd('/') };
         }
         catch { _connection = null; await client.DisposeAsync(); throw; }
     }

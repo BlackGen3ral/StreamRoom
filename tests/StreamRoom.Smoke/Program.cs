@@ -4,6 +4,19 @@ static void Check(bool value, string description) { if (!value) throw new Except
 var server = Invitations.ValidateServer(args.FirstOrDefault() ?? "http://127.0.0.1:8787");
 try { Invitations.ValidateServer("http://example.com"); throw new Exception("Insecure URL accepted"); } catch (ArgumentException) { }
 Check(true, "HTTP remoto recusado");
+var inviteServer = Invitations.ValidateServer("https://streamroom.arthostudio.com");
+var sampleInvite = Invitations.Create(inviteServer, Guid.NewGuid().ToString(), new string('a', 64));
+Check(Invitations.ServerFromInvitation("  " + sampleInvite + "  ") == inviteServer, "Servidor identificado pelo convite completo");
+var otherServer = Invitations.ValidateServer("https://example.org");
+try { Invitations.Parse(otherServer, sampleInvite); throw new Exception("Mismatched server accepted"); } catch (ArgumentException) { }
+Check(true, "Parser continua recusando servidor divergente");
+foreach (var invalid in new[] {
+    sampleInvite.Replace("https://", "http://"), sampleInvite.Replace("https://", "https://user:secret@"),
+    sampleInvite.Replace("#", "?q=1#"), sampleInvite.Split('#')[0], sampleInvite.Replace("/invite/", "/other/") })
+{
+    try { Invitations.ServerFromInvitation(invalid); throw new Exception("Invalid invite accepted"); } catch (ArgumentException) { }
+}
+Check(true, "Convites inseguros, incompletos e com caminho inválido recusados antes da conexão");
 var credentials = await SignalingClient.CreateRoomAsync(server);
 var invite = Invitations.Create(server, credentials.RoomId, credentials.InviteToken);
 Check(Invitations.Parse(server, invite).Token == credentials.InviteToken, "Convite mantém segredo");

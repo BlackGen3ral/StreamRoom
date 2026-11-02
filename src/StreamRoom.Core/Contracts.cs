@@ -24,6 +24,17 @@ public static class Invitations
     public static string Create(Uri server, string roomId, string inviteToken) =>
         new Uri(server, $"invite/{roomId}").AbsoluteUri + "#" + inviteToken;
 
+    public static Uri ServerFromInvitation(string value)
+    {
+        if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)
+            || !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query))
+            throw new ArgumentException("Convite inválido. Cole o link completo da sala.");
+        var server = ValidateServer(uri.GetLeftPart(UriPartial.Authority));
+        // Validate the entire path and secret before connecting to the invite's server.
+        _ = Parse(server, value);
+        return server;
+    }
+
     public static (string RoomId, string Token) Parse(Uri server, string value)
     {
         if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) || uri.GetLeftPart(UriPartial.Authority) != server.GetLeftPart(UriPartial.Authority)
