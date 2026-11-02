@@ -33,3 +33,29 @@ if (args is ["--verify-installer", var path])
     finally { File.Delete(copy); }
 }
 Console.WriteLine("No software installed and no account credentials used. Cross-network media test still required.");
+
+var groupDirectory = Path.Combine(Path.GetTempPath(), "streamroom-group-test-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(groupDirectory);
+try
+{
+    var server = Invitations.ValidateServer("https://example.org");
+    var roomId = Guid.NewGuid().ToString();
+    var invite = Invitations.Create(server, roomId, new string('a', 64));
+    var group = new SavedGroupRoom(server.AbsoluteUri, roomId, new string('b', 64), invite, true);
+    Check(SavedGroupRoom.Load(groupDirectory) is null, "no saved group on first launch");
+    await group.SaveAsync(groupDirectory);
+    Check(SavedGroupRoom.Load(groupDirectory) == group, "DPAPI restores saved owner credentials across reads");
+    var bytes = File.ReadAllBytes(Path.Combine(groupDirectory, "group-room.dat"));
+    Check(!System.Text.Encoding.UTF8.GetString(bytes).Contains(group.Token), "owner secret is encrypted on disk");
+    var member = group with { Owner = false, Token = new string('a', 64) };
+    await member.SaveAsync(groupDirectory);
+    Check(SavedGroupRoom.Load(groupDirectory) == member, "saved member retains invitation access");
+    bytes[bytes.Length / 2] ^= 255;
+    File.WriteAllBytes(Path.Combine(groupDirectory, "group-room.dat"), bytes);
+    var rejected = false;
+    try { SavedGroupRoom.Load(groupDirectory); } catch (IOException) { rejected = true; }
+    Check(rejected, "corrupted protected group access is rejected");
+    SavedGroupRoom.Forget(groupDirectory);
+    Check(SavedGroupRoom.Load(groupDirectory) is null, "forget removes local access only");
+}
+finally { File.Delete(Path.Combine(groupDirectory, "group-room.dat")); File.Delete(Path.Combine(groupDirectory, "group-room.dat.tmp")); Directory.Delete(groupDirectory); }

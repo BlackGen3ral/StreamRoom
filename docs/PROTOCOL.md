@@ -4,7 +4,7 @@
 
 API nova: POST /v2/rooms e WebSocket /v2/rooms/{uuid}/socket. Durable Object MultiRoom, binding MULTI_ROOMS. A API v1 permanece em /v1/rooms, classe Room/binding ROOMS, com o comportamento da beta 0.3 sem TURN. Os namespaces e salas são separados. Não misture versões de cliente em uma sala nova.
 
-Health informa protocol:2/version:0.4.0. Criar sala retorna roomId, inviteToken, hostToken, expiresAt (Unix ms), protocol:2. TTL inicial 24h. Convites continuam no fragmento # do link e são interpretados localmente; o token não entra na URL WebSocket. O backend armazena hashes SHA-256 dos tokens aleatórios de 256 bits.
+Health informa protocol:2/version:0.4.1 e persistentRooms:true. Criar sala retorna roomId, inviteToken, hostToken, expiresAt (Unix ms), protocol:2 e persistent. Sem cabeçalho adicional, o TTL inicial é 24h. Com X-StreamRoom-Persistent:1, a sala é fixa: expiresAt usa marcador de compatibilidade e persistent:true também aparece no welcome. Convites continuam no fragmento # do link e são interpretados localmente; o token não entra na URL WebSocket. O backend armazena hashes SHA-256 dos tokens aleatórios de 256 bits.
 
 ## Autenticação e estado
 
@@ -52,5 +52,7 @@ ICE contém candidate, sdpMid e sdpMLineIndex (os dois últimos podem ser null).
 Ping JSON exato a cada 20s usa setWebSocketAutoResponse para não acordar o DO. Limpeza inicial em até 15s, depois a cada 5min; timestamp de auto-resposta mantém sockets autenticados vivos. Auto-ping não prolonga sockets não autenticados.
 
 Host autenticado pode enviar renew. Fora da última hora, validade não muda; dentro dela, persiste agora+24h e informa room_renewed a todos. Expirada/encerrada não revive. O cliente solicita automaticamente perto do vencimento. deleteAll/deleteAlarm liberam a sala encerrada.
+
+Em salas fixas, renew mantém o marcador; leave/queda do host remove somente sua participação. Uma sala vazia cancela seu alarme na próxima varredura. Somente o host autenticado pode enviar destroy para excluir metadados e revogar todos os acessos. Salas temporárias e v1 mantêm o ciclo de vida anterior.
 
 Máximo de 5 autenticados e 10 sockets incluindo pendentes; criação limitada a 10/min por IP. Frames UTF-8 JSON até 64KiB; SDP até 48.000 caracteres; ICE até 4.096. Limite de 120 mensagens/10s por sessão. Rate limiting não é teto global de gastos. Não registrar frames, convites, IPs ou metadados de autenticação.

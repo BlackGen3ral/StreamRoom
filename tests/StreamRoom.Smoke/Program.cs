@@ -53,3 +53,20 @@ var closed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuations
 friend.Disconnected += _ => closed.TrySetResult(true);
 await host.DisposeAsync(); await closed.Task.WaitAsync(TimeSpan.FromSeconds(8));
 Check(true, "Criador ainda encerra a sala");
+
+var fixedRoom = await SignalingClient.CreateRoomAsync(server, persistent: true);
+Check(fixedRoom.Persistent, "Servidor confirma sala fixa");
+await using (var firstOwner = new SignalingClient())
+{
+    var welcome = await firstOwner.ConnectAsync(server, fixedRoom.RoomId, fixedRoom.HostToken, "Dono fixo");
+    Check(welcome.Persistent, "Welcome mantém sinalizador de persistência");
+}
+await using var returningMember = new SignalingClient();
+await returningMember.ConnectAsync(server, fixedRoom.RoomId, fixedRoom.InviteToken, "Amigo salvo");
+await using var returningOwner = new SignalingClient();
+Check((await returningOwner.ConnectAsync(server, fixedRoom.RoomId, fixedRoom.HostToken, "Dono salvo")).Role == "host", "Reentrada conserva controle do criador");
+var revoked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+returningMember.Disconnected += _ => revoked.TrySetResult();
+await returningOwner.DestroyGroupRoomAsync();
+await revoked.Task.WaitAsync(TimeSpan.FromSeconds(8));
+Check(true, "Exclusão confirmada pelo servidor desconecta os amigos");

@@ -29,7 +29,7 @@ internal sealed class CaptureSources
         if (source.Kind == "window")
         {
             GetWindowThreadProcessId(source.Handle, out var pid);
-            if (!IsWindowVisible(source.Handle) || IsIconic(source.Handle) || pid != source.ProcessId || Protected(source.Handle))
+            if (!CanCaptureWindow(source.Handle) || pid != source.ProcessId)
                 throw new InvalidOperationException("A janela foi fechada, minimizada ou protegida. Selecione outra fonte.");
         }
         else if (!GetMonitorInfo(source.Handle, new MonitorInfo())) throw new InvalidOperationException("Monitor desconectado.");
@@ -40,13 +40,11 @@ internal sealed class CaptureSources
         _sources.Clear();
         EnumWindows((hwnd, _) =>
         {
-            if (_sources.Count >= 48 || !IsWindowVisible(hwnd) || IsIconic(hwnd) || Protected(hwnd)) return true;
+            if (_sources.Count >= 48 || !CanCaptureWindow(hwnd)) return true;
             GetWindowThreadProcessId(hwnd, out var pid);
             if (pid == Environment.ProcessId) return true;
             var title = new StringBuilder(512); GetWindowText(hwnd, title, title.Capacity);
             if (title.Length == 0 || !GetWindowRect(hwnd, out var rect) || rect.Right - rect.Left < 80 || rect.Bottom - rect.Top < 60) return true;
-            DwmGetWindowAttribute(hwnd, 14, out int cloaked, sizeof(int));
-            if (cloaked != 0) return true;
             Add("window", title.ToString(), hwnd, pid, rect);
             return true;
         }, 0);
@@ -56,6 +54,15 @@ internal sealed class CaptureSources
         return _sources.Values.Select(s => (object)new { s.Id, s.Kind, s.Name, s.Thumbnail }).ToArray();
     }
     private static bool Protected(nint hwnd) => GetWindowDisplayAffinity(hwnd, out var affinity) && affinity != 0;
+    private static bool CanCaptureWindow(nint hwnd)
+    {
+        // The desktop shell/child windows are not supported by CreateForWindow.
+        // Share the monitor for the desktop, never silently capture a larger area.
+        if (hwnd == 0 || hwnd == GetShellWindow() || hwnd == GetDesktopWindow() || GetAncestor(hwnd, 2) != hwnd
+            || !IsWindowVisible(hwnd) || IsIconic(hwnd) || Protected(hwnd)) return false;
+        DwmGetWindowAttribute(hwnd, 14, out int cloaked, sizeof(int));
+        return cloaked == 0;
+    }
     private void Add(string kind, string name, nint handle, uint pid, Rect rect)
     {
         string id = Guid.NewGuid().ToString("N");
@@ -106,6 +113,9 @@ internal sealed class CaptureSources
     private delegate bool WindowCallback(nint handle, nint data);
     private delegate bool MonitorCallback(nint monitor, nint dc, ref Rect rect, nint data);
     [DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint hwnd, uint flags);
+    [DllImport("user32.dll")] private static extern nint GetShellWindow();
+    [DllImport("user32.dll")] private static extern nint GetDesktopWindow();
+    [DllImport("user32.dll")] private static extern nint GetAncestor(nint hwnd, uint flags);
     [DllImport("user32.dll")] private static extern bool EnumWindows(WindowCallback callback, nint data);
     [DllImport("user32.dll")] private static extern bool EnumDisplayMonitors(nint dc, nint clip, MonitorCallback callback, nint data);
     [DllImport("user32.dll")] private static extern bool GetMonitorInfo(nint monitor, [In, Out] MonitorInfo info);

@@ -120,3 +120,35 @@ test('salas e múltiplas publicações reais no workerd',async t=>{
 });
 
 test("rota v1 preserva o beta anterior sem TURN", async () => { const r=await fetch(base+"/v1/rooms",{method:"POST"}); assert.equal(r.status,201); const room=await r.json(); assert.equal(room.protocol,1); const client=socket(room.roomId,"v1"); try { const welcome=await client.join(room.hostToken); assert.equal(welcome.protocol,1); client.send({type:"ice_config"}); assert.equal((await client.wait("ice_servers")).turnAvailable,false); client.send({type:"leave"}); await client.wait("room_closed"); } finally { client.ws.close(); } });
+
+test('sala fixa sobrevive ao criador e só ele revoga o acesso', async t => {
+  const response = await fetch(base + '/v2/rooms', { method: 'POST', headers: { 'X-StreamRoom-Persistent': '1' } });
+  assert.equal(response.status, 201);
+  const room = await response.json(), sockets = [];
+  const connect = () => { const c = socket(room.roomId); sockets.push(c); return c; };
+  t.after(() => { for (const c of sockets) c.ws.close(); });
+  assert.equal(room.persistent, true);
+  let host = connect();
+  assert.equal((await host.join(room.hostToken, 'Criador')).persistent, true);
+  const friend = connect(); await friend.join(room.inviteToken, 'Amigo');
+  const streamId = uuid(); friend.send({ type: 'stream', active: true, streamId });
+  await host.wait('room', m => m.participants.some(p => p.streamId === streamId));
+  host.send({ type: 'leave' });
+  const alone = await friend.wait('room', m => m.participants.length === 1);
+  assert.equal(alone.participants[0].streamId, streamId);
+  friend.send({ type: 'destroy' }); assert.equal((await friend.wait('error')).code, 'forbidden');
+  friend.send({ type: 'leave' }); await delay(100);
+  // New sockets emulate new app sessions, using the original saved credentials.
+  host = connect(); const owner = await host.join(room.hostToken, 'Criador voltou');
+  assert.equal(owner.role, 'host'); assert.equal(owner.persistent, true);
+  const returning = connect(); assert.equal((await returning.join(room.inviteToken, 'Amigo voltou')).role, 'viewer');
+  host.ws.close();
+  await returning.wait('room', m => m.participants.length === 1);
+  returning.send({ type: 'ping' }); await returning.wait('pong');
+  const invalid = connect(); await invalid.opened; invalid.send({ type: 'join', token: '0'.repeat(64), displayName: 'Intruso', protocol: 2 });
+  assert.equal((await invalid.wait('error')).code, 'unauthorized');
+  host = connect(); await host.join(room.hostToken, 'Dono');
+  host.send({ type: 'renew' }); assert.equal((await host.wait('room_renewed')).expiresAt, room.expiresAt);
+  host.send({ type: 'destroy' }); await host.wait('room_closed'); await returning.wait('room_closed');
+  await assert.rejects(connect().opened);
+});

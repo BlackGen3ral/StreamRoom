@@ -138,6 +138,11 @@
 .app-shell .lobby-actions #create { margin-top:auto; height:42px; display:flex; align-items:center; justify-content:space-between; }
 .app-shell .lobby-actions #invite { min-height:66px; padding:11px; font-size:11px; margin:0 0 12px; background:#121721; border-color:#363e4f; }
 .lobby-actions .row { margin-top:auto; }
+.app-shell .lobby-create #createGroup,.app-shell .lobby-create #enterGroup { display:flex; justify-content:space-between; align-items:center; margin-top:auto; }
+.app-shell .lobby-create #create { margin-top:8px; height:auto; font-size:11px; color:#929fb6; }
+.app-shell #forgetGroup { font-size:11px; margin-top:6px; }
+.app-shell #groupManagement { margin-top:15px; font-size:11px; }
+.app-shell #groupManagement button { margin-top:10px; }
 .app-shell .lobby-actions #join { background:#292f40; border-color:#404b64; }
 .app-shell .lobby-actions #join:hover { background:#343c52; }
 .app-shell .lobby-actions button { min-height:40px; }

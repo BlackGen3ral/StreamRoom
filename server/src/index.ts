@@ -12,7 +12,7 @@ async function hash(value: string) {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
 }
-type Metadata = { roomId: string; inviteHash: string; hostHash: string; expiresAt: number };
+type Metadata = { roomId: string; inviteHash: string; hostHash: string; expiresAt: number; persistent?: boolean };
 type Watch = { publisherId: string; streamId: string; subscriptionId: string; height: number; fps: number };
 type Session = { id: string; name?: string; role?: 'host' | 'viewer'; lastSeen: number; window: number; count: number; streamId?: string; watching?: Watch[] };
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v);
@@ -25,7 +25,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/v1/rooms')) return legacy.fetch(request, env);
     if (url.pathname === '/health' && request.method === 'GET')
-      return json({ service: 'StreamRoom signaling', protocol: 2, version: '0.4.0', mediaPolicy: 'direct-only' });
+      return json({ service: 'StreamRoom signaling', protocol: 2, version: '0.4.1', persistentRooms: true, mediaPolicy: 'direct-only' });
     if (url.pathname === '/v2/rooms' && request.method === 'POST') {
       if (request.body) await request.body.cancel();
       const key = request.headers.get('CF-Connecting-IP') ?? 'local';
@@ -34,9 +34,10 @@ export default {
       const roomId = crypto.randomUUID();
       const inviteToken = token();
       const hostToken = token();
-      const expiresAt = Date.now() + ROOM_TTL;
-      await env.MULTI_ROOMS.getByName(roomId).initialize({ roomId, inviteHash: await hash(inviteToken), hostHash: await hash(hostToken), expiresAt });
-      return json({ roomId, inviteToken, hostToken, expiresAt, protocol: 2 }, 201);
+      const persistent = request.headers.get('X-StreamRoom-Persistent') === '1';
+      const expiresAt = persistent ? Date.UTC(9999, 11, 31) : Date.now() + ROOM_TTL;
+      await env.MULTI_ROOMS.getByName(roomId).initialize({ roomId, inviteHash: await hash(inviteToken), hostHash: await hash(hostToken), expiresAt, persistent });
+      return json({ roomId, inviteToken, hostToken, expiresAt, persistent, protocol: 2 }, 201);
     }
     const match = /^\/v2\/rooms\/([a-f0-9-]{36})\/socket$/.exec(url.pathname);
     if (match && request.method === 'GET') {
@@ -61,7 +62,7 @@ export class MultiRoom extends DurableObject<Env> {
     if (this.metadata) throw new Error('Room already exists');
     await this.ctx.storage.put('room', metadata);
     this.metadata = metadata;
-    await this.ctx.storage.setAlarm(metadata.expiresAt);
+    if (!metadata.persistent) await this.ctx.storage.setAlarm(metadata.expiresAt);
   }
   async fetch(_request: Request): Promise<Response> {
     if (!this.metadata || Date.now() >= this.metadata.expiresAt)
@@ -136,7 +137,7 @@ export class MultiRoom extends DurableObject<Env> {
       }
       s.role = role; s.name = message.displayName.trim();
       ws.serializeAttachment(s);
-      this.send(ws, { type: 'welcome', participantId: s.id, role, roomId: this.metadata.roomId, expiresAt: this.metadata.expiresAt, protocol: 2 });
+      this.send(ws, { type: 'welcome', participantId: s.id, role, roomId: this.metadata.roomId, expiresAt: this.metadata.expiresAt, persistent: Boolean(this.metadata.persistent), protocol: 2 });
       this.broadcast(); return;
     }
     if (message.type === 'ping') { this.send(ws, { type: 'pong' }); return; }
@@ -181,7 +182,7 @@ export class MultiRoom extends DurableObject<Env> {
     }
     if (message.type === 'renew') {
       if (s.role !== 'host') { this.reject(ws, 'forbidden', 'Somente o criador pode renovar a sala.'); return; }
-      const expiresAt = renewalExpiry(this.metadata.expiresAt, now);
+      const expiresAt = this.metadata.persistent ? this.metadata.expiresAt : renewalExpiry(this.metadata.expiresAt, now);
       if (expiresAt !== this.metadata.expiresAt) {
         const updated = { ...this.metadata, expiresAt };
         await this.ctx.storage.put('room', updated);
@@ -191,6 +192,10 @@ export class MultiRoom extends DurableObject<Env> {
       }
       for (const { ws: client } of this.sessions()) this.send(client, { type: 'room_renewed', expiresAt });
       return;
+    }
+    if (message.type === 'destroy') {
+      if (s.role !== 'host') { this.reject(ws, 'forbidden', 'Somente o criador pode excluir a sala.'); return; }
+      await this.end('O criador excluiu a sala do grupo.'); return;
     }
     if (message.type === 'leave') { await this.depart(ws); ws.close(1000, 'left'); return; }
     if (message.type !== 'signal' || typeof message.to !== 'string' || !record(message.payload)) {
@@ -229,7 +234,7 @@ export class MultiRoom extends DurableObject<Env> {
     const s = ws.deserializeAttachment() as Session;
     this.clearSubscriptions(s.id);
     ws.serializeAttachment({ ...s, role: undefined, streamId: undefined, watching: [] });
-    if (s.role === 'host') await this.end('O criador encerrou a sala.');
+    if (s.role === 'host' && !this.metadata?.persistent) await this.end('O criador encerrou a sala.');
     else this.broadcast();
   }
   async webSocketClose(ws: WebSocket, code: number, _reason: string, _wasClean: boolean) {
@@ -255,7 +260,10 @@ export class MultiRoom extends DurableObject<Env> {
         await this.depart(ws); ws.close(1008, 'timeout');
       }
     }
-    if (this.metadata) await this.ctx.storage.setAlarm(this.ctx.getWebSockets().length
-      ? Math.min(Date.now() + SWEEP_INTERVAL, this.metadata.expiresAt) : this.metadata.expiresAt);
+    if (this.metadata) {
+      if (this.ctx.getWebSockets().length) await this.ctx.storage.setAlarm(Math.min(Date.now() + SWEEP_INTERVAL, this.metadata.expiresAt));
+      else if (this.metadata.persistent) await this.ctx.storage.deleteAlarm();
+      else await this.ctx.storage.setAlarm(this.metadata.expiresAt);
+    }
   }
 }

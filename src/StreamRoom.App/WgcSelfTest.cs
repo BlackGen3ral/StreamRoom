@@ -32,7 +32,9 @@ internal static class WgcSelfTest
             try
             {
                 await Task.Delay(400);
-                var source = new CaptureSource("self-test", "window", window.Title, null, new WindowInteropHelper(window).Handle, (uint)Environment.ProcessId);
+                var sources = new CaptureSources();
+                var source = sources.Resolve(sources.AddTestWindow(new WindowInteropHelper(window).Handle));
+                await NativeCapture.RequestBorderlessAccessAsync();
                 capture.Start(source, 60, 480); timer.Start();
                 await Task.Delay(5000);
                 if (frames < 10 || !greenPixel) throw new InvalidOperationException("Frames ou pixels da janela de teste não foram capturados corretamente.");

@@ -212,6 +212,22 @@ public partial class ShellWindow : Window
                     if (p.GetRawText().Length > 4096) throw new ArgumentException("Configurações inválidas.");
                     await File.WriteAllTextAsync(Path.Combine(DataDirectory, "settings-v2.json"), p.GetRawText());
                     break;
+                case "groupRoomStatus":
+                    var group = SavedGroupRoom.Load(DataDirectory);
+                    result = new { saved = group is not null, owner = group?.Owner ?? false }; break;
+                case "groupRoomForget":
+                    if (_connection?.IsConnected == true) throw new IOException("Saia da sala antes de remover o acesso salvo.");
+                    if (MessageBox.Show(this, "Remover o acesso salvo somente deste PC? A sala continuará existindo. Se você é o criador, perderá o controle de exclusão e precisará de um convite para voltar.", "Remover sala salva", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes)
+                        SavedGroupRoom.Forget(DataDirectory);
+                    break;
+                case "groupRoomDestroy":
+                    if (MessageBox.Show(this, "Excluir a sala fixa para todos? Os convites e acessos salvos deixarão de funcionar. Esta ação não pode ser desfeita.", "Excluir sala do grupo", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes)
+                    {
+                        await (_connection ?? throw new IOException("Entre na sala para excluí-la.")).DestroyGroupRoomAsync();
+                        SavedGroupRoom.Forget(DataDirectory);
+                        await DisconnectAsync(); result = new { deleted = true };
+                    }
+                    break;
                 case "connect": result = await ConnectAsync(p); break;
                 case "leave": await DisconnectAsync(); break;
                 case "signal":
@@ -308,8 +324,11 @@ public partial class ShellWindow : Window
                         if (_nativeSession != nativeSession) return;
                         StopNativeCapture(); Emit(new { type = "nativeCaptureEnded", session = nativeSession, message = reason });
                     });
-                    await NativeCapture.RequestBorderlessAccessAsync();
-                    try { capture.Start(captureSource, p.GetProperty("fps").GetInt32(), p.TryGetProperty("quality", out var quality) ? quality.GetInt32() : 720); }
+                    try
+                    {
+                        await NativeCapture.RequestBorderlessAccessAsync();
+                        capture.Start(captureSource, p.GetProperty("fps").GetInt32(), p.TryGetProperty("quality", out var quality) ? quality.GetInt32() : 720);
+                    }
                     catch { StopNativeCapture(); throw; }
                     result = new { session = nativeSession, name = captureSource.Name };
                     break;
@@ -367,8 +386,13 @@ public partial class ShellWindow : Window
     }
     private async Task<object> ConnectAsync(JsonElement p)
     {
-        bool creating = p.GetProperty("mode").GetString() == "create";
-        var server = creating
+        var mode = p.GetProperty("mode").GetString();
+        bool creating = mode is "create" or "createFixed";
+        if (mode is not ("create" or "createFixed" or "saved" or "join")) throw new ArgumentException("Modo de entrada inválido.");
+        if (mode == "createFixed" && SavedGroupRoom.Load(DataDirectory) is not null)
+            throw new IOException("Já existe uma sala do grupo salva. Entre nela ou remova o acesso salvo antes de criar outra.");
+        var saved = mode == "saved" ? SavedGroupRoom.Load(DataDirectory) ?? throw new IOException("Nenhuma sala do grupo salva.") : null;
+        var server = saved is not null ? Invitations.ValidateServer(saved.Server) : creating
             ? Invitations.ValidateServer(p.GetProperty("server").GetString()!)
             : Invitations.ServerFromInvitation(p.GetProperty("invite").GetString()!);
         var name = p.GetProperty("name").GetString()!.Trim();
@@ -377,10 +401,13 @@ public partial class ShellWindow : Window
         string roomId, token, invitation;
         if (creating)
         {
-            var room = await SignalingClient.CreateRoomAsync(server);
+            var room = await SignalingClient.CreateRoomAsync(server, persistent: mode == "createFixed");
+            if (mode == "createFixed" && !room.Persistent) throw new IOException("O servidor ainda não oferece salas fixas. A atualização do servidor precisa ser concluída.");
             roomId = room.RoomId; token = room.HostToken;
             invitation = Invitations.Create(server, room.RoomId, room.InviteToken);
         }
+        else if (saved is not null)
+        { roomId = saved.RoomId; token = saved.Token; invitation = saved.Invitation; }
         else
         {
             invitation = p.GetProperty("invite").GetString()!;
@@ -398,10 +425,28 @@ public partial class ShellWindow : Window
         try
         {
             var welcome = await client.ConnectAsync(server, roomId, token, name);
+            if (welcome.Persistent)
+            {
+                var existing = SavedGroupRoom.Load(DataDirectory);
+                var sameRoom = existing?.RoomId == roomId && existing.Server == server.AbsoluteUri;
+                if (existing is not null && !sameRoom)
+                    throw new IOException("Outra sala do grupo já está salva neste PC. Remova o acesso salvo antes de trocar de grupo.");
+                if (existing is null || sameRoom && (!existing.Owner || welcome.Role == "host"))
+                    await new SavedGroupRoom(server.AbsoluteUri, roomId, token, invitation, welcome.Role == "host").SaveAsync(DataDirectory);
+            }
             Title = "StreamRoom · " + name;
             return new { welcome, invitation, server = server.AbsoluteUri.TrimEnd('/') };
         }
-        catch { _connection = null; await client.DisposeAsync(); throw; }
+        catch
+        {
+            // Do not leave a permanent room orphaned if Windows cannot save its owner access.
+            if (mode == "createFixed" && client.IsConnected)
+            {
+                try { await client.DestroyGroupRoomAsync(); }
+                catch (Exception cleanupError) { System.Diagnostics.Debug.WriteLine("Group creation cleanup failed: " + cleanupError.GetType().Name); }
+            }
+            _connection = null; await client.DisposeAsync(); throw;
+        }
     }
     private async Task DisconnectAsync()
     {

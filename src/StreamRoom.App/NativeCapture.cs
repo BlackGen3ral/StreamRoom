@@ -40,22 +40,37 @@ internal sealed class NativeCapture : IDisposable
     public static bool Supported => GraphicsCaptureSession.IsSupported();
     public void Start(CaptureSource source, int fps, int maxHeight = 1080)
     {
-        if (!Supported) throw new NotSupportedException("O Windows não oferece captura WGC neste dispositivo.");
-        _maxHeight = maxHeight is 480 or 720 or 1080 ? maxHeight : 720;
-        _interval = Stopwatch.Frequency / Math.Clamp(fps, 15, 60);
-        _item = CreateItem(source);
-        _device = CreateDevice(source);
-        _pool = Direct3D11CaptureFramePool.CreateFreeThreaded(_device, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, _item.Size);
-        _pool.FrameArrived += OnFrame;
-        _item.Closed += OnClosed;
-        _session = _pool.CreateCaptureSession(_item);
-        // Windows enforces its own consent/policy even when this preference is false.
-        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 20348))
+        string stage = "verificar suporte do Windows";
+        try
         {
-            try { _session.IsBorderRequired = false; BorderlessPreferenceApplied = !_session.IsBorderRequired; }
-            catch (Exception e) when (e is COMException or NotSupportedException) { Debug.WriteLine("Borderless capture unavailable: " + e.Message); }
+            if (!Supported) throw new NotSupportedException("O Windows não oferece captura WGC neste dispositivo.");
+            _maxHeight = maxHeight is 480 or 720 or 1080 ? maxHeight : 720;
+            _interval = Stopwatch.Frequency / Math.Clamp(fps, 15, 60);
+            stage = "abrir a fonte selecionada";
+            _item = CreateItem(source);
+            if (_item.Size.Width <= 0 || _item.Size.Height <= 0)
+                throw new InvalidOperationException("A fonte está sem área visível. Restaure a janela e selecione-a novamente.");
+            stage = "preparar o dispositivo gráfico";
+            _device = CreateDevice(source);
+            stage = "preparar os frames de vídeo";
+            _pool = Direct3D11CaptureFramePool.CreateFreeThreaded(_device, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, _item.Size);
+            _pool.FrameArrived += OnFrame;
+            _item.Closed += OnClosed;
+            stage = "criar a sessão de captura";
+            _session = _pool.CreateCaptureSession(_item);
+            // Windows enforces its own consent/policy even when this preference is false.
+            if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 20348))
+            {
+                try { _session.IsBorderRequired = false; BorderlessPreferenceApplied = !_session.IsBorderRequired; }
+                catch (Exception e) when (e is COMException or NotSupportedException or ArgumentException or UnauthorizedAccessException) { Debug.WriteLine("Borderless capture unavailable: " + e.Message); }
+            }
+            stage = "iniciar a captura no Windows";
+            _session.StartCapture();
         }
-        _session.StartCapture();
+        catch (Exception error) when (error is COMException or ArgumentException or InvalidOperationException or NotSupportedException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException($"Falha ao {stage} (0x{error.HResult:X8}): {error.Message} Use Modo compatível se persistir.", error);
+        }
     }
     public static async Task RequestBorderlessAccessAsync()
     {
@@ -67,7 +82,7 @@ internal sealed class NativeCapture : IDisposable
             // Windows decides whether the preference is honored.
             _ = await GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless);
         }
-        catch (Exception e) when (e is COMException or NotSupportedException)
+        catch (Exception e) when (e is COMException or NotSupportedException or ArgumentException or UnauthorizedAccessException)
         { Debug.WriteLine("Borderless access request unavailable: " + e.Message); }
     }
     private void OnClosed(GraphicsCaptureItem sender, object args) => Ended?.Invoke("A fonte compartilhada foi fechada.");

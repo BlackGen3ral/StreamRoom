@@ -6,12 +6,12 @@ Aplicativo Windows C#/.NET 10 para compartilhar gameplays por **WebRTC P2P diret
 
 1. Baixe **StreamRoom-win-Setup.exe** na [versão mais recente](https://github.com/BlackGen3ral/StreamRoom/releases/latest). A primeira instalação é manual; depois, o aplicativo verifica novas versões ao iniciar e a cada 30 minutos. Clique em **Atualizar e reiniciar** para aplicar.
 2. Extraia e execute **StreamRoom-win-Setup.exe**. O pacote x64 inclui .NET e declara WebView2 como requisito. O instalador beta ainda não tem assinatura digital.
-3. Informe um nome, crie uma sala ou cole um convite. Use a mesma versão em todos os participantes da nova sala.
+3. Informe um nome e escolha **Criar sala fixa**. Compartilhe o convite uma vez: o app de cada amigo salva o acesso e, nas próximas vezes, mostra **Entrar na sala do grupo**. Também é possível criar uma sala temporária. Use a mesma versão em todos os participantes.
 4. **Qualquer participante** pode clicar em **Escolher o que compartilhar** para abrir o seletor próprio do StreamRoom, selecionar uma janela/monitor e confirmar a captura WGC. O modo nativo oferece áudio do sistema (inclui Discord e outras transmissões) ou sem áudio. Para áudio isolado por janela ou problemas de compatibilidade, escolha **Modo compatível**, que mantém o seletor WebView2 anterior. Captura nativa requer Windows 10 build 19041 ou superior. 1080p60 ainda está em validação; veja [integração nativa](docs/NATIVE-CAPTURE-PLAN.md).
 5. As transmissões disponíveis aparecem na grade. Clique em **Assistir** nas que quiser receber. Não há recepção automática.
 6. Cada player remoto possui qualidade, volume, ativar/silenciar áudio, parar de assistir, ampliar e tela cheia. O áudio começa silenciado para evitar reprodução inesperada e retorno.
 7. Você pode compartilhar e assistir ao mesmo tempo. **Parar minha transmissão** encerra apenas sua captura e seus envios; você continua assistindo aos amigos. **Parar de assistir** fecha aquela conexão e libera o decodificador.
-8. A sala é renovada automaticamente enquanto o criador permanece conectado, sem limite total fixo de duração. O **X** mantém o StreamRoom aberto na bandeja e preserva a sala e a transmissão. Clique no ícone para reabrir; escolha **Sair do StreamRoom** no menu da bandeja para encerrar o aplicativo. **Encerrar sala para todos**, sair pelo menu da bandeja, desligar o PC ou perder a conexão do criador encerra a sala inteira.
+8. A sala fixa permanece disponível quando todos saem, inclusive o criador. **Sair da sala** encerra apenas sua participação. O criador pode excluir o grupo em **Gerenciar sala**. Em uma sala temporária, a saída do criador ainda encerra a sala inteira. O **X** mantém o StreamRoom na bandeja, preservando participação e transmissão; **Sair do StreamRoom** no menu da bandeja encerra o aplicativo. Veja [sala fixa do grupo](docs/FIXED-GROUP-ROOM.md).
 
 Servidor de desenvolvimento: https://streamroom.arthostudio.com.
 A rota antiga v1 permanece disponível para os betas anteriores; as salas v1 e v2 são separadas. Convites de uma sala nova exigem clientes novos. Não há migração silenciosa de uma sala ativa.
@@ -43,7 +43,7 @@ Por padrão, STUN público e P2P direto. URLs TURN/credenciais de um servidor an
 
 **Tailscale opcional:** o painel lateral detecta instalação/conexão, oferece o instalador oficial com autorização e assinatura verificada, orienta contas individuais e convites da rede privada e mostra direta/relay/desconectada. A opção permite candidatos reais da interface Tailscale, tenta priorizar caminhos diretos e preserva o modo normal. Não há TURN pago. **A validação Tailscale audiovisual entre redes diferentes está pendente; não há garantia de 1080p60.** [Configuração, segurança e roteiro do teste](docs/TAILSCALE.md).
 
-Salas começam com 24h. Na última hora, o criador autenticado renova por mais 24h; espectadores não renovam e salas expiradas/encerradas não revivem. Os dois protocolos usam SQLite, WebSocket Hibernation, ping respondido pelo runtime e limpeza a cada cinco minutos.
+Salas temporárias começam com 24h. Na última hora, o criador autenticado renova por mais 24h; espectadores não renovam e salas expiradas/encerradas não revivem. Salas fixas v2 preservam o acesso até a exclusão pelo criador. Os dois protocolos usam SQLite, WebSocket Hibernation e ping respondido pelo runtime; salas fixas vazias suspendem a varredura periódica.
 
 **Confirme Workers Free no painel Cloudflare para obter proteção contra cobrança por excedentes.** A conexão OAuth não permitiu ler faturamento; o plano não foi confirmado. Franquias são compartilhadas com outros projetos e podem ser esgotadas por abuso. O app não altera planos nem configura serviços pagos. Em Workers Paid pode haver cobrança de excedente. [Detalhes de custo e duração](docs/FREE-AND-LONG-SESSIONS.md).
 
@@ -94,6 +94,6 @@ O EXE, a janela e o instalador possuem ícone próprio. **Ícone não remove Sma
 
 ## Bandeja e duração da sala
 
-O X oculta a janela e mantém o processo, a captura e o heartbeat ativos. O menu do ícone na bandeja oferece Abrir e Sair. Sair encerra a participação e, no caso do criador, encerra a sala. A renovação automática de 24h se repete enquanto o criador estiver conectado; não existe um limite total fixo. Isso não mantém a sala ativa se o computador desligar, dormir ou perder a conexão.
+O X oculta a janela e mantém o processo, a captura e o heartbeat ativos. O menu da bandeja oferece Abrir e Sair. Sair encerra a participação. Em salas temporárias, a saída do criador encerra a sala; em salas fixas, o acesso continua disponível. Uma transmissão depende do PC ligado e conectado.
 
 Teste local de duas instâncias após a integração da bandeja: fechar o transmissor no X, mantê-lo oculto por oito segundos e reabrir preservou a conexão e o vídeo; o receptor manteve pelo menos 54 FPS nas amostras em 720p após aquecimento. O teste separado de ocultar/reabrir a janela também passou.

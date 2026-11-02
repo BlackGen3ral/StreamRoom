@@ -77,9 +77,9 @@ test('stable sender settings avoid encoder reconfiguration and failed changes ar
  assert.equal(calls,4);assert.equal(last.encodings[0].maxFramerate,60);
 });
 
-test('native tracks keep native size and pacing without unsupported browser constraints',async t=>{
+test('member can start native capture without unsupported browser constraints',async t=>{
  const room=new RtcRoom(async()=>{});t.after(()=>room.shutdown());
- room.enter({participantId:id()});let stopped=false;
+ room.enter({participantId:id(),role:'viewer'});let stopped=false;
  const track={kind:'video',applyConstraints(){throw Error('Generator constraints are unsupported');},getSettings:()=>({width:1280,height:720}),stop(){stopped=true;}};
  const stream={getTracks:()=>[track],getVideoTracks:()=>[track],getAudioTracks:()=>[]};
  const bridge={name:'Monitor',start:async()=>stream,stop:async()=>{}};

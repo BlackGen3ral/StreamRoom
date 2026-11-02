@@ -12,7 +12,7 @@ function native(type, payload = {}) {
   });
 }
 const rtc = new RtcRoom(native);
-const state = { connected: false, role: null, invitation: '', participants: [], room: null, busy: false, shuttingDown: false };
+const state = { connected: false, role: null, persistent: false, groupSaved: false, groupInvalid: false, invitation: '', participants: [], room: null, busy: false, shuttingDown: false };
 let updateBusy = false, updateReady = false;
 let latestStats = [], buildVersion = '', runtimeVersion = '';
 const cards = new Map(), remoteStreams = new Map();
@@ -133,6 +133,12 @@ function render() {
   if (updateReady) $('installUpdate').textContent = state.connected ? 'Saia da sala para atualizar' : 'Reiniciar e atualizar';
   $('entryControls').hidden = state.connected; $('roomControls').hidden = !state.connected;
   $('create').disabled = $('join').disabled = $('paste').disabled = state.busy;
+  for (const id of ['createGroup','enterGroup','forgetGroup','deleteGroup']) $(id).disabled = state.busy;
+  $('createGroup').hidden = state.groupSaved || state.groupInvalid;
+  $('enterGroup').hidden = !state.groupSaved;
+  $('forgetGroup').hidden = !state.groupSaved && !state.groupInvalid;
+  $('groupHint').textContent = state.groupInvalid ? 'Não foi possível ler o acesso salvo. Remova-o para entrar novamente com um convite.' : state.groupSaved ? 'Seu acesso está salvo neste PC. Entre quando quiser, mesmo se o criador estiver offline.' : 'Compartilhe o convite uma vez. O acesso fica salvo no app de cada amigo.';
+  $('groupManagement').hidden = !state.connected || !state.persistent || state.role !== 'host';
   $('leave').disabled = state.busy; $('name').disabled = state.connected || state.busy; $('server').disabled = state.connected || state.busy;
   $('start').disabled = !state.connected || state.busy || Boolean(rtc.localStream);
   $('startCompatible').hidden = Boolean(rtc.localStream);
@@ -144,7 +150,7 @@ function render() {
   $('showTransmissionSettings').textContent = $('quality').value + 'p · ' + $('fps').value + ' FPS';
   $('networkBadge').textContent = state.connected ? 'Sala conectada' : 'Desconectado'; $('networkBadge').classList.toggle('connected', state.connected);
   $('participantCount').textContent = state.participants.length + '/5'; $('emptyPeers').hidden = state.participants.length > 0;
-  $('leave').textContent = state.role === 'host' ? 'Encerrar sala para todos' : 'Sair da sala';
+  $('leave').textContent = state.role === 'host' && !state.persistent ? 'Encerrar sala para todos' : 'Sair da sala';
   $('roomState').textContent = 'TELA COMPARTILHADA';
   $('title').textContent = 'Transmissões';
   $('emptyTitle').textContent = state.connected ? 'Sua sala está pronta.' : 'Nenhuma transmissão';
@@ -161,20 +167,27 @@ async function busy(action) {
   finally { state.busy = false; render(); }
 }
 async function save() { await native('settings', { server: $('server').value.trim(), name: $('name').value.trim(), tailscaleEnabled: $('tailscaleEnabled').checked, ...options() }); }
+async function refreshGroup() {
+  try { const group = await native('groupRoomStatus'); state.groupSaved = group.saved; state.groupInvalid = false; }
+  catch { state.groupSaved = false; state.groupInvalid = true; }
+  render();
+}
 async function connect(mode) {
   state.participants = []; state.room = null; await save();
-  status(mode === 'create' ? 'Criando sala...' : 'Entrando na sala...');
+  status(mode === 'create' || mode === 'createFixed' ? 'Criando sala...' : 'Entrando na sala...');
   const response = await native('connect', { mode, server: $('server').value.trim(), name: $('name').value.trim(), invite: $('invite').value.trim() });
   if (response.server) $('server').value = response.server;
   state.connected = true; state.role = response.welcome.role; state.invitation = response.invitation; state.roomId = response.welcome.roomId;
+  state.persistent = Boolean(response.welcome.persistent);
   rtc.setOptions(options()); rtc.enter(response.welcome); if (state.room) rtc.updateRoom(state.room);
   showExpiry(response.welcome.expiresAt); $('invite').value = '';
   void save().catch(() => status('Sala conectada. Não foi possível salvar o endereço para a próxima sessão.', true));
-  status('Sala pronta. Você pode transmitir e escolher quais gameplays assistir.'); void rtc.ice().catch(e => status(e.message, true));
+  await refreshGroup();
+  status(state.persistent ? 'Sala do grupo conectada. O acesso está salvo para a próxima vez.' : 'Sala pronta. Você pode transmitir e escolher quais gameplays assistir.'); void rtc.ice().catch(e => status(e.message, true));
 }
 async function disconnected(message) {
   if (state.shuttingDown) return;
-  state.connected = false; state.role = null; state.invitation = ''; state.participants = []; state.room = null;
+  state.connected = false; state.role = null; state.persistent = false; state.invitation = ''; state.participants = []; state.room = null;
   await rtc.leave(); remoteStreams.clear(); $('source').textContent = 'Nenhuma fonte selecionada'; status(message); render();
 }
 window.chrome.webview.addEventListener('message', ({ data }) => {
@@ -240,7 +253,12 @@ rtc.addEventListener('stats', ({ detail }) => {
   }
 });
 function showExpiry(expiresAt) {
-  $('roomCode').textContent = 'Sala ' + (state.roomId ?? '').slice(0,8);
+  $('roomCode').textContent = state.persistent ? 'Sala do grupo' : 'Sala ' + (state.roomId ?? '').slice(0,8);
+  if (state.persistent) {
+    $('roomCode').title = 'Sala fixa privada';
+    $('roomLifetime').textContent = 'Acesso salvo neste PC. A sala continua disponível mesmo quando todos saem.';
+    return;
+  }
   $('roomCode').title = 'Próxima renovação antes de ' + new Date(expiresAt).toLocaleString('pt-BR');
   $('roomLifetime').textContent = state.role === 'host' ? 'Renovação automática enquanto você estiver conectado. Sem limite total de duração.' : 'A sala continua ativa enquanto o criador estiver conectado.';
 }
@@ -300,6 +318,13 @@ for (const button of document.querySelectorAll('[data-settings-tab]')) {
   });
 }
 $('create').addEventListener('click', () => busy(() => connect('create')));
+$('createGroup').addEventListener('click', () => busy(() => connect('createFixed')));
+$('enterGroup').addEventListener('click', () => busy(() => connect('saved')));
+$('forgetGroup').addEventListener('click', () => busy(async () => { await native('groupRoomForget'); await refreshGroup(); }));
+$('deleteGroup').addEventListener('click', () => busy(async () => {
+  const result = await native('groupRoomDestroy');
+  if (result?.deleted) { await disconnected('Sala excluída. Os acessos antigos não funcionam mais.'); await refreshGroup(); }
+}));
 $('join').addEventListener('click', () => busy(() => connect('join')));
 $('copy').addEventListener('click', () => busy(async () => { await native('copy',{text:state.invitation}); status('Convite copiado.'); }));
 $('paste').addEventListener('click', () => busy(async () => { $('invite').value = await native('paste'); }));
@@ -325,6 +350,7 @@ $('copyDiagnostics').addEventListener('click', () => busy(async () => {
 }));
 try {
   const r = await native('ready');
+  await refreshGroup();
   await zeroTierUi.start(r);
   for (const [key,value] of Object.entries(r.settings ?? {})) { const input=$(key); if (!input) continue; if(input.type==='checkbox') input.checked=Boolean(value); else input.value=String(value); }
   if (r.zeroTierEnabled) { $('quality').value = '720'; $('fps').value = '30'; }

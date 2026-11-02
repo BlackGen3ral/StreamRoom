@@ -15,6 +15,9 @@ public sealed class SignalingClient : IAsyncDisposable
     private Task? _receiver;
     private Task? _heartbeat;
     private string? _role;
+    private bool _persistent;
+    private readonly TaskCompletionSource _destroyed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private bool _destroyRequested;
     private long _expiresAt;
     private volatile bool _pongPending;
     public event Action<long>? RoomRenewed;
@@ -27,13 +30,14 @@ public sealed class SignalingClient : IAsyncDisposable
     public event Action<JsonElement>? RoomStateChanged;
     public bool IsConnected => _socket.State == WebSocketState.Open && _welcome.Task.IsCompletedSuccessfully;
 
-    public static async Task<RoomCredentials> CreateRoomAsync(Uri server, CancellationToken cancellationToken = default)
+    public static async Task<RoomCredentials> CreateRoomAsync(Uri server, CancellationToken cancellationToken = default, bool persistent = false)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
         cancellationToken = timeout.Token;
         using var http = new HttpClient { BaseAddress = server, Timeout = TimeSpan.FromSeconds(15) };
         using var request = new HttpRequestMessage(HttpMethod.Post, "v2/rooms");
+        if (persistent) request.Headers.Add("X-StreamRoom-Persistent", "1");
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw new SignalingException($"Não foi possível criar sala (HTTP {(int)response.StatusCode}).");
@@ -65,7 +69,7 @@ public sealed class SignalingClient : IAsyncDisposable
             _receiver = ReceiveAsync();
             await SendAsync(new { type = "join", token, displayName, protocol = 2 }, timeout.Token);
             var welcome = await _welcome.Task.WaitAsync(timeout.Token);
-            _role = welcome.Role; _expiresAt = welcome.ExpiresAt;
+            _role = welcome.Role; _expiresAt = welcome.ExpiresAt; _persistent = welcome.Persistent;
             _heartbeat = HeartbeatAsync();
             return welcome;
         }
@@ -78,6 +82,15 @@ public sealed class SignalingClient : IAsyncDisposable
     }
     public Task SetStreamingAsync(bool active, string streamId, CancellationToken cancellationToken = default) =>
         SendAsync(new { type = "stream", active, streamId }, cancellationToken);
+
+    public async Task DestroyGroupRoomAsync()
+    {
+        if (!IsConnected || _role != "host" || !_persistent) throw new SignalingException("Entre como criador da sala fixa para excluí-la.");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        _destroyRequested = true;
+        await SendAsync(new { type = "destroy" }, timeout.Token);
+        await _destroyed.Task.WaitAsync(timeout.Token);
+    }
 
     public Task SetWatchingAsync(string publisherId, string streamId, string subscriptionId, bool active, int height = 480, int fps = 30, CancellationToken cancellationToken = default) =>
         SendAsync(new { type = "watch", publisherId, streamId, subscriptionId, active, height, fps }, cancellationToken);
@@ -161,7 +174,10 @@ public sealed class SignalingClient : IAsyncDisposable
                         _welcome.TrySetException(new SignalingException(error));
                         ServerError?.Invoke(error);
                         break;
-                    case "room_closed": reason = item.GetProperty("message").GetString() ?? reason; return;
+                    case "room_closed":
+                        reason = item.GetProperty("message").GetString() ?? reason;
+                        if (_destroyRequested) _destroyed.TrySetResult();
+                        return;
                 }
             }
         }
@@ -171,6 +187,7 @@ public sealed class SignalingClient : IAsyncDisposable
         finally
         {
             _welcome.TrySetException(new SignalingException(reason));
+            if (_destroyRequested) _destroyed.TrySetException(new SignalingException(reason));
             _iceReply?.TrySetException(new SignalingException(reason));
             _lifetime.Cancel();
             Disconnected?.Invoke(reason);
