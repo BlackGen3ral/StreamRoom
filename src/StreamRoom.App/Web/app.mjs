@@ -82,6 +82,8 @@ function render() {
   $('create').disabled = $('join').disabled = $('paste').disabled = state.busy;
   $('leave').disabled = state.busy; $('name').disabled = state.connected || state.busy; $('server').disabled = state.connected || state.busy;
   $('start').disabled = !state.connected || state.busy || Boolean(rtc.localStream);
+  $('captureSetup').hidden = Boolean(rtc.localStream);
+  if (!rtc.localStream) $('source').textContent = state.connected ? 'Você confirma a fonte no seletor.' : 'Entre em uma sala para começar.';
   $('start').hidden = Boolean(rtc.localStream); $('stop').hidden = !rtc.localStream; $('stop').disabled = state.busy;
   for (const id of ['quality', 'fps', 'audio']) $(id).disabled = Boolean(rtc.localStream);
   $('networkBadge').textContent = state.connected ? 'Sala conectada' : 'Desconectado'; $('networkBadge').classList.toggle('connected', state.connected);
@@ -99,7 +101,7 @@ function render() {
 }
 async function busy(action) {
   if (state.busy) return; state.busy = true; render();
-  try { await action(); } catch (e) { status(e.name === 'NotAllowedError' ? 'Captura cancelada ou não autorizada. Tente novamente.' : e.message, true); }
+  try { await action(); } catch (e) { status(e.name === 'NotAllowedError' ? 'Compartilhamento cancelado ou não autorizado. Escolha uma fonte quando quiser.' : e.message, e.name !== 'NotAllowedError'); }
   finally { state.busy = false; render(); }
 }
 async function save() { await native('settings', { server: $('server').value.trim(), name: $('name').value.trim(), ...options() }); }
@@ -135,7 +137,7 @@ rtc.addEventListener('connectionError', ({ detail }) => {
   status(name + ': ' + detail.message + ' Pare de assistir e selecione novamente para tentar outra vez.', true);
 });
 rtc.addEventListener('capture', ({ detail }) => {
-  $('source').textContent = detail ? 'Sua captura · prévia sem som' : 'Nenhuma fonte selecionada';
+  $('source').textContent = detail ? 'Compartilhando: ' + (detail.source || 'fonte selecionada') + ' · prévia sem som' : 'Nenhuma fonte selecionada';
   if (detail) status('Captura real iniciada: ' + detail.settings.width + '×' + detail.settings.height + '. Vídeo é enviado somente a quem escolher assistir. ' + (detail.audio ? 'Faixa de áudio ativa.' : 'Sem faixa de áudio.'));
   render();
 });

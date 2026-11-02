@@ -13,8 +13,6 @@
   <details class="card" id="settings"><summary>Minha transmissão</summary>
     <label for="quality">Resolução máxima</label><select id="quality"><option value="1080">1080p</option><option value="720" selected>720p</option><option value="480">480p</option></select>
     <label for="fps">Taxa de quadros máxima</label><select id="fps"><option value="60">60 FPS</option><option value="30" selected>30 FPS</option></select>
-    <label for="audio">Áudio compartilhado</label><select id="audio"><option value="window">Aplicativo da janela, se disponível</option><option value="system">Sistema via WASAPI (inclui Discord)</option><option value="none">Sem áudio</option></select>
-    <p class="fine" id="audioHint">No seletor, escolha o jogo/janela e habilite o áudio. Se o Windows não oferecer essa opção, o vídeo terá aviso de ausência de áudio.</p>
     <details class="advanced-settings"><summary>Ajustes avançados</summary><label class="checkbox"><input id="autoQuality" type="checkbox" checked> Ajustar qualidade à conexão</label>
     <label for="upload">Limite total de envio (Mbps)</label><input id="upload" type="number" min="2" max="80" step="1" value="24">
     <p class="fine">O envio é dividido entre espectadores. Quatro amigos exigem até quatro cópias do vídeo.</p>
@@ -25,7 +23,12 @@
   <div class="stage-title"><div><span class="eyebrow" id="roomState">Gameplay entre amigos</span><h1 id="title">O jogo fica melhor junto.</h1></div><span id="directStatus" class="muted">Conexão direta</span></div>
   <div id="streamGrid" class="stream-grid" hidden></div>
   <div class="empty-player" id="playerEmpty"><span class="play-mark">▷</span><h2 id="emptyTitle">A próxima partida começa aqui.</h2><p id="emptyDescription">Crie uma sala ou entre com um convite.</p></div>
-  <div class="toolbar"><div class="row"><button id="start" class="primary" disabled>Compartilhar tela</button><button id="stop" class="danger" hidden>Parar transmissão</button><span id="source" class="muted">Nenhuma fonte selecionada</span></div></div>
+  <section class="capture-launch" aria-label="Compartilhar tela">
+    <div id="captureSetup" class="capture-setup"><div class="capture-heading"><h2>Compartilhe sua partida</h2><p class="muted">Escolha uma janela, um jogo ou a tela inteira no próximo passo.</p></div><div class="capture-audio">    <label for="audio">Áudio da transmissão</label><select id="audio"><option value="window">Da janela ou jogo</option><option value="system">Todo o som do computador</option><option value="none">Sem áudio</option></select>
+    <p class="fine" id="audioHint">Habilite o áudio no seletor, quando disponível.</p>
+</div></div>
+    <div class="toolbar"><div class="row"><button id="start" class="primary" disabled>Escolher o que compartilhar</button><button id="stop" class="danger" hidden>Parar transmissão</button><span id="source" class="muted">Entre em uma sala para começar.</span></div></div>
+  </section>
   <details id="captureInfo" class="info-card"><summary>Sobre captura e áudio</summary><p>Você escolhe o que capturar no seletor do Windows. Jogos em tela cheia exclusiva podem exigir modo janela sem bordas. Nenhum microfone é capturado.</p></details>
   <details class="card telemetry"><summary>Detalhes da conexão</summary><div id="stats" class="stats-empty">As estatísticas aparecem quando houver uma conexão WebRTC.</div></details>
   <div id="status" role="status" aria-live="polite">Pronto para começar.</div>

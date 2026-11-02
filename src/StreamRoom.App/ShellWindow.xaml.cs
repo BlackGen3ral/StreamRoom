@@ -38,7 +38,8 @@ public partial class ShellWindow : Window
         try
         {
             Directory.CreateDirectory(DataDirectory);
-            var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(DataDirectory, "WebView2"));
+            var browserOptions = new CoreWebView2EnvironmentOptions { Language = "pt-BR" };
+            var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(DataDirectory, "WebView2"), browserOptions);
             await Browser.EnsureCoreWebView2Async(environment);
             var core = Browser.CoreWebView2;
             core.Settings.AreDevToolsEnabled = false;

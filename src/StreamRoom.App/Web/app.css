@@ -117,3 +117,16 @@ details[open] > summary { margin-bottom: 16px; }
 @media(max-width:1150px) { .stream-grid { grid-template-columns: 1fr; } .layout { gap: 24px; padding: 0 24px; } header, footer { padding-left: 24px; padding-right: 24px; } h1 { font-size: 24px; } .header-right #version { display: none; } #directStatus { display: none; } }
 @media(max-width:760px) { header { height: auto; min-height: 76px; flex-wrap: wrap; gap: 16px; padding-top: 16px; padding-bottom: 16px; } .layout { grid-template-columns: 1fr; margin-top: 24px; } #playerEmpty { min-height: 260px; } .brand small { display: none; } }
 @media(prefers-reduced-motion:reduce) { * { transition: none !important; } }
+
+.capture-launch { margin-top: 20px; padding: 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+.capture-setup { display: flex; align-items: start; justify-content: space-between; gap: 24px; }
+.capture-heading { flex: 1; padding-top: 3px; }
+.capture-heading h2 { margin-bottom: 8px; font-size: 15px; }
+.capture-heading p { margin-bottom: 0; max-width: 310px; }
+.capture-audio { flex: 0 1 280px; min-width: 200px; }
+.capture-audio label { margin-top: 0; }
+.capture-audio .fine { margin-top: 7px; }
+.capture-launch .toolbar { margin-bottom: 0; }
+.capture-launch #source { overflow-wrap: anywhere; }
+.capture-launch:has(#captureSetup[hidden]) .toolbar { margin-top: 0; }
+@media(max-width:1150px) { .capture-setup { flex-direction: column; gap: 18px; } .capture-audio { flex-basis: auto; width: 100%; } }
