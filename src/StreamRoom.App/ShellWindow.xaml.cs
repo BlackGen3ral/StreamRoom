@@ -246,6 +246,7 @@ public partial class ShellWindow : Window
                         if (_nativeSession != nativeSession) return;
                         StopNativeCapture(); Emit(new { type = "nativeCaptureEnded", session = nativeSession, message = reason });
                     });
+                    await NativeCapture.RequestBorderlessAccessAsync();
                     try { capture.Start(captureSource, p.GetProperty("fps").GetInt32(), p.TryGetProperty("quality", out var quality) ? quality.GetInt32() : 720); }
                     catch { StopNativeCapture(); throw; }
                     result = new { session = nativeSession, name = captureSource.Name };

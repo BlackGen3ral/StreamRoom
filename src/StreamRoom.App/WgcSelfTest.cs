@@ -41,7 +41,7 @@ internal static class WgcSelfTest
             finally
             {
                 timer.Stop(); capture.Dispose(); window.Close();
-                await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { success = error is null, frames, width, height, greenPixel, transferMode = capture.TransferMode, scaleFailure = capture.ScaleFailure, error }));
+                await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { success = error is null, frames, width, height, greenPixel, transferMode = capture.TransferMode, scaleFailure = capture.ScaleFailure, borderlessPreferenceApplied = capture.BorderlessPreferenceApplied, error }));
                 app.Shutdown(error is null ? 0 : 1);
             }
         };

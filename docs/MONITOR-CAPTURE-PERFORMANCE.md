@@ -48,3 +48,7 @@ Short live-game comparison on the same PC with two test instances, the game acti
 These runs were sequential during live gameplay, not identical replay scenes or GPU saturation benchmarks; they do not guarantee 60 FPS. The user's 14 FPS case was not exactly reproduced. Audio was disabled for this comparison. No changes to P2P, audio or receiver subscriptions.
 
 To test an existing game's monitor without covering it with the synthetic moving scene, set `STREAMROOM_TEST_MONITOR_WINDOW` to that currently observed window handle before running the media script. This override is consumed only inside explicit media-test commands. Bring the game back to the foreground after test processes start; repeat for each comparison build. Do not commit local window handles or invitation secrets.
+
+## Capture border preference
+
+At the user's request, native capture now requests Windows Borderless access before starting and sets IsBorderRequired=false on Windows build 20348+. Windows remains responsible for consent and enforcement; denied/unsupported access, system policy, or another app capturing the same source with borders can keep the indicator visible. Older systems retain their supported capture behavior. No registry/privacy changes are made. This unpackaged Velopack app has no MSIX capability manifest; no packaged capability claim is made. See https://learn.microsoft.com/en-us/uwp/api/windows.graphics.capture.graphicscapturesession.isborderrequired.

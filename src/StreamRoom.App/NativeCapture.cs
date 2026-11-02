@@ -18,6 +18,7 @@ internal sealed class NativeCapture : IDisposable
     private long _nextFrame;
     private long _interval;
     private volatile bool _disposed;
+    public bool BorderlessPreferenceApplied { get; private set; }
     public long Arrivals;
     public long BackpressureDrops;
     public long BusyDrops;
@@ -48,8 +49,26 @@ internal sealed class NativeCapture : IDisposable
         _pool.FrameArrived += OnFrame;
         _item.Closed += OnClosed;
         _session = _pool.CreateCaptureSession(_item);
-        // Keep Windows capture borders and cursor. No borderless capture permissions are requested.
+        // Windows enforces its own consent/policy even when this preference is false.
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 20348))
+        {
+            try { _session.IsBorderRequired = false; BorderlessPreferenceApplied = !_session.IsBorderRequired; }
+            catch (Exception e) when (e is COMException or NotSupportedException) { Debug.WriteLine("Borderless capture unavailable: " + e.Message); }
+        }
         _session.StartCapture();
+    }
+    public static async Task RequestBorderlessAccessAsync()
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 20348)) return;
+        try
+        {
+            // Packaged apps may show the Windows consent dialog. Unpackaged desktop
+            // apps can report NotDeclared; setting IsBorderRequired remains safe and
+            // Windows decides whether the preference is honored.
+            _ = await GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless);
+        }
+        catch (Exception e) when (e is COMException or NotSupportedException)
+        { Debug.WriteLine("Borderless access request unavailable: " + e.Message); }
     }
     private void OnClosed(GraphicsCaptureItem sender, object args) => Ended?.Invoke("A fonte compartilhada foi fechada.");
     private async void OnFrame(Direct3D11CaptureFramePool pool, object args)

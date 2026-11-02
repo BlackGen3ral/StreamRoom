@@ -12,7 +12,7 @@ $publisher = $null; $viewer = $null
 try {
     & $Dotnet build src/StreamRoom.App -c Release --nologo
     if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
-    $dll = Join-Path $root 'src/StreamRoom.App/bin/Release/net10.0-windows10.0.19041.0/StreamRoom.dll'
+    $dll = Join-Path $root 'src/StreamRoom.App/bin/Release/net10.0-windows10.0.22621.0/StreamRoom.dll'
     $publisher = Start-Process -FilePath $Dotnet -ArgumentList @('"'+$dll+'"','--media-room-test','host','"'+$testRoot+'"',$Height) -WindowStyle Hidden -PassThru
     $viewer = Start-Process -FilePath $Dotnet -ArgumentList @('"'+$dll+'"','--media-room-test','viewer','"'+$testRoot+'"',$Height) -WindowStyle Hidden -PassThru
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
