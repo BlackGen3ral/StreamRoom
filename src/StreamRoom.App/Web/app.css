@@ -256,3 +256,15 @@ footer { margin:0; padding:9px 24px; width:100%; max-width:none; border-top:1px 
 .tail-dialog-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:22px; }.tail-dialog-footer span { font-size:10px; color:#858f9f; line-height:1.5; }.tail-dialog-footer button { font-size:12px; padding:9px 18px; border-radius:5px; }
 @media(max-width:480px) { .tail-dialog { padding:20px; }.tail-dialog h2 { font-size:20px; }.tail-dialog-footer { flex-wrap:wrap; }.tail-steps>li { gap:10px; } }
 @media(prefers-reduced-motion:reduce) { .tail-switch-track,.tail-switch-track::after { transition:none; } }
+#zeroTierPanel .tail-connection { min-width:0; }
+#zeroTierPanel .tail-status-row { align-items:flex-start; gap:8px; }
+#zeroTierPanel .tail-connection strong { font-size:12px; line-height:1.5; }
+#zeroTierPanel .row { flex-wrap:wrap; gap:8px; }
+#zeroTierPanel input[type="text"], #zeroTierNetwork { font-family:Consolas,monospace; letter-spacing:.035em; }
+#zeroTierPanel .tail-connection-info { margin-top:16px; padding-top:12px; }
+#zeroTierPanel .tail-connection-info p { font-size:11px; }
+#zeroTierPanel .tail-connection > div { display:flex; flex-direction:column; gap:4px; }
+#zeroTierMode { font-size:11px; font-weight:400; color:var(--muted); line-height:1.5; }
+#zeroTierDialog label { display:block; margin-top:16px; }
+#zeroTierDialog .checkbox { display:flex; }
+#zeroTierDialog .row { flex-wrap:wrap; gap:8px; }

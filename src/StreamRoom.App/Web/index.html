@@ -19,7 +19,11 @@
     <label for="server">Servidor de sinalização</label><input id="server" value="https://streamroom.arthostudio.com" spellcheck="false">
     <p class="fine">STUN gratuito, sem TURN pago. A opção Tailscale pode usar a retransmissão gratuita da rede privada. A sala é renovada automaticamente enquanto o criador permanece conectado.</p></details>
   </details>
-  <details class="card" id="tailscalePanel"><summary>Rede privada <span class="tail-optional">Opcional</span></summary>
+  <details class="card" id="zeroTierPanel"><summary>ZeroTier <span class="tail-optional">Opcional · em teste</span></summary>
+    <div class="tail-status-row"><div class="tail-connection"><span class="tail-dot" id="zeroTierDot" aria-hidden="true"></span><div><strong id="zeroTierState" role="status">Verificando serviço…</strong><span id="zeroTierMode"></span></div></div><button id="zeroTierRefresh" class="quiet" aria-label="Atualizar estado do ZeroTier">↻</button></div>
+    <button id="zeroTierSetup" class="tail-setup wide">Configurar conexão</button>
+  </details>
+  <details class="card" id="tailscalePanel"><summary>Tailscale <span class="tail-optional">Alternativa</span></summary>
     <div class="tail-status-row"><div class="tail-connection"><span class="tail-dot" id="tailscaleDot" aria-hidden="true"></span><div><strong>Tailscale</strong><span id="tailscaleStatus" role="status" aria-live="polite">Verificando…</span></div></div><button id="tailscaleRefresh" class="quiet tail-refresh" aria-label="Atualizar status do Tailscale" title="Atualizar status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 11-1l3 3M4 15l3 3a7 7 0 0 0 11-1"/></svg></button></div>
     <label class="tail-switch"><span>Preferir esta rede<span class="tail-switch-hint" id="tailscaleModeHint">Para conectar com amigos</span></span><input id="tailscaleEnabled" type="checkbox" role="switch"><span class="tail-switch-track" aria-hidden="true"></span></label>
     <div class="tail-restart" id="tailscaleRestartHint" hidden><p>Reinicie para aplicar a alteração.</p><button id="tailscaleRestart" class="wide">Reiniciar StreamRoom</button></div>
@@ -49,6 +53,20 @@
   <p class="fine">A captura solicita ao Windows o modo sem borda. Se aparecer uma solicitação, autorize para remover o contorno amarelo.</p>
   <div class="picker-audio"><label for="nativeAudio">Áudio da transmissão</label><select id="nativeAudio"><option value="none">Sem áudio</option><option value="system">Todo o som do computador</option></select><p class="fine">Áudio do sistema inclui Discord e outras transmissões. Para áudio isolado da janela, feche este seletor e use Modo compatível.</p></div>
   <div class="picker-footer"><p class="fine">Você pode parar de compartilhar a qualquer momento.</p><button id="confirmCapture" class="primary" disabled>Compartilhar agora</button></div>
+</dialog>
+<dialog id="zeroTierDialog" class="tail-dialog" aria-labelledby="zeroTierTitle">
+  <div class="tail-dialog-heading"><div><span class="tail-kicker">REDE PRIVADA · EM TESTE</span><h2 id="zeroTierTitle">Conectar com ZeroTier</h2></div><button id="zeroTierClose" class="quiet tail-close" aria-label="Fechar configuração do ZeroTier">✕</button></div>
+  <p id="zeroTierDialogState" class="tail-dialog-intro" role="status"></p>
+  <label for="zeroTierNetwork">Rede privada</label><input id="zeroTierNetwork" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Identificador de 16 caracteres">
+  <button id="zeroTierCopy" class="quiet">Copiar rede para um amigo</button>
+  <label class="checkbox"><input id="zeroTierEnabled" type="checkbox"> Usar ZeroTier para a transmissão</label>
+  <p class="fine">Ao ativar, os endereços da rede privada serão usados para conectar os participantes. A alteração exige reiniciar.</p>
+  <p id="zeroTierDevice" class="fine" hidden></p>
+  <p id="zeroTierInstallNote" class="fine" hidden>A instalação integrada do serviço ainda não está disponível. Esta opção precisa do cliente oficial ZeroTier instalado.</p>
+  <button id="zeroTierDownload" class="quiet" hidden>Abrir download oficial ↗</button>
+  <div id="zeroTierRestartNote" class="tail-restart" hidden><p>Reinicie para aplicar a mudança de conexão.</p><button id="zeroTierRestart" class="wide">Reiniciar StreamRoom</button></div>
+  <details class="tail-connection-info"><summary>Como conectar seus amigos</summary><p>O proprietário informa a rede e autoriza cada dispositivo no painel ZeroTier. O amigo usa o identificador neste aplicativo e não precisa criar conta ZeroTier. Depois, todos entram na sala do StreamRoom normalmente.</p><p>Recurso em validação. A conexão entre casas e a rota direta/relay do ZeroTier ainda precisam ser confirmadas. Você pode desativar a opção e reiniciar para voltar ao compartilhamento normal.</p></details>
+  <div class="tail-dialog-footer"><span>Sem câmera, microfone ou TURN pago.</span><div class="row"><button id="zeroTierSave">Salvar preferência</button><button id="zeroTierJoin" class="primary">Conectar este PC</button></div></div>
 </dialog>
 <dialog id="tailscaleSetupDialog" class="tail-dialog" aria-labelledby="tailscaleSetupTitle" aria-describedby="tailscaleSetupDescription">
   <div class="tail-dialog-heading"><div><span class="tail-kicker">REDE PRIVADA</span><h2 id="tailscaleSetupTitle">Conecte seus amigos</h2></div><button id="tailscaleSetupClose" class="quiet tail-close" aria-label="Fechar configuração do Tailscale">✕</button></div>

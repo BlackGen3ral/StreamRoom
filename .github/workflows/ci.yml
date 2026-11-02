@@ -23,6 +23,8 @@ jobs:
           cache-dependency-path: server/package-lock.json
       - run: npm ci
         working-directory: server
+      - name: Verify experimental ZeroTier candidate guards
+        run: node --test scripts/diagnostics/zerotier-routing.test.mjs
       - run: npm run check
         working-directory: server
       - run: npm run build

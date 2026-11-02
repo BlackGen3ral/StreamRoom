@@ -13,9 +13,11 @@ namespace StreamRoom.App;
 public partial class ShellWindow : Window
 {
     private const string Origin = "https://streamroom.local";
+    private string _webOrigin = Origin;
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly SemaphoreSlim _tailscaleCommands = new(1, 1);
+    private readonly SemaphoreSlim _zeroTierStatusCommands = new(1, 1);
     private readonly TailscaleService _tailscale = new();
     private bool _tailscaleWebRtcReady;
     private readonly SystemAudioCapture _audio = new();
@@ -44,7 +46,7 @@ public partial class ShellWindow : Window
     private WindowState _previousState;
     private CaptureTestScene? _mediaTestScene;
     private readonly System.Windows.Threading.DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(30) };
-    private static string DataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StreamRoom");
+    private static string DataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StreamRoom", App.ZeroTierProof ? "ZeroTierProof" : ".");
 
     public ShellWindow()
     {
@@ -69,14 +71,26 @@ public partial class ShellWindow : Window
                 _tailscaleWebRtcReady = startupSettings.RootElement.TryGetProperty("tailscaleEnabled", out var enabled) && enabled.ValueKind == JsonValueKind.True;
             }
             catch (Exception ex) when (ex is IOException or JsonException) { }
+            if (App.ZeroTierEnabled) _tailscaleWebRtcReady = false;
             var browserOptions = new CoreWebView2EnvironmentOptions { Language = "pt-BR", AdditionalBrowserArguments = "--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows" };
+            browserOptions.AreBrowserExtensionsEnabled = App.ZeroTierEnabled;
             // Opt-in only: expose real host candidates to room participants so ICE
             // can reach the Tailscale adapter. No invented/replaced candidate IPs.
             if (_tailscaleWebRtcReady) browserOptions.AdditionalBrowserArguments += " --force-webrtc-ip-handling-policy=default --disable-features=WebRtcHideLocalIpsWithMdns";
             var browserData = App.MediaTestDirectory ?? (App.UiPreviewOutput is null ? DataDirectory : App.UiPreviewOutput + ".profile");
-            var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(browserData, _tailscaleWebRtcReady ? "WebView2-Tailscale" : "WebView2"), browserOptions);
+            var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(browserData, App.ZeroTierEnabled ? "WebView2-ZeroTier" : _tailscaleWebRtcReady ? "WebView2-Tailscale" : "WebView2"), browserOptions);
             await Browser.EnsureCoreWebView2Async(environment);
             var core = Browser.CoreWebView2;
+            if (App.ZeroTierEnabled)
+            {
+                try
+                {
+                    var extension = await core.Profile.AddBrowserExtensionAsync(Path.Combine(AppContext.BaseDirectory, "Web"));
+                    _webOrigin = "chrome-extension://" + extension.Id;
+                }
+                catch (Exception ex) when (!App.ZeroTierProof && ex is (System.Runtime.InteropServices.COMException or NotSupportedException))
+                { App.UseNormalNetworkContext(); }
+            }
             try { _tray = new TrayIcon(this, OpenFromTray, () => { _exitRequested = true; Close(); }); }
             catch (Win32Exception) { /* Keep normal close behavior if the Windows tray is unavailable. */ }
             core.Settings.AreDevToolsEnabled = false;
@@ -99,20 +113,21 @@ public partial class ShellWindow : Window
                 await DisconnectAsync();
                 MessageBox.Show("O motor de mídia foi interrompido. A sala e a captura de áudio foram encerradas. Feche e reabra o StreamRoom.", "StreamRoom");
             };
-            core.Navigate(Origin + (App.TrayTestOutput is not null ? "/tray-test.html" : App.MediaTestRole is not null ? "/media-room-test.html" : App.CaptureTestOutput is not null ? "/capture-test.html" : App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
+            core.Navigate(_webOrigin + (App.TrayTestOutput is not null ? "/tray-test.html" : App.MediaTestRole is not null ? "/media-room-test.html" : App.CaptureTestOutput is not null ? "/capture-test.html" : App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
             _updateTimer.Tick += async (_, _) =>
             {
                 if (!await _updateCommands.WaitAsync(0)) return;
                 try { await CheckUpdatesAsync(); } finally { _updateCommands.Release(); }
             };
-            _updateTimer.Start();
+            if (!App.ZeroTierProof) _updateTimer.Start();
         }
         catch (WebView2RuntimeNotFoundException)
         { MessageBox.Show("Instale o Microsoft Edge WebView2 Evergreen Runtime oficial e abra o StreamRoom novamente. O instalador do StreamRoom também pode instalar esse requisito.", "WebView2 necessário"); Close(); }
         catch (Exception ex) { MessageBox.Show("Não foi possível abrir o StreamRoom: " + ex.Message, "StreamRoom"); Close(); }
     }
-    private static bool Trusted(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri)
-        && uri.Scheme == "https" && uri.Host == "streamroom.local" && uri.Port == 443;
+    private bool Trusted(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri)
+        && (App.ZeroTierEnabled ? uri.Scheme == "chrome-extension" && uri.Host == new Uri(_webOrigin).Host
+            : uri.Scheme == "https" && uri.Host == "streamroom.local" && uri.Port == 443);
 
     private void Emit(object value, bool allowClosing = false)
     {
@@ -138,7 +153,7 @@ public partial class ShellWindow : Window
                 return;
             }
             id = message.GetProperty("id").GetString();
-            commandGate = type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
+            commandGate = type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
             object? result = null;
@@ -169,8 +184,29 @@ public partial class ShellWindow : Window
                         try { using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(file)); settings = doc.RootElement.Clone(); }
                         catch (JsonException) { }
                     }
-                    result = new { settings, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = _updates.IsInstalled, capturePreview = App.PickerPreviewOutput is not null, uiPreview = App.UiPreviewOutput is not null };
+                    result = new { settings, zeroTierProof = App.ZeroTierProof, zeroTierEnabled = App.ZeroTierEnabled, zeroTierContextUnavailable = App.ZeroTierContextUnavailable, version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.4.0-beta.1", runtime = Browser.CoreWebView2.Environment.BrowserVersionString, installed = !App.ZeroTierProof && _updates.IsInstalled, capturePreview = App.PickerPreviewOutput is not null, uiPreview = App.UiPreviewOutput is not null };
                     break;
+                case "zeroTierStatus":
+                    var zeroTier = new ZeroTierService(); var zeroTierStatus = await zeroTier.StatusAsync(); var zeroTierConfig = ZeroTierPreferences.Load();
+                    result = new { status = zeroTierStatus, networkId = zeroTierConfig.NetworkId.Length > 0 ? zeroTierConfig.NetworkId : zeroTier.DetectedNetworkId, enabled = zeroTierConfig.Enabled, active = App.ZeroTierEnabled, proof = App.ZeroTierProof }; break;
+                case "zeroTierConfigure":
+                    if (App.ZeroTierProof) throw new InvalidOperationException("A configuração do protótipo é definida pelo pacote.");
+                    if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de alterar a rede privada.");
+                    await ZeroTierPreferences.SaveAsync((p.GetProperty("networkId").GetString() ?? "").Trim().ToLowerInvariant(), p.GetProperty("enabled").GetBoolean()); break;
+                case "zeroTierRestart":
+                    if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de reiniciar.");
+                    var zRestart = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };
+                    if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase)) zRestart.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "StreamRoom.dll"));
+                    zRestart.ArgumentList.Add("--restart-parent"); zRestart.ArgumentList.Add(Environment.ProcessId.ToString());
+                    if (App.ZeroTierProof) zRestart.ArgumentList.Add("--zerotier-proof");
+                    System.Diagnostics.Process.Start(zRestart); _exitRequested = true; Close(); break;
+                case "zeroTierDownload":
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://www.zerotier.com/download/") { UseShellExecute = true }); break;
+                case "zeroTierJoin":
+                    if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de conectar este PC à rede privada.");
+                    if (MessageBox.Show(this, "Conectar este PC à rede privada configurada?\n\nO Windows pedirá autorização. O proprietário deverá autorizar este dispositivo no painel ZeroTier. Não será alterada a rota padrão da internet nem o DNS.", "Conectar ZeroTier", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes)
+                        await ZeroTierService.RequestJoinAsync();
+                    result = await new ZeroTierService().StatusAsync(); break;
                 case "settings":
                     Invitations.ValidateServer(p.GetProperty("server").GetString()!);
                     if (p.GetRawText().Length > 4096) throw new ArgumentException("Configurações inválidas.");
@@ -300,6 +336,7 @@ public partial class ShellWindow : Window
                 case "audioStop": _audio.Dispose(); break;
                 case "checkUpdates": result = await CheckUpdatesAsync(); break;
                 case "downloadUpdate":
+                    if (App.ZeroTierProof) throw new InvalidOperationException("Atualizações estáveis desativadas neste protótipo.");
                     if (_availableUpdate is null) throw new InvalidOperationException("Consulte as atualizações primeiro.");
                     if (!_updateDownloaded)
                     {
@@ -309,6 +346,7 @@ public partial class ShellWindow : Window
                     result = new { downloaded = true };
                     break;
                 case "installUpdate":
+                    if (App.ZeroTierProof) throw new InvalidOperationException("Atualizações estáveis desativadas neste protótipo.");
                     if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de atualizar.");
                     if (_availableUpdate is null) throw new InvalidOperationException("Nenhuma atualização aprovada disponível.");
                     if (!_updateDownloaded) throw new InvalidOperationException("Aguarde o download da atualização.");
@@ -404,6 +442,7 @@ public partial class ShellWindow : Window
     }
     private async Task<object> CheckUpdatesAsync()
     {
+        if (App.ZeroTierProof) return new { available = false, message = "Protótipo experimental isolado." };
         if (!_updates.IsInstalled) return new { available = false, message = "Atualizações automáticas funcionam na versão instalada." };
         try
         {

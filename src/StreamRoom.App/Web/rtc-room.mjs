@@ -1,6 +1,7 @@
 import { directConfiguration, directRoute, DIRECT_FAILURE } from './direct-ice.mjs';
 import { profile, perPeerCap, adapt } from './quality.mjs';
 import { localTailCandidate, tailDescription, tailscaleRoute, deferTailCandidate } from './tailscale-routing.mjs';
+import { zeroTierCandidate, zeroTierRoute } from './zerotier-routing.mjs';
 
 export class RtcRoom extends EventTarget {
   constructor(native) {
@@ -21,11 +22,13 @@ export class RtcRoom extends EventTarget {
     for (const signal of pending) this.enqueueSignal(signal.from, signal.payload);
   }
   async ice() {
+    if (this.zeroTierProof && !this.zeroTier?.connected) throw Error('ZeroTier experimental: conecte e autorize os dois dispositivos na rede privada antes de transmitir.');
     if (!this.iceCache || Date.now() - this.iceAt > 300_000) {
       if (!this.iceRequest) this.iceRequest = this.native('ice').then(value => { this.iceCache = value; this.iceAt = Date.now(); this.event('ice', 'direct-only'); }).finally(() => { this.iceRequest = null; });
       await this.iceRequest;
     }
-    return directConfiguration(this.iceCache);
+    const configuration = directConfiguration(this.iceCache);
+    return this.zeroTierProof ? { ...configuration, iceServers: [] } : configuration;
   }
   updateRoom(state) {
     this.participants = state.participants ?? [];
@@ -136,7 +139,7 @@ export class RtcRoom extends EventTarget {
       }
       await peer.pc.setLocalDescription(await peer.pc.createOffer());
       if (!this.validPeer(peer)) return;
-      await this.signal(peer, { kind: 'offer', sdp: tailDescription(peer.pc.localDescription.sdp, peer.tailPreferred) });
+      await this.signal(peer, { kind: 'offer', sdp: tailDescription(peer.pc.localDescription.sdp, peer.tailPreferred || this.zeroTierProof) });
       peer.sent = true; await this.flushLocal(peer); await this.configureSender(peer);
     } catch (error) {
       if (peer && this.peers.get(key) === peer) this.closePeer(key);
@@ -156,6 +159,7 @@ export class RtcRoom extends EventTarget {
     peer.connectDeadline = setTimeout(() => { if (this.validPeer(peer) && pc.connectionState !== 'connected') void recover(); }, 30_000);
     pc.onicecandidate = ({ candidate }) => {
       if (!this.validPeer(peer) || !candidate || candidate.type === 'relay') return;
+      if (this.zeroTierProof && !zeroTierCandidate(candidate, this.zeroTier)) return;
       if (candidate && candidate.type in peer.candidates) peer.candidates[candidate.type]++;
       // A null event is local gathering completion. Only actual per-generation
       // candidates (including their empty-string marker) go to the remote peer.
@@ -208,10 +212,11 @@ export class RtcRoom extends EventTarget {
       clearTimeout(peer.connectDeadline); clearTimeout(peer.recovery); peer.recovery = null;
       const attempts = (this.attempts.get(key) ?? 0) + 1; this.attempts.set(key, attempts);
       if (attempts > 3) {
+        const failureMessage = this.zeroTierProof ? 'Não foi possível conectar a mídia pela rede ZeroTier. Confira se os dois PCs estão autorizados na mesma rede, com a opção ativada e o StreamRoom reiniciado. O diagnóstico foi preservado.' : DIRECT_FAILURE;
         // Preserve safe summaries before closePeer discards the failed RTCPeerConnection.
         this.failedConnections.set(key, {
           key, id: peer.id, publisherId: peer.publisherId, direction: peer.direction,
-          state: 'failed', failed: true, direct: false, message: DIRECT_FAILURE, tailscaleAttempted: Boolean(peer.tailPreferred), tailscaleCandidates: peer.tailCandidates,
+          state: 'failed', failed: true, direct: false, message: failureMessage, tailscaleAttempted: Boolean(peer.tailPreferred), tailscaleCandidates: peer.tailCandidates,
           iceState: peer.pc.iceConnectionState ?? 'unknown', gathering: peer.pc.iceGatheringState ?? 'unknown',
           candidates: { ...peer.candidates }, remoteCandidates: peer.remoteCandidates ?? 0,
           remotePublicCandidates: peer.remotePublicCandidates ?? 0,
@@ -220,7 +225,7 @@ export class RtcRoom extends EventTarget {
         });
         this.closePeer(key);
         this.event('stats', [...this.failedConnections.values()]);
-        this.event('connectionError', { id: peer.id, message: DIRECT_FAILURE }); return;
+        this.event('connectionError', { id: peer.id, message: failureMessage }); return;
       }
       if (peer.direction === 'send') {
         const sub = this.subscribers.find(s => s.subscriptionId === key); if (sub) await this.offer(sub, true);
@@ -253,16 +258,16 @@ export class RtcRoom extends EventTarget {
       const config = await this.ice();
       if (!this.identity || !this.subscriptions.some(s => s.subscriptionId === key && s.streamId === payload.streamId)) return;
       peer = this.newPeer(from, sub, 'receive', payload.session, config);
-      await peer.pc.setRemoteDescription({ type: 'offer', sdp: payload.sdp });
+      await peer.pc.setRemoteDescription({ type: 'offer', sdp: tailDescription(payload.sdp, this.zeroTierProof) });
       if (!this.validPeer(peer)) return;
       await peer.pc.setLocalDescription(await peer.pc.createAnswer());
       if (!this.validPeer(peer)) return;
-      await this.signal(peer, { kind: 'answer', sdp: tailDescription(peer.pc.localDescription.sdp, peer.tailPreferred) });
+      await this.signal(peer, { kind: 'answer', sdp: tailDescription(peer.pc.localDescription.sdp, peer.tailPreferred || this.zeroTierProof) });
       peer.sent = true; await this.flushLocal(peer); return;
     }
     if (!peer || peer.id !== from || payload.streamId !== peer.streamId || payload.session !== peer.session || !this.validPeer(peer)) return;
     if (payload.kind === 'answer' && peer.direction === 'send' && peer.pc.signalingState === 'have-local-offer') {
-      await peer.pc.setRemoteDescription({ type: 'answer', sdp: payload.sdp });
+      await peer.pc.setRemoteDescription({ type: 'answer', sdp: tailDescription(payload.sdp, this.zeroTierProof) });
       for (const ice of peer.remoteIce.splice(0)) if (this.validPeer(peer)) await peer.pc.addIceCandidate(ice);
     } else if (payload.kind === 'ice' && !/ typ relay(?: |$)/.test(payload.candidate)) {
       if (payload.candidate) { peer.remoteCandidates = (peer.remoteCandidates ?? 0) + 1; if (/ typ (?:srflx|prflx)(?: |$)/.test(payload.candidate)) peer.remotePublicCandidates = (peer.remotePublicCandidates ?? 0) + 1; }
@@ -309,7 +314,8 @@ export class RtcRoom extends EventTarget {
         if (video?.codecId) codec = reports.get(video.codecId);
         const tailStatus = this.tailscale?.addresses?.length ? this.tailscale : this.tailscaleKnown
           ? { ...this.tailscaleKnown, connected: false, state: this.tailscale?.state ?? 'Unavailable' } : null;
-        const route = tailscaleRoute(reports, tailStatus) ?? directRoute(reports);
+        const ordinaryRoute = tailscaleRoute(reports, tailStatus) ?? directRoute(reports);
+        const route = this.zeroTierProof ? zeroTierRoute(reports, this.zeroTier) ?? { ...ordinaryRoute, confirmed: false, label: 'ZeroTier · aguardando validação da interface de mídia' } : ordinaryRoute;
         if (route.relayed) { this.closePeer(peer.key); this.event('connectionError', { id: peer.id, message: 'Rota relay detectada e bloqueada. ' + DIRECT_FAILURE }); continue; }
         const bytes = video?.bytesSent ?? video?.bytesReceived ?? 0;
         const packets = video?.packetsSent ?? video?.packetsReceived ?? 0;
@@ -322,7 +328,7 @@ export class RtcRoom extends EventTarget {
         const hardware = video?.encoderImplementation ?? video?.decoderImplementation ?? 'Não informado';
         rows.push({ id: peer.id, key: peer.key, direction: peer.direction, publisherId: peer.publisherId, state: peer.pc.connectionState, bitrate, fps: video?.framesPerSecond ?? null,
           width: video?.frameWidth ?? null, height: video?.frameHeight ?? null, loss, rtt: rtt || null,
-          codec: codec?.mimeType?.replace('video/', '') ?? 'Negociando', route: route.label, localCandidate: route.localType, remoteCandidate: route.remoteType, transport: route.protocol, direct: route.confirmed, tailscale: Boolean(route.tailscale), overlayRelay: Boolean(route.overlayRelay), tailscaleCandidates: peer.tailCandidates,
+          codec: codec?.mimeType?.replace('video/', '') ?? 'Negociando', route: route.label, localCandidate: route.localType, remoteCandidate: route.remoteType, transport: route.protocol, direct: route.confirmed, zeroTier: Boolean(route.zeroTier), overlayRoute: route.overlayRoute ?? null, tailscale: Boolean(route.tailscale), overlayRelay: Boolean(route.overlayRelay), tailscaleCandidates: peer.tailCandidates,
           elapsed: Math.floor((performance.now() - peer.startedAt) / 1000), iceState: peer.pc.iceConnectionState, gathering: peer.pc.iceGatheringState, candidates: { ...peer.candidates }, stunError: peer.stunError, frames: video?.framesDecoded ?? video?.framesEncoded ?? 0,
           hardware, powerEfficient: video?.powerEfficientEncoder ?? null, limitation: video?.qualityLimitationReason ?? null,
           audioPackets: audio?.packetsSent ?? audio?.packetsReceived ?? null, audioCodec: audio?.codecId ? reports.get(audio.codecId)?.mimeType : null });

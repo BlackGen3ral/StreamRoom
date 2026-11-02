@@ -1,12 +1,13 @@
 import { RtcRoom } from './rtc-room.mjs';
 import { createCapturePicker } from './capture-picker.mjs';
 import { createTailscaleUi } from './tailscale-ui.mjs';
+import { createZeroTierUi } from './zerotier-ui.mjs';
 const $ = id => document.getElementById(id);
 const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
     const id = String(++sequence);
-    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'tailscaleInstall' ? 1800000 : type === 'tailscaleProbe' ? 45000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
+    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'zeroTierJoin' ? 180000 : type === 'tailscaleInstall' ? 1800000 : type === 'tailscaleProbe' ? 45000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
     requests.set(id, { resolve, reject, timer }); window.chrome.webview.postMessage({ id, type, payload });
   });
 }
@@ -17,6 +18,7 @@ let latestStats = [], buildVersion = '', runtimeVersion = '';
 const cards = new Map(), remoteStreams = new Map();
 function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
 const tailscaleUi = createTailscaleUi(native, rtc, save, () => state.connected, status);
+const zeroTierUi = createZeroTierUi(native, rtc, () => state.connected, status);
 function options() { return { quality: Number($('quality').value), fps: Number($('fps').value), audio: $('audio').value, autoQuality: $('autoQuality').checked, upload: Number($('upload').value) }; }
 function node(tag, className, text) { const e = document.createElement(tag); if (className) e.className = className; if (text !== undefined) e.textContent = text; return e; }
 function button(text, action) { const e = node('button', 'quiet', text); e.addEventListener('click', action); return e; }
@@ -197,7 +199,7 @@ rtc.addEventListener('peerState', ({ detail }) => {
 });
 rtc.addEventListener('stats', ({ detail }) => {
   latestStats = detail;
-  $('directStatus').textContent = detail.some(r => r.overlayRelay) ? 'Tailscale · relay em uso' : detail.some(r => r.tailscale) ? 'Rede privada Tailscale' : detail.length && detail.every(r => r.direct) ? 'P2P direto confirmado · sem relay' : 'STUN gratuito · aguardando P2P';
+  $('directStatus').textContent = rtc.zeroTierProof ? detail.some(r => r.zeroTier) ? 'ZeroTier · interface de mídia confirmada' : 'ZeroTier · aguardando mídia' : detail.some(r => r.overlayRelay) ? 'Tailscale · relay em uso' : detail.some(r => r.tailscale) ? 'Rede privada Tailscale' : detail.length && detail.every(r => r.direct) ? 'P2P direto confirmado · sem relay' : 'STUN gratuito · aguardando P2P';
   $('stats').replaceChildren(...detail.map(row => {
     const name = state.participants.find(p => p.id === row.id)?.name ?? 'Participante';
     if (row.failed) return node('p', 'fine', 'Última tentativa com ' + name + ': conexão direta falhou · ICE: ' + row.iceState + ' · descoberta: ' + row.gathering + ' · endereços locais/públicos encontrados: ' + row.candidates.host + '/' + row.candidates.srflx + ' · endereços recebidos do amigo: ' + row.remoteCandidates + ' (públicos: ' + row.remotePublicCandidates + ') · negociação recebida: ' + (row.descriptionReceived ? 'sim' : 'não') + (row.stunError ? ' · houve falha ao consultar STUN' : '') + '. Esses dados permanecem até reconectar ou sair da sala.');
@@ -288,21 +290,25 @@ $('installUpdate').addEventListener('click', () => busy(async () => { if (state.
 for (const id of ['quality','fps','autoQuality','upload']) $(id).addEventListener('change', () => { rtc.setOptions(options()); void save().catch(e => status(e.message,true)); });
 $('audio').addEventListener('change', () => { $('audioHint').textContent = $('audio').value === 'system' ? 'WASAPI captura todo o sistema, incluindo Discord e outras gameplays que você estiver ouvindo. Pode causar retorno. Prefira áudio da janela.' : $('audio').value === 'none' ? 'Apenas vídeo.' : 'Escolha a janela do jogo e habilite áudio no seletor. Depende do Windows/WebView2.'; });
 window.streamroom = { shutdown: async () => { state.shuttingDown = true; await rtc.shutdown(); }, diagnostics: () => ({ peers: rtc.peers.size, sending: rtc.subscribers.length, watching: rtc.subscriptions.length }) };
-window.streamroom.shutdown = async () => { tailscaleUi.dispose(); state.shuttingDown = true; await rtc.shutdown(); };
+window.streamroom.shutdown = async () => { tailscaleUi.dispose(); zeroTierUi.dispose(); state.shuttingDown = true; await rtc.shutdown(); };
+window.addEventListener('pagehide', () => zeroTierUi.dispose(), { once: true });
 $('copyDiagnostics').addEventListener('click', () => busy(async () => {
   // Whitelist only summary fields. No invites, IPs, account names, SDP, or keys.
   const fields = ['direction','state','failed','message','bitrate','fps','width','height','loss','rtt','codec','route','localCandidate','remoteCandidate','transport','direct','tailscale','overlayRelay','tailscaleAttempted','tailscaleCandidates','elapsed','iceState','gathering','candidates','stunError','frames','remoteCandidates','remotePublicCandidates','descriptionReceived'];
-  const report = { format: 1, version: buildVersion, runtime: runtimeVersion, at: new Date().toISOString(), tailscale: tailscaleUi.diagnostics(),
+  fields.push('zeroTier','overlayRoute');
+  const report = { format: 1, version: buildVersion, runtime: runtimeVersion, at: new Date().toISOString(), zeroTier: { ...zeroTierUi.diagnostics(), verifiedMediaConnections: latestStats.filter(row => row.zeroTier).length }, tailscale: tailscaleUi.diagnostics(),
     connections: latestStats.map(row => Object.fromEntries(fields.filter(key => row[key] !== undefined).map(key => [key,row[key]]))) };
   await native('copy', { text: JSON.stringify(report, null, 2) }); status('Diagnóstico copiado, sem convites, IPs ou tokens.');
 }));
 try {
   const r = await native('ready');
+  await zeroTierUi.start(r);
   for (const [key,value] of Object.entries(r.settings ?? {})) { const input=$(key); if (!input) continue; if(input.type==='checkbox') input.checked=Boolean(value); else input.value=String(value); }
+  if (r.zeroTierEnabled) { $('quality').value = '720'; $('fps').value = '30'; }
   buildVersion = r.version; runtimeVersion = r.runtime; void tailscaleUi.refresh();
-  $('version').textContent=r.version+' · desenvolvimento'; $('runtime').textContent='Motor WebView2 '+r.runtime; $('footerVersion').textContent='StreamRoom '+r.version+' · build de desenvolvimento';
+  $('version').textContent=r.version+(r.installed?'':' · desenvolvimento'); $('runtime').textContent='Motor WebView2 '+r.runtime; $('footerVersion').textContent='StreamRoom '+r.version+(r.installed?'':' · build de desenvolvimento');
   if (!isSecureContext || !navigator.mediaDevices?.getDisplayMedia || !globalThis.RTCPeerConnection) status('Atualize o Microsoft Edge WebView2 Runtime para captura/WebRTC.',true);
-  if (r.uiPreview) { $('tailscalePanel').open = true; setTimeout(() => native('uiPreview'), 2000); }
+  if (r.uiPreview) { $('zeroTierPanel').open = true; $('zeroTierDialog').showModal(); setTimeout(() => native('uiPreview'), 2000); }
   if (r.capturePreview) { capturePicker.open(); setTimeout(() => native('capturePreview'), 6000); }
   if(r.installed) setTimeout(checkUpdates,5000);
 } catch(e) {status('Falha ao iniciar: '+e.message,true);}
