@@ -19,6 +19,12 @@ public partial class App : Application
     public static void Main(string[] args)
     {
         VelopackApp.Build().Run();
+        int previewTest = Array.IndexOf(args, "--preview-self-test");
+        if (previewTest >= 0)
+        {
+            CapturePreviewSelfTest.Run(System.IO.Path.GetFullPath(args.ElementAtOrDefault(previewTest + 1) ?? "preview-self-test.json")).GetAwaiter().GetResult();
+            return;
+        }
         ZeroTierProof = args.Contains("--zerotier-proof", StringComparer.Ordinal);
 #if ZEROTIER_PROOF
         ZeroTierProof = true;

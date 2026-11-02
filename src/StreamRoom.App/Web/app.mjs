@@ -146,6 +146,8 @@ function renderProfile() {
 }
 function render() {
   renderProfile();
+  $('qualitySummary').textContent = $('quality').value + 'p · ' + $('fps').value + ' FPS';
+  $('qualitySummaryHint').textContent = rtc.localStream ? 'Compartilhando · ajustes aplicados ao vivo' : 'Pronto para sua próxima transmissão';
   $('headerRoom').textContent = state.connected ? 'Sala conectada' : 'Sua sala';
   document.body.classList.toggle('in-room', state.connected);
   $('installUpdate').disabled = !updateReady || state.connected;
@@ -246,9 +248,7 @@ rtc.addEventListener('remote', ({ detail }) => {
 rtc.addEventListener('peerState', ({ detail }) => {
   if (detail.state === 'failed' || detail.state === 'disconnected') status('Reconectando uma transmissão; as outras continuam.');
 });
-rtc.addEventListener('stats', ({ detail }) => {
-  latestStats = detail;
-  $('directStatus').textContent = rtc.zeroTierProof ? detail.some(r => r.zeroTier) ? 'ZeroTier · interface de mídia confirmada' : 'ZeroTier · aguardando mídia' : detail.some(r => r.overlayRelay) ? 'Tailscale · relay em uso' : detail.some(r => r.tailscale) ? 'Rede privada Tailscale' : detail.length && detail.every(r => r.direct) ? 'P2P direto confirmado · sem relay' : 'STUN gratuito · aguardando P2P';
+function renderStats(detail) {
   $('stats').replaceChildren(...detail.map(row => {
     const name = state.participants.find(p => p.id === row.id)?.name ?? 'Participante';
     if (row.failed) return node('p', 'fine', 'Última tentativa com ' + name + ': conexão direta falhou · ICE: ' + row.iceState + ' · descoberta: ' + row.gathering + ' · endereços locais/públicos encontrados: ' + row.candidates.host + '/' + row.candidates.srflx + ' · endereços recebidos do amigo: ' + row.remoteCandidates + ' (públicos: ' + row.remotePublicCandidates + ') · negociação recebida: ' + (row.descriptionReceived ? 'sim' : 'não') + (row.stunError ? ' · houve falha ao consultar STUN' : '') + '. Esses dados permanecem até reconectar ou sair da sala.');
@@ -256,6 +256,12 @@ rtc.addEventListener('stats', ({ detail }) => {
     return node('p','fine',text);
   }));
   if (!detail.length) $('stats').textContent = 'Sem conexões de mídia. Escolha uma transmissão para assistir.';
+}
+$('stats').closest('details').addEventListener('toggle', event => { if (event.target.open) renderStats(latestStats); });
+rtc.addEventListener('stats', ({ detail }) => {
+  latestStats = detail;
+  $('directStatus').textContent = rtc.zeroTierProof ? detail.some(r => r.zeroTier) ? 'ZeroTier · interface de mídia confirmada' : 'ZeroTier · aguardando mídia' : detail.some(r => r.overlayRelay) ? 'Tailscale · relay em uso' : detail.some(r => r.tailscale) ? 'Rede privada Tailscale' : detail.length && detail.every(r => r.direct) ? 'P2P direto confirmado · sem relay' : 'STUN gratuito · aguardando P2P';
+  if ($('stats').closest('details').open) renderStats(detail);
   for (const card of cards.values()) {
     const rows = detail.filter(r => r.publisherId === card.id);
     if (!card.own && rows.length) {
@@ -279,7 +285,7 @@ function showExpiry(expiresAt) {
   $('roomCode').textContent = state.persistent ? 'Sala do grupo' : 'Sala ' + (state.roomId ?? '').slice(0,8);
   if (state.persistent) {
     $('roomCode').title = 'Sala fixa privada';
-    $('roomLifetime').textContent = 'Acesso salvo neste PC. A sala continua disponível mesmo quando todos saem.';
+    $('roomLifetime').textContent = 'Acesso salvo. Volte quando quiser, mesmo com a sala vazia.';
     return;
   }
   $('roomCode').title = 'Próxima renovação antes de ' + new Date(expiresAt).toLocaleString('pt-BR');
@@ -333,10 +339,10 @@ $('showStage').addEventListener('click', () => { selectPage('screens', true); $(
 for (const tab of document.querySelectorAll('[data-page]')) {
   tab.addEventListener('click', () => { if (tab.dataset.page === 'screens') selectPage('screens'); else openSettings(tab.dataset.page); });
   tab.addEventListener('keydown', event => {
-    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+    if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key)) return;
     event.preventDefault(); const pages = ['screens','transmission','connections'];
     const index = pages.indexOf(currentPage);
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (index + (event.key === 'ArrowRight' ? 1 : 2)) % 3;
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (index + ((event.key === 'ArrowRight' || event.key === 'ArrowDown') ? 1 : 2)) % 3;
     if (pages[next] !== 'screens') $('settings').open = true;
     selectPage(pages[next], true);
   });

@@ -16,6 +16,7 @@ public partial class ShellWindow : Window
     private string _webOrigin = Origin;
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
     private readonly SemaphoreSlim _commands = new(1, 1);
+    private readonly SemaphoreSlim _previewCommands = new(4, 4);
     private readonly SemaphoreSlim _tailscaleCommands = new(1, 1);
     private readonly SemaphoreSlim _zeroTierStatusCommands = new(1, 1);
     private readonly TailscaleService _tailscale = new();
@@ -160,7 +161,7 @@ public partial class ShellWindow : Window
             id = message.GetProperty("id").GetString();
             if (type?.StartsWith("tailscale", StringComparison.Ordinal) == true)
                 throw new InvalidOperationException("A integração Tailscale foi retirada. Use a opção ZeroTier em Conexões.");
-            commandGate = type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
+            commandGate = type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
             object? result = null;
@@ -340,6 +341,9 @@ public partial class ShellWindow : Window
                     break;
                 case "captureSources":
                     result = new { supported = NativeCapture.Supported, sources = await Task.Run(() => _captureSources.List()) };
+                    break;
+                case "captureThumbnail":
+                    result = new { thumbnail = await _captureSources.ThumbnailAsync(p.GetProperty("sourceId").GetString()!) };
                     break;
                 case "nativeCaptureStart":
                     if (_connection?.IsConnected != true && App.CaptureTestOutput is null) throw new InvalidOperationException("Entre em uma sala primeiro.");
