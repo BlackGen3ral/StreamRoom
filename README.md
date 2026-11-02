@@ -39,7 +39,9 @@ Vídeo real por Windows Graphics Capture no seletor próprio, com fallback expl�
 
 ## STUN gratuito e salas longas
 
-Somente STUN público e P2P direto. TURN, relay, Stream e SFU não são configurados. URLs TURN/credenciais de um servidor antigo são descartadas pelo cliente; candidatos relay são bloqueados. CGNAT/NAT restritivo, VPN, firewall e UDP bloqueado podem impedir a conexão. O app mostra erro e não ativa fallback pago.
+Por padrão, STUN público e P2P direto. URLs TURN/credenciais de um servidor antigo são descartadas; candidatos TURN/relay do WebRTC continuam bloqueados. CGNAT/NAT restritivo, VPN, firewall e UDP bloqueado podem impedir a conexão.
+
+**Tailscale opcional:** o painel lateral detecta instalação/conexão, oferece o instalador oficial com autorização e assinatura verificada, orienta contas individuais e convites da rede privada e mostra direta/relay/desconectada. A opção permite candidatos reais da interface Tailscale, tenta priorizar caminhos diretos e preserva o modo normal. Não há TURN pago. **A validação Tailscale audiovisual entre redes diferentes está pendente; não há garantia de 1080p60.** [Configuração, segurança e roteiro do teste](docs/TAILSCALE.md).
 
 Salas começam com 24h. Na última hora, o criador autenticado renova por mais 24h; espectadores não renovam e salas expiradas/encerradas não revivem. Os dois protocolos usam SQLite, WebSocket Hibernation, ping respondido pelo runtime e limpeza a cada cinco minutos.
 
@@ -84,9 +86,9 @@ Cria cinco sessões, vinte canais de dados diretos por assinaturas, remove uma a
 
 Worker: server/src/index.ts / MultiRoom, API v2. Compatibilidade v1: server/src/legacy.ts / Room. wrangler.jsonc preserva a migração v1 e adiciona MultiRoom SQLite em v2. Nenhum segredo de mídia é necessário.
 
-Após testes e confirmação do plano Free no painel: npm run deploy em server. Não configure TURN ou serviços pagos.
+Após testes e confirmação do plano Free no painel: npm run deploy em server. Não configure TURN ou serviços pagos. A integração Tailscale fica no cliente e não exige alteração do Worker.
 
-Velopack verifica Releases públicas oficiais estáveis, avisa e aplica a atualização por ação do usuário após sair da sala. Commits, drafts, prereleases e artefatos de Actions não são atualizações oficiais. Os workflows têm contents:read e não publicam Releases. [Aprovação e assinatura](docs/RELEASING.md).
+Velopack verifica Releases públicas oficiais estáveis, avisa e aplica a atualização por ação do usuário após sair da sala. O workflow de main compila, testa e publica o instalador e o feed após sucesso. Commits, drafts, prereleases e artefatos de Actions não são atualizações oficiais. [Aprovação e assinatura](docs/RELEASING.md).
 
 O EXE, a janela e o instalador possuem ícone próprio. **Ícone não remove SmartScreen.** Não há certificado de assinatura de código disponível nesta sessão; mesmo apps assinados podem receber aviso enquanto constroem reputação. [Assinatura e avisos do Windows](docs/WINDOWS-SIGNING.md).
 

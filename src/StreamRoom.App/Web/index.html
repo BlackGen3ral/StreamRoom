@@ -17,7 +17,17 @@
     <label for="upload">Limite total de envio (Mbps)</label><input id="upload" type="number" min="2" max="80" step="1" value="24">
     <p class="fine">O envio é dividido entre espectadores. Quatro amigos exigem até quatro cópias do vídeo.</p>
     <label for="server">Servidor de sinalização</label><input id="server" value="https://streamroom.arthostudio.com" spellcheck="false">
-    <p class="fine">Apenas P2P direto com STUN gratuito. Redes incompatíveis não conectam; nenhum relay é ativado. A sala é renovada automaticamente enquanto o criador permanece conectado.</p></details>
+    <p class="fine">STUN gratuito, sem TURN pago. A opção Tailscale pode usar a retransmissão gratuita da rede privada. A sala é renovada automaticamente enquanto o criador permanece conectado.</p></details>
+  </details>
+  <details class="card" id="tailscalePanel"><summary>Conectar com Tailscale <span class="muted">· opcional</span></summary>
+    <p id="tailscaleStatus" class="fine" role="status" aria-live="polite">Verificando instalação…</p>
+    <label class="checkbox"><input id="tailscaleEnabled" type="checkbox"> Preferir minha rede Tailscale</label>
+    <p class="fine" id="tailscaleRestartHint" hidden>Saia da sala e reinicie para aplicar. Este modo permite ao WebRTC anunciar endereços locais reais aos participantes da sala.</p>
+    <button id="tailscaleRestart" class="wide" hidden>Reiniciar para aplicar</button>
+    <div class="row"><button id="tailscaleInstall" hidden>Instalar Tailscale…</button><button id="tailscaleOpen" hidden>Abrir Tailscale</button><button id="tailscaleRefresh" class="quiet">Atualizar</button></div>
+    <details><summary>Conectar seus amigos</summary><ol class="fine"><li>Cada pessoa instala o Tailscale e entra com sua própria conta pessoal, no plano gratuito.</li><li>Uma pessoa abre os convites da rede privada e envia o link aos amigos. Cada amigo aceita no navegador, com sua própria conta. O convite Tailscale é diferente do convite da sala.</li><li>Com os PCs na mesma rede privada, ativem a preferência acima, reiniciem o StreamRoom e entrem na sala normalmente.</li></ol><button id="tailscaleInvitations" class="quiet">Gerenciar convites no navegador</button></details>
+    <ul id="tailscalePeers" class="tailscale-peers"></ul><p class="fine" id="tailscaleNoPeers" hidden>Nenhum amigo detectado. Confirme que aceitaram o convite e conectaram seus PCs à mesma rede privada.</p>
+    <p class="fine">Direta é a melhor rota para 1080p60. Relay pode ter menor velocidade; a taxa de quadros depende da rede e do PC. Sem exit node e sem TURN pago.</p>
   </details>
 <div class="sidebar-presence"><span id="profileAvatar" class="avatar">V</span><div><strong id="profileName">Você</strong><span id="profileStatus">Pronto para entrar</span></div><span class="presence-dot" aria-hidden="true"></span></div><p class="tray-note">Ao fechar a janela, o StreamRoom continua na bandeja.</p></aside><main id="stage">
   <div class="stage-title"><div><span class="eyebrow" id="roomState">TELA COMPARTILHADA</span><h1 id="title">Transmissões</h1></div><span id="directStatus" class="muted">Conexão direta</span></div>
@@ -30,7 +40,7 @@
     <div class="toolbar"><div class="row"><button id="start" class="primary" disabled>Compartilhar tela</button><button id="startCompatible" class="quiet" disabled>Modo compatível</button><button id="stop" class="danger" hidden>Parar transmissão</button><span id="source" class="muted">Entre em uma sala para começar.</span></div></div>
   </section>
   <details id="captureInfo" class="info-card"><summary>Sobre captura e áudio</summary><p>Você escolhe o que capturar no seletor do Windows. Jogos em tela cheia exclusiva podem exigir modo janela sem bordas. Nenhum microfone é capturado.</p></details>
-  <details class="card telemetry"><summary>Detalhes da conexão</summary><div id="stats" class="stats-empty">As estatísticas aparecem quando houver uma conexão WebRTC.</div></details>
+  <details class="card telemetry"><summary>Detalhes da conexão</summary><div id="stats" class="stats-empty">As estatísticas aparecem quando houver uma conexão WebRTC.</div><button id="copyDiagnostics" class="quiet">Copiar diagnóstico</button></details>
   <div id="status" role="status" aria-live="polite">Pronto para começar.</div>
 </main></div><footer><span id="runtime"></span><span id="footerVersion">StreamRoom · build de desenvolvimento</span></footer>
 <dialog id="capturePicker" aria-labelledby="pickerTitle">

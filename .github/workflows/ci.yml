@@ -28,6 +28,7 @@ jobs:
       - run: npm run build
         working-directory: server
       - run: dotnet build src/StreamRoom.App/StreamRoom.App.csproj -c Release
+      - run: dotnet run --project tests/StreamRoom.NetworkTests -c Release
       - name: Start local Cloudflare runtime and run integration tests
         shell: pwsh
         run: |

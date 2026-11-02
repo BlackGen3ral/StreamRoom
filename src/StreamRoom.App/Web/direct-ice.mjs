@@ -1,4 +1,4 @@
-export const DIRECT_FAILURE = 'Não foi possível estabelecer P2P direto. CGNAT/NAT restritivo, VPN, firewall ou bloqueio de UDP podem impedir a conexão. Esta versão não usa TURN e não tem retransmissão alternativa.';
+export const DIRECT_FAILURE = 'Não foi possível estabelecer a conexão direta. Restrições de rede, VPN ou firewall podem impedir o P2P. Nenhum TURN pago está configurado. Se usar Tailscale, confirme que os dois PCs estão conectados à mesma rede privada.';
 // Whitelist schemes and strip credentials even when connected to an old/custom server.
 export function directConfiguration(value) {
   const urls = (value?.iceServers ?? []).flatMap(server => typeof server.urls === 'string' ? [server.urls] : server.urls ?? [])

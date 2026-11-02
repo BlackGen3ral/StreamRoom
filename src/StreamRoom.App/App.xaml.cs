@@ -15,6 +15,12 @@ public partial class App : Application
     public static void Main(string[] args)
     {
         VelopackApp.Build().Run();
+        int restartParent = Array.IndexOf(args, "--restart-parent");
+        if (restartParent >= 0 && int.TryParse(args.ElementAtOrDefault(restartParent + 1), out var parentId) && parentId != Environment.ProcessId)
+        {
+            try { if (!System.Diagnostics.Process.GetProcessById(parentId).WaitForExit(15000)) return; }
+            catch (ArgumentException) { }
+        }
         int uiPreview = Array.IndexOf(args, "--ui-preview");
         if (uiPreview >= 0) UiPreviewOutput = System.IO.Path.GetFullPath(args.ElementAtOrDefault(uiPreview + 1) ?? "ui-preview.png");
         int trayTest = Array.IndexOf(args, "--tray-self-test");

@@ -15,6 +15,9 @@ public partial class ShellWindow : Window
     private const string Origin = "https://streamroom.local";
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
     private readonly SemaphoreSlim _commands = new(1, 1);
+    private readonly SemaphoreSlim _tailscaleCommands = new(1, 1);
+    private readonly TailscaleService _tailscale = new();
+    private bool _tailscaleWebRtcReady;
     private readonly SystemAudioCapture _audio = new();
     private readonly UpdateManager _updates = new(new GithubSource("https://github.com/BlackGen3ral/StreamRoom", null, false));
     private readonly CaptureSources _captureSources = new();
@@ -60,8 +63,18 @@ public partial class ShellWindow : Window
         try
         {
             Directory.CreateDirectory(DataDirectory);
+            try
+            {
+                using var startupSettings = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(DataDirectory, "settings-v2.json")));
+                _tailscaleWebRtcReady = startupSettings.RootElement.TryGetProperty("tailscaleEnabled", out var enabled) && enabled.ValueKind == JsonValueKind.True;
+            }
+            catch (Exception ex) when (ex is IOException or JsonException) { }
             var browserOptions = new CoreWebView2EnvironmentOptions { Language = "pt-BR", AdditionalBrowserArguments = "--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows" };
-            var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(App.MediaTestDirectory ?? DataDirectory, "WebView2"), browserOptions);
+            // Opt-in only: expose real host candidates to room participants so ICE
+            // can reach the Tailscale adapter. No invented/replaced candidate IPs.
+            if (_tailscaleWebRtcReady) browserOptions.AdditionalBrowserArguments += " --force-webrtc-ip-handling-policy=default --disable-features=WebRtcHideLocalIpsWithMdns";
+            var browserData = App.MediaTestDirectory ?? (App.UiPreviewOutput is null ? DataDirectory : App.UiPreviewOutput + ".profile");
+            var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(browserData, _tailscaleWebRtcReady ? "WebView2-Tailscale" : "WebView2"), browserOptions);
             await Browser.EnsureCoreWebView2Async(environment);
             var core = Browser.CoreWebView2;
             try { _tray = new TrayIcon(this, OpenFromTray, () => { _exitRequested = true; Close(); }); }
@@ -125,7 +138,7 @@ public partial class ShellWindow : Window
                 return;
             }
             id = message.GetProperty("id").GetString();
-            commandGate = type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
+            commandGate = type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
             object? result = null;
@@ -172,6 +185,19 @@ public partial class ShellWindow : Window
                 case "watch":
                     await (_connection ?? throw new SignalingException("Você está desconectado.")).SetWatchingAsync(p.GetProperty("publisherId").GetString()!, p.GetProperty("streamId").GetString()!, p.GetProperty("subscriptionId").GetString()!, p.GetProperty("active").GetBoolean(), p.GetProperty("height").GetInt32(), p.GetProperty("fps").GetInt32()); break;
                 case "ice": result = await (_connection ?? throw new SignalingException("Você está desconectado.")).GetIceConfigurationAsync(); break;
+                case "tailscaleStatus": result = new { status = await _tailscale.StatusAsync(), webRtcReady = _tailscaleWebRtcReady }; break;
+                case "tailscaleProbe": result = new { status = await _tailscale.ProbeAsync(p.GetProperty("address").GetString()!), webRtcReady = _tailscaleWebRtcReady }; break;
+                case "tailscaleOpen": _tailscale.OpenClient(); break;
+                case "tailscaleInvitations": TailscaleService.OpenInvitations(); break;
+                case "tailscaleInstall":
+                    if (MessageBox.Show(this, "Instalar o Tailscale oficial neste computador?\n\nO download será feito do site da Tailscale, com assinatura digital verificada. O Windows pedirá autorização de administrador. Entre com sua própria conta no Tailscale; o StreamRoom não recebe sua senha nem tokens. Use o plano pessoal gratuito.", "Instalar Tailscale", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+                    { result = new { cancelled = true }; break; }
+                    await _tailscale.InstallAsync(); result = new { cancelled = false }; break;
+                case "tailscaleRestart":
+                    if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de reiniciar.");
+                    var restart = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };
+                    restart.ArgumentList.Add("--restart-parent"); restart.ArgumentList.Add(Environment.ProcessId.ToString());
+                    System.Diagnostics.Process.Start(restart); _exitRequested = true; Close(); break;
                 case "copy": Clipboard.SetText(p.GetProperty("text").GetString()!); break;
                 case "paste": result = Clipboard.ContainsText() ? Clipboard.GetText() : ""; break;
                 case "captureTestSource" when App.CaptureTestOutput is not null:

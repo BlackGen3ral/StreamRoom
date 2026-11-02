@@ -147,3 +147,22 @@ test('local gathering completion does not synthesize a remote end marker',async 
  await peer.iceSending;
  const last=s.calls.at(-1);assert.equal(last.type,'signal');assert.equal(last.payload.payload.candidate,'');assert.equal(last.payload.payload.sdpMid,'0');
 });
+
+test('Tailscale preserves local socket candidates and defers overlay relay behind direct routes',async t=>{
+ const s=setup();t.after(()=>s.room.shutdown());
+ s.room.setTailscale({connected:true,addresses:['100.64.0.1'],peers:[{addresses:['100.64.0.2'],online:true,route:'relay'}]},true);
+ s.room.updateRoom(s.state);await new Promise(r=>setImmediate(r));
+ const peer=s.room.peers.get(s.send),before=s.calls.length;
+ const candidate=address=>({type:'host',address,toJSON:()=>({candidate:`candidate:1 1 udp 123 ${address} 7777 typ host`,sdpMid:'0',sdpMLineIndex:0})});
+ peer.pc.onicecandidate({candidate:candidate('192.168.1.2')});
+ peer.pc.onicecandidate({candidate:candidate('100.64.0.1')});await peer.iceSending;
+ assert.equal(s.calls.slice(before).filter(c=>c.type==='signal').length,2);
+ assert.match(s.calls.at(-1).payload.payload.candidate,/100\.64\.0\.1/);
+ const remote=(address)=>({kind:'ice',subscriptionId:s.send,streamId:s.streamId,session:peer.session,candidate:address?`candidate:2 1 udp 123 ${address} 8888 typ host`:'',sdpMid:'0',sdpMLineIndex:0});
+ peer.pc.remoteDescription={type:'answer',sdp:'v=0'};
+ await s.room.receiveSignal(s.b,remote('100.64.0.2'));await s.room.receiveSignal(s.b,remote('198.51.100.1'));await s.room.receiveSignal(s.b,remote(''));
+ assert.equal(peer.pc.addedIce.length,1);assert.match(peer.pc.addedIce[0].candidate,/198\.51\.100\.1/);
+ await s.room.releaseFallback(peer);
+ assert.deepEqual(peer.pc.addedIce.slice(1).map(c=>c.candidate),['candidate:2 1 udp 123 100.64.0.2 8888 typ host','']);
+ assert.equal(peer.tailCandidates,1);
+});
