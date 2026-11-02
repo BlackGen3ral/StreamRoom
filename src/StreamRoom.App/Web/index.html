@@ -4,7 +4,7 @@
 <title>StreamRoom</title><link rel="stylesheet" href="app.css"><script type="module" src="app.mjs"></script></head>
 <body>
 <header><div class="brand"><span class="brand-icon">S</span><div>StreamRoom<small>Gameplay entre amigos</small></div></div><div class="header-right"><span id="version">0.4.0 · desenvolvimento</span><span class="badge" id="networkBadge">Desconectado</span><button id="updateButton" class="quiet">Atualizações</button></div></header>
-<div id="updateNotice" class="notice" hidden><span id="updateText"></span><button id="installUpdate">Atualizar e reiniciar</button></div>
+<div id="updateNotice" class="notice" hidden><span id="updateText" role="status" aria-live="polite"></span><progress id="updateDownloadProgress" max="100" value="0" aria-label="Download da atualização" hidden></progress><button id="installUpdate" disabled>Reiniciar e atualizar</button></div>
 <div class="layout"><aside>
   <section class="card"><h2>Sua sala</h2><label for="name">Seu nome</label><input id="name" maxlength="32" placeholder="Como seus amigos te chamam?" autocomplete="off">
   <div id="entryControls"><button id="create" class="primary wide">Criar sala</button><div class="divider">ou entre com um convite</div><textarea id="invite" rows="2" aria-label="Convite da sala" placeholder="Cole o convite completo aqui" spellcheck="false"></textarea><div class="row"><button id="paste" class="quiet">Colar</button><button id="join" class="wide">Entrar</button></div></div>

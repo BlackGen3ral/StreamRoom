@@ -4,12 +4,13 @@ const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
     const id = String(++sequence);
-    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'connect' ? 45000 : 25000);
+    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
     requests.set(id, { resolve, reject, timer }); window.chrome.webview.postMessage({ id, type, payload });
   });
 }
 const rtc = new RtcRoom(native);
 const state = { connected: false, role: null, invitation: '', participants: [], room: null, busy: false, shuttingDown: false };
+let updateBusy = false, updateReady = false;
 const cards = new Map(), remoteStreams = new Map();
 function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
 function options() { return { quality: Number($('quality').value), fps: Number($('fps').value), audio: $('audio').value, autoQuality: $('autoQuality').checked, upload: Number($('upload').value) }; }
@@ -78,6 +79,8 @@ function renderStreams() {
   $('streamGrid').hidden = streams.length === 0; $('playerEmpty').hidden = streams.length !== 0;
 }
 function render() {
+  $('installUpdate').disabled = !updateReady || state.connected;
+  if (updateReady) $('installUpdate').textContent = state.connected ? 'Saia da sala para atualizar' : 'Reiniciar e atualizar';
   $('entryControls').hidden = state.connected; $('roomControls').hidden = !state.connected;
   $('create').disabled = $('join').disabled = $('paste').disabled = state.busy;
   $('leave').disabled = state.busy; $('name').disabled = state.connected || state.busy; $('server').disabled = state.connected || state.busy;
@@ -129,7 +132,7 @@ window.chrome.webview.addEventListener('message', ({ data }) => {
   else if (data.type === 'pcm') rtc.pushPcm(data.data);
   else if (data.type === 'roomRenewed') showExpiry(data.expiresAt);
   else if (data.type === 'update') showUpdate(data.result);
-  else if (data.type === 'updateProgress') status('Baixando atualização oficial: ' + data.progress + '%');
+  else if (data.type === 'updateProgress') { $('updateText').textContent = 'Baixando atualização… ' + data.progress + '%'; $('updateDownloadProgress').value = data.progress; }
 });
 rtc.addEventListener('notice', e => status(e.detail));
 rtc.addEventListener('connectionError', ({ detail }) => {
@@ -164,7 +167,48 @@ rtc.addEventListener('stats', ({ detail }) => {
   }
 });
 function showExpiry(expiresAt) { $('roomCode').textContent = 'Sala ' + (state.roomId ?? '').slice(0,8) + ' · válida até ' + new Date(expiresAt).toLocaleString('pt-BR') + ' · renovação pelo criador'; }
-function showUpdate(r) { if (r.available) { $('updateText').textContent = 'Nova versão oficial disponível: ' + r.version; $('updateNotice').hidden = false; } else if (r.message) status(r.message); }
+function showUpdate(r) {
+  if (!r.available) { if (r.message) status(r.message); return; }
+  $('updateNotice').hidden = false;
+  if (r.downloaded) { markUpdateReady(); return; }
+  if (!updateBusy) void downloadUpdate();
+}
+function markUpdateReady() {
+  updateReady = true;
+  $('updateDownloadProgress').hidden = true;
+  $('updateText').textContent = 'Atualização pronta. Reinicie quando quiser.';
+  $('updateButton').textContent = 'Atualização pronta';
+  $('updateButton').disabled = true;
+  render();
+}
+async function downloadUpdate() {
+  if (updateBusy || updateReady) return;
+  updateBusy = true;
+  $('updateNotice').hidden = false;
+  $('updateButton').disabled = true;
+  $('updateButton').textContent = 'Baixando…';
+  $('installUpdate').disabled = true;
+  $('updateText').textContent = 'Preparando download…';
+  $('updateDownloadProgress').hidden = false;
+  $('updateDownloadProgress').value = 0;
+  try { await native('downloadUpdate'); markUpdateReady(); }
+  catch (e) {
+    $('updateText').textContent = 'Download não concluído: ' + e.message;
+    $('updateButton').textContent = 'Tentar novamente';
+    $('updateDownloadProgress').hidden = true;
+  } finally { updateBusy = false; if (!updateReady) $('updateButton').disabled = false; }
+}
+async function checkUpdates() {
+  if (updateBusy || updateReady) return;
+  updateBusy = true;
+  $('updateButton').disabled = true;
+  $('updateButton').textContent = 'Verificando…';
+  let result;
+  try { result = await native('checkUpdates'); }
+  catch (e) { status(e.message, true); }
+  finally { updateBusy = false; $('updateButton').disabled = false; $('updateButton').textContent = 'Verificar atualização'; }
+  if (result) showUpdate(result);
+}
 $('create').addEventListener('click', () => busy(() => connect('create')));
 $('join').addEventListener('click', () => busy(() => connect('join')));
 $('copy').addEventListener('click', () => busy(async () => { await native('copy',{text:state.invitation}); status('Convite copiado.'); }));
@@ -172,7 +216,7 @@ $('paste').addEventListener('click', () => busy(async () => { $('invite').value 
 $('leave').addEventListener('click', () => busy(async () => { await rtc.leave(); await native('leave'); await disconnected('Você saiu da sala.'); }));
 $('start').addEventListener('click', () => busy(() => rtc.startCapture(options())));
 $('stop').addEventListener('click', () => busy(async () => { await rtc.stopCapture(); status('Sua transmissão parou. As demais continuam.'); }));
-$('updateButton').addEventListener('click', () => busy(async () => showUpdate(await native('checkUpdates'))));
+$('updateButton').addEventListener('click', checkUpdates);
 $('installUpdate').addEventListener('click', () => busy(async () => { if (state.connected) throw Error('Saia da sala antes de atualizar.'); await native('installUpdate'); }));
 for (const id of ['quality','fps','autoQuality','upload']) $(id).addEventListener('change', () => { rtc.setOptions(options()); void save().catch(e => status(e.message,true)); });
 $('audio').addEventListener('change', () => { $('audioHint').textContent = $('audio').value === 'system' ? 'WASAPI captura todo o sistema, incluindo Discord e outras gameplays que você estiver ouvindo. Pode causar retorno. Prefira áudio da janela.' : $('audio').value === 'none' ? 'Apenas vídeo.' : 'Escolha a janela do jogo e habilite áudio no seletor. Depende do Windows/WebView2.'; });
@@ -182,6 +226,6 @@ try {
   for (const [key,value] of Object.entries(r.settings ?? {})) { const input=$(key); if (!input) continue; if(input.type==='checkbox') input.checked=Boolean(value); else input.value=String(value); }
   $('version').textContent=r.version+' · desenvolvimento'; $('runtime').textContent='Motor WebView2 '+r.runtime; $('footerVersion').textContent='StreamRoom '+r.version+' · build de desenvolvimento';
   if (!isSecureContext || !navigator.mediaDevices?.getDisplayMedia || !globalThis.RTCPeerConnection) status('Atualize o Microsoft Edge WebView2 Runtime para captura/WebRTC.',true);
-  if(r.installed) setTimeout(()=>native('checkUpdates').then(result=>{if(result.available)showUpdate(result);}).catch(()=>{}),5000);
+  if(r.installed) setTimeout(checkUpdates,5000);
 } catch(e) {status('Falha ao iniciar: '+e.message,true);}
 render();

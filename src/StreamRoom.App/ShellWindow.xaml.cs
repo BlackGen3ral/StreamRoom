@@ -18,6 +18,8 @@ public partial class ShellWindow : Window
     private readonly SystemAudioCapture _audio = new();
     private readonly UpdateManager _updates = new(new GithubSource("https://github.com/BlackGen3ral/StreamRoom", null, false));
     private UpdateInfo? _availableUpdate;
+    private bool _updateDownloaded;
+    private readonly SemaphoreSlim _updateCommands = new(1, 1);
     private SignalingClient? _connection;
     private bool _closing;
     private bool _ready;
@@ -63,7 +65,11 @@ public partial class ShellWindow : Window
                 MessageBox.Show("O motor de mídia foi interrompido. A sala e a captura de áudio foram encerradas. Feche e reabra o StreamRoom.", "StreamRoom");
             };
             core.Navigate(Origin + (App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
-            _updateTimer.Tick += async (_, _) => { await CheckUpdatesAsync(); };
+            _updateTimer.Tick += async (_, _) =>
+            {
+                if (!await _updateCommands.WaitAsync(0)) return;
+                try { await CheckUpdatesAsync(); } finally { _updateCommands.Release(); }
+            };
             _updateTimer.Start();
         }
         catch (WebView2RuntimeNotFoundException)
@@ -83,13 +89,15 @@ public partial class ShellWindow : Window
     {
         if (!Trusted(e.Source) || e.WebMessageAsJson.Length > 128 * 1024) return;
         string? id = null;
-        await _commands.WaitAsync();
+        SemaphoreSlim? commandGate = null;
         try
         {
             using var document = JsonDocument.Parse(e.WebMessageAsJson);
             var message = document.RootElement;
             id = message.GetProperty("id").GetString();
             var type = message.GetProperty("type").GetString();
+            commandGate = type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
+            await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
             object? result = null;
             switch (type)
@@ -152,10 +160,19 @@ public partial class ShellWindow : Window
                     break;
                 case "audioStop": _audio.Dispose(); break;
                 case "checkUpdates": result = await CheckUpdatesAsync(); break;
+                case "downloadUpdate":
+                    if (_availableUpdate is null) throw new InvalidOperationException("Consulte as atualizações primeiro.");
+                    if (!_updateDownloaded)
+                    {
+                        await _updates.DownloadUpdatesAsync(_availableUpdate, progress => Emit(new { type = "updateProgress", progress }));
+                        _updateDownloaded = true;
+                    }
+                    result = new { downloaded = true };
+                    break;
                 case "installUpdate":
                     if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de atualizar.");
                     if (_availableUpdate is null) throw new InvalidOperationException("Nenhuma atualização aprovada disponível.");
-                    await _updates.DownloadUpdatesAsync(_availableUpdate, progress => Emit(new { type = "updateProgress", progress }));
+                    if (!_updateDownloaded) throw new InvalidOperationException("Aguarde o download da atualização.");
                     _updates.ApplyUpdatesAndRestart(_availableUpdate);
                     break;
                 default: throw new ArgumentException("Comando desconhecido.");
@@ -167,7 +184,7 @@ public partial class ShellWindow : Window
             // Never include native message payloads, invitations, SDP or credentials in logs.
             Emit(new { type = "reply", id, ok = false, error = ex is OperationCanceledException or TimeoutException ? "Tempo de resposta esgotado. Tente novamente." : ex.Message }, true);
         }
-        finally { _commands.Release(); }
+        finally { commandGate?.Release(); }
     }
     private async Task<object> ConnectAsync(JsonElement p)
     {
@@ -216,8 +233,8 @@ public partial class ShellWindow : Window
         if (!_updates.IsInstalled) return new { available = false, message = "Atualizações automáticas funcionam na versão instalada." };
         try
         {
-            _availableUpdate = await _updates.CheckForUpdatesAsync().WaitAsync(TimeSpan.FromSeconds(15));
-            var result = new { available = _availableUpdate is not null, version = _availableUpdate?.TargetFullRelease.Version.ToString(), message = _availableUpdate is null ? "Você está na versão oficial mais recente." : "Nova versão oficial disponível." };
+            if (!_updateDownloaded) _availableUpdate = await _updates.CheckForUpdatesAsync();
+            var result = new { available = _availableUpdate is not null, version = _availableUpdate?.TargetFullRelease.Version.ToString(), downloaded = _updateDownloaded, message = _availableUpdate is null ? "Você está na versão oficial mais recente." : "Nova versão oficial disponível." };
             Emit(new { type = "update", result });
             return result;
         }

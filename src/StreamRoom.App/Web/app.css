@@ -130,3 +130,6 @@ details[open] > summary { margin-bottom: 16px; }
 .capture-launch #source { overflow-wrap: anywhere; }
 .capture-launch:has(#captureSetup[hidden]) .toolbar { margin-top: 0; }
 @media(max-width:1150px) { .capture-setup { flex-direction: column; gap: 18px; } .capture-audio { flex-basis: auto; width: 100%; } }
+
+.notice { flex-wrap: wrap; }
+#updateDownloadProgress { flex: 1; min-width: 100px; max-width: 240px; height: 6px; accent-color: var(--accent); }
