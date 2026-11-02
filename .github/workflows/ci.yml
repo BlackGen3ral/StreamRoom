@@ -36,8 +36,9 @@ jobs:
               if ($worker.HasExited) { throw 'Worker failed to start.' }
               try {
                 $health = Invoke-RestMethod http://127.0.0.1:8787/health -TimeoutSec 1
-                if ($health.protocol -eq 1) { $ready = $true; break }
-              } catch { Start-Sleep -Seconds 1 }
+                if ($health.protocol -eq 2) { $ready = $true; break }
+              } catch { }
+              Start-Sleep -Seconds 1
             }
             if (!$ready) { throw 'Worker startup timed out.' }
             Push-Location server
