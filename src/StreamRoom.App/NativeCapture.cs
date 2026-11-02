@@ -75,7 +75,7 @@ internal sealed class NativeCapture : IDisposable
                 if (!_disposed) pool.Recreate(_device!, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, new Windows.Graphics.SizeInt32 { Width = width, Height = height });
                 return;
             }
-            if (!_scaleUnavailable && (width > _maxHeight * 16 / 9 || height > _maxHeight))
+            if (!_scaleUnavailable)
             {
                 try
                 {
@@ -86,7 +86,7 @@ internal sealed class NativeCapture : IDisposable
                         long copyStart = Stopwatch.GetTimestamp();
                         var pixels = _scaler.Read(frame.Surface, width, height, _maxHeight, out int outputWidth, out int outputHeight);
                         LastCopyMs = Stopwatch.GetElapsedTime(copyStart).TotalMilliseconds;
-                        TransferMode = "gpu-scale";
+                        TransferMode = width == outputWidth && height == outputHeight ? "gpu-copy" : "gpu-scale";
                         FrameCount++;
                         Frame?.Invoke(pixels, outputWidth, outputHeight);
                     }

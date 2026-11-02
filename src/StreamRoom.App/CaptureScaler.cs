@@ -29,14 +29,17 @@ internal sealed class CaptureScaler : IDisposable
         height = Math.Max(2, (int)(sourceHeight * scale) / 2 * 2);
         if (_processor is null || _sourceWidth != sourceWidth || _sourceHeight != sourceHeight || _width != width || _height != height)
             Initialize(source, sourceWidth, sourceHeight, width, height);
-        var inputDescription = new VideoProcessorInputViewDescription { ViewDimension = VideoProcessorInputViewDimension.Texture2D };
-        _videoDevice!.CreateVideoProcessorInputView(source, _enumerator!, inputDescription, out var input).CheckError();
-        using (input)
-        {
-            _videoContext!.VideoProcessorBlt(_processor!, _output!, 0, 1, [new VideoProcessorStream { Enable = true, InputSurface = input }]).CheckError();
-        }
         using var context = _videoContext!.QueryInterface<ID3D11DeviceContext>();
-        context.CopyResource(_staging!, _target!);
+        if (width == sourceWidth && height == sourceHeight)
+            context.CopyResource(_staging!, source);
+        else
+        {
+            var inputDescription = new VideoProcessorInputViewDescription { ViewDimension = VideoProcessorInputViewDimension.Texture2D };
+            _videoDevice!.CreateVideoProcessorInputView(source, _enumerator!, inputDescription, out var input).CheckError();
+            using (input)
+                _videoContext!.VideoProcessorBlt(_processor!, _output!, 0, 1, [new VideoProcessorStream { Enable = true, InputSurface = input }]).CheckError();
+            context.CopyResource(_staging!, _target!);
+        }
         context.Map(_staging!, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None, out var mapped).CheckError();
         try
         {

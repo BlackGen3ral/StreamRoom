@@ -203,7 +203,7 @@ public partial class ShellWindow : Window
                     _exitRequested = true; _ = Dispatcher.BeginInvoke(Close);
                     break;
                 case "mediaTestSetup" when App.MediaTestRole is not null:
-                    if (App.MediaTestRole == "host") { _mediaTestScene = new CaptureTestScene(); _mediaTestScene.Show(); }
+                    if (App.MediaTestRole == "host") { _mediaTestScene = new CaptureTestScene(); if (Environment.GetEnvironmentVariable("STREAMROOM_TEST_MONITOR_WINDOW") is null) _mediaTestScene.Show(); }
                     else { MinWidth = 400; MinHeight = 300; Width = 500; Height = 350; Left = SystemParameters.PrimaryScreenWidth - 510; Top = 0; }
                     result = new { role = App.MediaTestRole, server = "https://streamroom.arthostudio.com", quality = App.MediaTestHeight, fps = 60 };
                     break;
@@ -213,7 +213,7 @@ public partial class ShellWindow : Window
                     result = File.Exists(invitationPath) ? await File.ReadAllTextAsync(invitationPath) : "";
                     break;
                 case "mediaTestMonitor" when App.MediaTestRole == "host":
-                    result = new { id = _captureSources.AddTestMonitor(new System.Windows.Interop.WindowInteropHelper(_mediaTestScene!).Handle) };
+                    result = new { id = _captureSources.AddTestMonitor(long.TryParse(Environment.GetEnvironmentVariable("STREAMROOM_TEST_MONITOR_WINDOW"), out var testMonitorWindow) ? (nint)testMonitorWindow : new System.Windows.Interop.WindowInteropHelper(_mediaTestScene!).Handle) };
                     break;
                 case "mediaTestState" when App.MediaTestRole == "host":
                     if (p.GetProperty("minimized").GetBoolean())

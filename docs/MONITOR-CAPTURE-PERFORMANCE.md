@@ -35,3 +35,16 @@ An interactive Windows desktop with WebView2 and hardware WGC support is require
 ```
 
 Use `-Dotnet <path-to-dotnet.exe>` if the SDK is installed outside PATH. JSON results and the temporary invitation are written under the per-run temp folder printed by the script. Do not publish the invitation file. Test-only native commands are enabled only with the explicit `--media-room-test` launch argument.
+
+## Life is Strange monitor regression (0.4.14)
+
+A 1920x1080 monitor at 1080p previously bypassed the native D3D readback path entirely: the GPU resize path only ran when the source exceeded the requested size. Equal-size frames now copy directly to a reusable staging texture, without the SoftwareBitmap and DataReader intermediate copies. Resized frames retain the existing video processor path; failure still falls back to SoftwareBitmap. Windows capture borders remain enabled and the picker explains their purpose.
+
+Short live-game comparison on the same PC with two test instances, the game active and the sender closed to tray during part of the run:
+
+- Published 0.4.13: 27-31 received FPS.
+- Direct staging copy: 41-50 received FPS after warm-up (39-57 including startup).
+
+These runs were sequential during live gameplay, not identical replay scenes or GPU saturation benchmarks; they do not guarantee 60 FPS. The user's 14 FPS case was not exactly reproduced. Audio was disabled for this comparison. No changes to P2P, audio or receiver subscriptions.
+
+To test an existing game's monitor without covering it with the synthetic moving scene, set `STREAMROOM_TEST_MONITOR_WINDOW` to that currently observed window handle before running the media script. This override is consumed only inside explicit media-test commands. Bring the game back to the foreground after test processes start; repeat for each comparison build. Do not commit local window handles or invitation secrets.
