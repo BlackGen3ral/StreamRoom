@@ -40,6 +40,18 @@ internal static class PlayerLayoutSelfTest
             await core.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent", JsonSerializer.Serialize(new { type = "mouseMoved", buttons = 1, x = x + 30, y = y + 20 }));
             await core.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent", JsonSerializer.Serialize(new { type = "mouseReleased", button = "left", buttons = 0, clickCount = 1, x = x + 30, y = y + 20 }));
             await Task.Delay(200); var dragged = await Probe("dragged");
+            await core.ExecuteScriptAsync("window.resetPlayerTestSize()"); await Task.Delay(150);
+            var beforeBottom = await Probe("restored"); var bottomHandle = beforeBottom.GetProperty("resizeHandle");
+            double bx=bottomHandle.GetProperty("x").GetDouble(), by=bottomHandle.GetProperty("y").GetDouble();
+            double dragBottomY=beforeBottom.GetProperty("viewport").GetProperty("height").GetDouble()-8;
+            await core.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new {type="mousePressed",button="left",buttons=1,clickCount=1,x=bx,y=by}));
+            await core.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new {type="mouseMoved",buttons=1,x=bx,y=dragBottomY}));
+            await core.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new {type="mouseReleased",button="left",buttons=0,clickCount=1,x=bx,y=dragBottomY}));
+            await Task.Delay(250); var bottomDragged = await Probe("bottom-dragged");
+            window.Height=Math.Max(window.MinHeight,previousHeight-80);await Task.Delay(300);var smallerAtBottom=await Probe("bottom-dragged");
+            window.Height=previousHeight+60;await Task.Delay(300);var largerAtBottom=await Probe("bottom-dragged");
+            window.Height=previousHeight;await Task.Delay(200);
+            using(var file=File.Create(Path.ChangeExtension(output,".bottom-dragged.png")))await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,file);
             await core.ExecuteScriptAsync("window.resetPlayerTestSize()"); await Task.Delay(100);
             await ClickFullscreen(); await Wait(true); var full = await Probe("full");
             using (var file = File.Create(Path.ChangeExtension(output, ".fullscreen.png"))) await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, file);
@@ -48,7 +60,7 @@ internal static class PlayerLayoutSelfTest
                 && Math.Abs(window.ActualWidth-previousWidth)<3 && Math.Abs(window.ActualHeight-previousHeight)<3;
             if (!restoredWindow) throw new Exception("Native window was not restored.");
             using (var file = File.Create(Path.ChangeExtension(output, ".restored.png"))) await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, file);
-            await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { success = true, automatic, filled, dragged, full, restored, restoredWindow }));
+            await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { success = true, automatic, filled, dragged, bottomDragged, smallerAtBottom, largerAtBottom, full, restored, restoredWindow }));
         }
         catch (Exception error) { Environment.ExitCode = 1; await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { success = false, error = error.ToString() })); }
     }

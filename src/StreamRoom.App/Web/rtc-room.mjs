@@ -138,7 +138,6 @@ export class RtcRoom extends EventTarget {
     if(this.localStream.getAudioTracks().length){this.setCaptureAudioMuted(false);return;}
     const stream=this.localStream,run=this.run;
     this.audioChange=(async()=>{
-      const consent=await this.native('audioConfirm');if(!consent?.accepted)return;
       if(this.localStream!==stream||this.run!==run)throw Error('A transmissão foi encerrada.');
       try {
         await this.startSystemAudio(stream,run);

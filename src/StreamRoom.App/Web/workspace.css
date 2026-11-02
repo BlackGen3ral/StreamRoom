@@ -194,7 +194,11 @@
 .app-shell .stream-grid>.stream-card.fill-window:where(:not(:fullscreen)) .stream-controls { position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:5;margin:0;width:max-content;max-width:calc(100% - 24px);background:#161b26ed;box-shadow:0 6px 24px #0006; }
 .app-shell .stream-card.fill-window:where(:not(:fullscreen))>.fine { display:none; }
 .app-shell.stage-filled:has(#screensPage:not([hidden])) #status:not(.error) { display:none; }
-.app-shell .stream-card.fill-window .video-resize-handle { bottom:80px; }
+.app-shell .stream-card.fill-window .video-resize-handle { bottom:8px; }
+.app-shell .stream-grid>.stream-card.fill-window.custom-size:where(:not(:fullscreen)) { width:min(100%,var(--video-width)); }
+.app-shell .stream-grid>.stream-card.fill-window.custom-size:where(:not(:fullscreen)) .player-card { height:min(var(--video-height),var(--video-height-limit)); }
+.app-shell .stream-grid>.stream-card.fill-window.custom-size.bottom-pinned:where(:not(:fullscreen)) .player-card { height:var(--video-height-limit); }
+.app-shell .stream-grid>.stream-card.fill-window:where(:not(:fullscreen)) .stream-controls { max-width:calc(100% - 76px); }
 .app-shell.stage-filled:has(#screensPage:not([hidden])) main { padding-bottom:0; }
 .app-shell.stage-filled:has(#screensPage:not([hidden])) #streamGrid { padding-bottom:0; }
 .app-shell.in-room:not(.has-streams) #screensPage { max-width:1160px;margin-inline:auto; }

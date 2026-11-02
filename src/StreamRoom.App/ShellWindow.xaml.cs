@@ -57,7 +57,11 @@ public partial class ShellWindow : Window
     private bool _browserFullScreen;
     private CaptureTestScene? _mediaTestScene;
     private readonly System.Windows.Threading.DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(30) };
-    private static string DataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StreamRoom", App.ZeroTierProof ? "ZeroTierProof" : ".");
+    private static string DataDirectory => App.MediaTestDirectory is { } media
+        ? Path.Combine(media, App.MediaTestRole ?? "profile")
+        : (App.UiPreviewOutput ?? App.CaptureTestOutput ?? App.NetworkTestOutput ?? App.TrayTestOutput ?? App.PickerPreviewOutput) is { } diagnostic
+            ? diagnostic + ".data"
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StreamRoom", App.ZeroTierProof ? "ZeroTierProof" : ".");
 
     public ShellWindow()
     {
@@ -98,7 +102,7 @@ public partial class ShellWindow : Window
             // Opt-in only: expose real host candidates to room participants so ICE
             // can reach the Tailscale adapter. No invented/replaced candidate IPs.
             if (_tailscaleWebRtcReady) browserOptions.AdditionalBrowserArguments += " --force-webrtc-ip-handling-policy=default --disable-features=WebRtcHideLocalIpsWithMdns";
-            var browserData = App.MediaTestDirectory ?? (App.UiPreviewOutput is null ? DataDirectory : App.UiPreviewOutput + ".profile");
+            var browserData = DataDirectory;
             var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(browserData, App.ZeroTierEnabled ? "WebView2-ZeroTier" : _tailscaleWebRtcReady ? "WebView2-Tailscale" : "WebView2"), browserOptions);
             await Browser.EnsureCoreWebView2Async(environment);
             var core = Browser.CoreWebView2;
@@ -447,8 +451,6 @@ public partial class ShellWindow : Window
                 case "nativeCaptureStop":
                     if (_nativeSession == p.GetProperty("session").GetString()) StopNativeCapture();
                     break;
-                case "audioConfirm":
-                    result = new { accepted = AppPrompt.Confirm(this, "Ativar som na transmissão?", "Será compartilhado todo o som do computador, incluindo jogos, Discord e outras transmissões. Nenhum microfone será capturado.", "Ativar som") }; break;
                 case "audioStart":
                     if (_connection?.IsConnected != true) throw new SignalingException("Entre em uma sala primeiro.");
                     int rate = _audio.Start(bytes =>

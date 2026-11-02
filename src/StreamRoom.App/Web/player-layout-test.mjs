@@ -26,7 +26,8 @@ export async function runPlayerLayoutTest({ native, rtc, state, render, showExpi
     const full = document.fullscreenElement === root;
     const main = $('stage'), mainBox = main.getBoundingClientRect();
     const success = video === root.querySelector('video') && video.srcObject === stream && stream.getVideoTracks()[0].readyState === 'live'
-      && (phase === 'filled' ? !full && root.classList.contains('fill-window') && picture.bottom>mainBox.bottom-32 && picture.bottom<=mainBox.bottom && controls.bottom<=picture.bottom && main.scrollHeight<=main.clientHeight+2
+      && (phase === 'bottom-dragged' ? !full && root.classList.contains('fill-window') && root.classList.contains('custom-size') && Math.abs(box.width-600)<2 && picture.bottom>=mainBox.bottom-6 && picture.bottom<=mainBox.bottom && controls.bottom<=picture.bottom && main.scrollHeight<=main.clientHeight+2
+        : phase === 'filled' ? !full && root.classList.contains('fill-window') && picture.bottom>mainBox.bottom-32 && picture.bottom<=mainBox.bottom && controls.bottom<=picture.bottom && main.scrollHeight<=main.clientHeight+2
         : phase === 'auto' ? !full && Math.abs(box.width-root.parentElement.clientWidth)<2 && picture.height>=160 && controls.bottom<=mainBox.bottom+2 && main.scrollHeight<=main.clientHeight+2
         : phase === 'full' ? full && Math.abs(box.height-innerHeight)<2 && Math.abs(box.width-innerWidth)<2 && picture.height>innerHeight-130 && controls.bottom<=innerHeight+2 && !root.querySelector('.stream-more').open
         : phase === 'dragged' ? !full && Math.abs(picture.height-330)<2 && Math.abs(box.width-660)<2 : !full && Math.abs(picture.height-310)<2 && Math.abs(box.width-600)<2);

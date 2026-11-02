@@ -31,15 +31,20 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
   fullscreenButton.parentElement.insertBefore(fill,fullscreenButton);
   const updateFill = active => {
     root.classList.toggle('fill-window',active); fill.setAttribute('aria-pressed',String(active));fill.textContent=active?'Voltar ao layout':'Expandir janela';
+    if(!active)root.classList.remove('bottom-pinned');
     document.body.classList.toggle('stage-filled',Boolean(document.querySelector('.stream-card.fill-window')));
   };
-  fill.addEventListener('click',()=> { updateFill(!root.classList.contains('fill-window')); more.open=false; sync(); });
+  fill.addEventListener('click',()=> {
+    const active=!root.classList.contains('fill-window');
+    custom=null;root.classList.remove('custom-size');root.style.removeProperty('--video-width');root.style.removeProperty('--video-height');
+    updateFill(active);more.open=false;sync();
+  });
   const handle = element('button', 'video-resize-handle', '↘'); handle.type = 'button';
   handle.title = 'Arraste para ajustar o tamanho. Dois cliques restauram o automático.';
   handle.setAttribute('aria-label', 'Redimensionar vídeo. Use as setas para ajustar; Home restaura o tamanho.');
   frame.append(handle);
   const available = () => root.parentElement?.clientWidth || 280;
-  function heightLimit() {
+  function heightLimit(filled=root.classList.contains('fill-window')) {
     const main=root.closest('main');if(!main || document.fullscreenElement===root)return 2160;
     const outerHeight = element => {
       if(!element || element.hidden)return 0;
@@ -47,18 +52,18 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
       return element.getBoundingClientRect().height+(parseFloat(style.marginTop)||0)+(parseFloat(style.marginBottom)||0);
     };
     const top=frame.getBoundingClientRect().top-main.getBoundingClientRect().top+main.scrollTop;
-    const filled=root.classList.contains('fill-window');
     const controls=filled?0:outerHeight(root.querySelector('.stream-controls'));
     const metrics=filled?0:outerHeight(root.querySelector(':scope>.fine'));
-    const status=filled?0:outerHeight(main.querySelector('#status'));
-    const padding=(parseFloat(getComputedStyle(main).paddingBottom)||0)+(parseFloat(getComputedStyle(root.parentElement).paddingBottom)||0);
+    const statusElement=main.querySelector('#status');
+    const status=filled&&!statusElement?.classList.contains('error')?0:outerHeight(statusElement);
+    const padding=filled?0:(parseFloat(getComputedStyle(main).paddingBottom)||0)+(parseFloat(getComputedStyle(root.parentElement).paddingBottom)||0);
     return Math.max(160,Math.floor(main.clientHeight-top-controls-metrics-status-padding-4));
   }
   function sync() {
     if(document.fullscreenElement!==root) {
       const limit=heightLimit();root.style.setProperty('--video-height-limit',limit+'px');
       root.style.setProperty('--auto-video-width',available()+'px');
-      inputs.height.max=limit;
+      inputs.height.max=heightLimit(true);
     }
     const width = Math.round(root.getBoundingClientRect().width), height = Math.round(frame.getBoundingClientRect().height);
     inputs.width.max = Math.floor(available()); inputs.width.min = Math.min(280, Number(inputs.width.max));
@@ -78,11 +83,16 @@ export function createStreamViewport(root, frame, fullscreenButton, more, extra)
       highlight.textContent = 'Destacar'; highlight.setAttribute('aria-pressed', 'false');
       root.parentElement.classList.toggle('has-highlight', Boolean(root.parentElement.querySelector('.expanded')));
     }
+    // Crossing the normal toolbar limit moves the controls onto the video.
+    // The same drag can then continue to the bottom of the window.
+    if(Number(size.height)>heightLimit())updateFill(true);
+    root.classList.toggle('bottom-pinned',root.classList.contains('fill-window')&&Number(size.height)>=heightLimit()-4);
     custom = boundedVideoSize(size.width, size.height, available(), heightLimit());
     root.style.setProperty('--video-width', custom.width + 'px'); root.style.setProperty('--video-height', custom.height + 'px');
     root.classList.add('custom-size'); sync();
   }
   function restore() {
+    updateFill(false);
     custom = null; root.classList.remove('custom-size'); root.style.removeProperty('--video-width'); root.style.removeProperty('--video-height'); sync();
   }
   reset.addEventListener('click', restore); handle.addEventListener('dblclick', restore);
