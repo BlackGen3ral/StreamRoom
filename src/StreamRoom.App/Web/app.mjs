@@ -14,6 +14,7 @@ $('settingsConnections').hidden = false;
 for (const id of ['settingsTransmission','settingsConnections']) { $(id).removeAttribute('role'); $(id).removeAttribute('aria-labelledby'); }
 let currentPage = 'screens';
 function selectPage(page, focus = false) {
+  const previous = currentPage;
   currentPage = page;
   for (const tab of document.querySelectorAll('[data-page]')) {
     const active = tab.dataset.page === page;
@@ -21,6 +22,8 @@ function selectPage(page, focus = false) {
     $(tab.getAttribute('aria-controls')).hidden = !active;
     if (active && focus) tab.focus();
   }
+  if (previous !== page && previous === 'profile') profileUi.close();
+  if (previous !== page && page === 'profile') profileUi.open();
 }
 const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
@@ -29,6 +32,10 @@ function native(type, payload = {}) {
     const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'googleSignIn' ? 330000 : type === 'profilePhoto' ? 900000 : type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
     requests.set(id, { resolve, reject, timer }); window.chrome.webview.postMessage({ id, type, payload });
   });
+}
+$('editProfile').addEventListener('click', () => selectPage('profile', true));
+for (const id of ['profileClose', 'profileCancel']) {
+  $(id).addEventListener('click', () => selectPage('screens', true));
 }
 const rtc = new RtcRoom(native);
 const state = { connected: false, role: null, persistent: false, groupSaved: false, groupInvalid: false, invitation: '', participants: [], room: null, busy: false, shuttingDown: false };
@@ -400,12 +407,12 @@ $('name').addEventListener('input', renderProfile);
 $('showStage').addEventListener('click', () => { selectPage('screens', true); $('stage').scrollIntoView({ block: 'start' }); });
 $('stageShare').addEventListener('click', () => $('start').click());
 for (const tab of document.querySelectorAll('[data-page]')) {
-  tab.addEventListener('click', () => { if (tab.dataset.page === 'screens') selectPage('screens'); else openSettings(tab.dataset.page); });
+  tab.addEventListener('click', () => { if (['screens','profile'].includes(tab.dataset.page)) selectPage(tab.dataset.page); else openSettings(tab.dataset.page); });
   tab.addEventListener('keydown', event => {
     if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key)) return;
-    event.preventDefault(); const pages = ['screens','transmission','connections'];
+    event.preventDefault(); const pages = ['screens','transmission','connections','profile'];
     const index = pages.indexOf(currentPage);
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (index + ((event.key === 'ArrowRight' || event.key === 'ArrowDown') ? 1 : 2)) % 3;
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? pages.length - 1 : (index + ((event.key === 'ArrowRight' || event.key === 'ArrowDown') ? 1 : pages.length - 1)) % pages.length;
     if (pages[next] !== 'screens') $('settings').open = true;
     selectPage(pages[next], true);
   });

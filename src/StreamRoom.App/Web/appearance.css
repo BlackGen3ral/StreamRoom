@@ -6,27 +6,6 @@
   --shell-accent:#c0afff;
   --shell-tint:#332a49;
 }
-:root[data-theme="ocean"] {
-  --shell-bg:#101920;
-  --shell-panel:#182932;
-  --shell-edge:#304854;
-  --shell-accent:#8cdbeb;
-  --shell-tint:#224350;
-}
-:root[data-theme="graphite"] {
-  --shell-bg:#141516;
-  --shell-panel:#202224;
-  --shell-edge:#3a3e42;
-  --shell-accent:#d1d9e0;
-  --shell-tint:#333a40;
-}
-:root[data-theme="ember"] {
-  --shell-bg:#1b1415;
-  --shell-panel:#292020;
-  --shell-edge:#503b37;
-  --shell-accent:#ffbf95;
-  --shell-tint:#4a2f29;
-}
 :root[data-theme] {
   --panel:var(--shell-panel);
   --border:var(--shell-edge);
@@ -58,10 +37,6 @@
 .theme-options { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px; }
 .theme-options button { display:flex;align-items:center;gap:10px;text-align:left;padding:12px; }
 .theme-options button span { width:24px;height:24px;border-radius:50%;background:var(--swatch); }
-[data-theme-choice="violet"] { --swatch:#c0afff; }
-[data-theme-choice="ocean"] { --swatch:#8cdbeb; }
-[data-theme-choice="graphite"] { --swatch:#d1d9e0; }
-[data-theme-choice="ember"] { --swatch:#ffbf95; }
 @media (prefers-reduced-motion:no-preference) {
   :root:not([data-reduce-motion]) .profile-section:not([hidden]) { animation:profile-enter 150ms ease-out; }
   :root:not([data-reduce-motion]) .profile-sections button,
@@ -73,10 +48,6 @@
 }
 
 /* Keep the accent on controls and details, with neutral surfaces underneath. */
-:root[data-theme="ocean"] {
-  --shell-bg:#10151a; --shell-panel:#191f25; --shell-edge:#323d46;
-  --shell-accent:#96d8de; --shell-tint:#24393f;
-}
 .app-shell .lobby-actions>section,
 .app-shell .lobby-actions .lobby-create {
   background:var(--shell-panel); border-color:var(--shell-edge);

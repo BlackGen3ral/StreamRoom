@@ -57,3 +57,87 @@
   :root:not([data-reduce-motion]) .entry-mark { transition:transform 150ms ease; }
   :root:not([data-reduce-motion]) .lobby-actions section:hover .entry-mark { transform:translateY(-3px); }
 }
+
+/* The control pages share the same lighting and surface language as the lobby. */
+.app-shell .preferences-page > .page-heading {
+  position:relative;overflow:hidden;padding:32px clamp(18px,4vw,42px);margin-bottom:20px;
+  border:1px solid var(--shell-edge);border-radius:18px;
+  background:radial-gradient(ellipse at 90% 15%,#50407666,transparent 60%),var(--studio-surface);
+}
+.app-shell .preferences-page > .page-heading h1 {font-size:clamp(25px,4vw,42px);letter-spacing:-.045em;}
+.app-shell #settingsTransmission,.app-shell #settingsConnections .connection-card {
+  background:var(--studio-surface);border-color:var(--shell-edge);border-radius:16px;
+}
+.app-shell .quality-overview,.app-shell .connection-heading {
+  padding:18px;border:1px solid var(--shell-edge);border-radius:12px;
+  background:linear-gradient(110deg,var(--shell-tint),var(--studio-surface));
+}
+.app-shell .connection-facts>div { padding-block:6px; }
+.app-shell .stream-card .stream-controls {
+  background:var(--studio-surface);border-color:var(--shell-edge);border-radius:12px;gap:5px;
+}
+.app-shell .stream-controls button:not(.danger):hover { background:var(--shell-tint);color:var(--shell-accent); }
+.app-shell .stream-controls button:focus-visible { outline:2px solid var(--shell-accent);outline-offset:2px; }
+.app-shell .profile-page-card {
+  display:block;width:100%;max-width:none;max-height:none;margin:0;position:relative;
+  border:1px solid var(--shell-edge);border-radius:18px;overflow:hidden;
+}
+.app-shell .profile-page-card .profile-dialog-body { max-height:none;overflow:visible; }
+.app-shell .profile-page-card .profile-banner { aspect-ratio:4/1; }
+.app-shell .profile-page-card .profile-dialog-header { padding:28px; }
+.app-shell .header-friends { white-space:nowrap; }
+.app-shell .header-friends span { margin-inline-start:4px;color:var(--shell-accent); }
+
+.app-shell .profile-page-card .profile-dialog-header {
+  background:radial-gradient(ellipse at 100% 0,#53417a88,transparent 65%),var(--studio-surface);
+  border-bottom:1px solid var(--shell-edge);
+}
+.app-shell .profile-page-card .profile-dialog-header h2 {font-size:clamp(26px,4vw,42px);letter-spacing:-.045em;}
+.app-shell .profile-page-card .profile-identity-card {padding:0;overflow:hidden;background:var(--studio-surface);}
+.app-shell .profile-page-card .profile-banner {
+  border-radius:0;min-height:120px;max-height:220px;
+  background:radial-gradient(ellipse at 76% 4%,#6b519b,transparent 62%),linear-gradient(125deg,#1b1930,#362548);
+}
+.app-shell .profile-page-card .profile-photo-row {
+  position:relative;margin:-34px 20px 0;z-index:1;align-items:end;
+}
+.app-shell .profile-page-card .profile-photo-preview {border:5px solid var(--studio-surface);background-color:var(--shell-tint);}
+.app-shell .profile-page-card .profile-banner-actions {margin:14px 20px;}
+.app-shell .profile-page-card .profile-photo-hint {margin:10px 20px 18px;}
+.app-shell .profile-page-card .profile-dialog-footer {border-top:1px solid var(--shell-edge);}
+
+.app-shell .friends-dialog { width:min(680px,calc(100% - 28px)); }
+.app-shell .friends-dialog .profile-dialog-header {
+  background:radial-gradient(ellipse at 100% 0,#594081aa,transparent 70%),var(--studio-surface);
+}
+.app-shell .friends-dialog .profile-dialog-body { display:grid;gap:14px; }
+.app-shell .friends-dialog .people-search,.app-shell .friends-shelf {
+  margin:0;padding:16px;border:1px solid var(--shell-edge);border-radius:14px;
+  background:var(--studio-surface);
+}
+.app-shell .friends-dialog .people-search .row { margin-top:8px; }
+.app-shell .friends-dialog .people-search label,.app-shell .friends-shelf h3 { color:#e8dfff;font-weight:700;margin:0 0 8px; }
+.app-shell .friends-dialog .friends-list:empty,.app-shell .friends-dialog p:empty { display:none; }
+.app-shell .friends-dialog .friends-empty { margin:0;border:0;background:var(--shell-panel); }
+
+.app-shell #profileDialog.profile-page-card {
+  width:100%;max-width:none;max-height:none;height:auto;overflow:hidden;
+}
+.app-shell #profileDialog.profile-page-card .profile-dialog-body { overflow:visible; }
+.app-shell #profileDialog.profile-page-card .profile-dialog-header {
+  padding:24px clamp(18px,4vw,34px);
+  background:radial-gradient(ellipse at 100% 0,#53417a88,transparent 65%),var(--studio-surface);
+}
+.app-shell #profileDialog.profile-page-card .profile-dialog-header h2 { font-size:clamp(26px,4vw,42px); }
+.app-shell #profileDialog.profile-page-card .profile-photo-row { margin:-28px 20px 0; }
+.app-shell #profileDialog.profile-page-card .profile-section { padding-top:16px; }
+.app-shell #profileDialog.profile-page-card input[type="file"]::file-selector-button {
+  color:#e9dfff;background:var(--shell-tint);border:1px solid var(--shell-edge);border-radius:7px;padding:6px 10px;margin-right:8px;cursor:pointer;
+}
+@media (min-width:1060px) {
+  .app-shell #profileDialog [data-profile-panel="identity"]:not([hidden]) {
+    grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);align-items:start;
+  }
+  .app-shell #profileDialog .profile-identity-card { grid-row:span 2; }
+  .app-shell #profileDialog .profile-name-field { margin:0; }
+}

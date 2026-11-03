@@ -16,7 +16,7 @@ export function createProfileUi(native, onSaved) {
   const $ = id => document.getElementById(id), dialog = $('profileDialog');
   const selectPanel = setupAppearance(dialog);
   let profile = { name: '', avatar: null }, draft = null, busy = false, google = {}, configured = false, signing = false;
-  let listed=false;
+  let listed=false, directoryReady=false;
   const banner = setupProfileBanner(dialog, feedback);
   function drawGoogle() {
     $('googleAccountStatus').textContent = signing ? 'Aguardando você no navegador…' : google.linked ? google.name : configured ? 'Use seu nome e foto do Google.' : 'Indisponível. Verifique a conexão e reabra o app.';
@@ -36,17 +36,17 @@ export function createProfileUi(native, onSaved) {
     try { await action(); } catch (error) { feedback(error.message, true); }
     finally { busy = false; for (const id of ['profileChoosePhoto','profileSave','profileDisplayName','profileSounds','profileDiscoverable']) $(id).disabled = false; preview(); drawGoogle(); }
   }
-  $('editProfile').addEventListener('click', async () => {
+  async function open() {
+    directoryReady = false;
     selectPanel('identity');
     draft = profile.avatar; $('profileDisplayName').value = $('name').value.trim() || profile.name;
     $('profileSounds').checked = profile.sounds !== false;
-    preview(); feedback(''); drawGoogle(); dialog.showModal(); banner.open();
+    preview(); feedback(''); drawGoogle(); banner.open();
     $('profileDiscoverable').disabled=true;
-    try{const state=await native('peopleStatus');listed=state.listed;$('profileDiscoverable').checked=listed;}catch(error){feedback(error.message,true);}finally{if(!busy)$('profileDiscoverable').disabled=false;}
-  });
-  for (const id of ['profileClose','profileCancel']) $(id).addEventListener('click', () => dialog.close());
+    try{const state=await native('peopleStatus');listed=state.listed;$('profileDiscoverable').checked=state.configured ? listed : localStorage.getItem('streamroom.discoverable') !== 'false';directoryReady=true;}catch(error){feedback(error.message,true);}finally{if(!busy)$('profileDiscoverable').disabled=false;}
+  }
   const cancelLogin = () => { if (signing) void native('googleCancel').catch(() => {}); };
-  dialog.addEventListener('close', cancelLogin); dialog.addEventListener('cancel', cancelLogin);
+  function close() { cancelLogin(); banner.close(); }
   $('googleCancel').addEventListener('click', cancelLogin);
   $('googleSignIn').addEventListener('click', () => run(async () => {
     signing = true; drawGoogle();
@@ -73,7 +73,8 @@ export function createProfileUi(native, onSaved) {
       try{const published=await native('peoplePublish',{listed:$('profileDiscoverable').checked});profile=published.profile;listed=published.status.listed;}
       catch(error){onSaved(profile,result.message);throw Error('Perfil salvo neste PC. '+error.message);}
     }
-    onSaved(profile, result.message); banner.save(); dialog.close();
+    try { if (directoryReady) localStorage.setItem('streamroom.discoverable', String($('profileDiscoverable').checked)); } catch {}
+    onSaved(profile, result.message); banner.save(); feedback('Perfil salvo neste PC.');
   }));
-  return { start(value, account, available = false) { if (value) { profile = value; $('name').value = value.name; } google = account ?? {}; configured = available; drawGoogle(); }, get avatar() { return profile.avatar; }, get soundsEnabled() { return profile.sounds !== false; } };
+  return { open, close, start(value, account, available = false) { if (value) { profile = value; $('name').value = value.name; } google = account ?? {}; configured = available; drawGoogle(); }, get avatar() { return profile.avatar; }, get soundsEnabled() { return profile.sounds !== false; } };
 }

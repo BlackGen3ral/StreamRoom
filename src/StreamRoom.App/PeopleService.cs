@@ -24,7 +24,7 @@ internal static class PeopleService
     }
     internal static object Status(string directory)
     {
-        var identity=Load(directory);return new{listed=identity?.Listed??false};
+        var identity=Load(directory);return new{listed=identity?.Listed??false, configured=identity is not null};
     }
     private static async Task SaveAsync(string directory,DirectoryIdentity identity)
     {
