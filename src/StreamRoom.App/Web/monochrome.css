@@ -77,3 +77,20 @@
 .app-shell .source-choice[aria-selected=true],.app-shell .source-choice.selected,
 .app-shell .picker-tab[aria-selected=true] {background:#343741;border-color:#9da4b3;color:#f2f3f7;}
 .app-shell .stream-count,.app-shell .quality-tag,.app-shell .connection-mode-badge {background:#343741;color:#e1e4eb;}
+
+.app-shell #profileDialog #profileChoosePhoto,
+.app-shell #profileDialog .profile-google .quiet,
+.app-shell .friends-dialog .friends-list button {
+  background:#30333b;border-color:#565a65;color:#edf0f5;
+}
+.app-shell #profileDialog #profileChoosePhoto:hover:not(:disabled) {background:#454953;border-color:#9299a8;}
+.app-shell .profile-sections,.app-shell .friends-shelf,.app-shell .people-search,
+.app-shell .friends-dialog .friends-empty {background:#1c1e23;border-color:#3a3e46;color:#b9bec8;}
+.app-shell #profileDialog .profile-section .profile-field-note,
+.app-shell #profileDialog .profile-edit-block p,
+.app-shell #profileDialog .profile-edit-block h3 {color:#b9bec8;}
+.app-shell #profileDialog .profile-edit-block h3 {color:#e5e8ee;}
+.app-shell #profileDialog .profile-sounds-option:hover {background:#2c2f36;border-color:#626975;}
+.app-shell #profileDialog .profile-account-badge {background:#343841;border-color:#555d6b;color:#e1e6f0;}
+.app-shell #profileDialog .profile-google .fine,
+.app-shell #profileDialog .profile-sections {border-color:#3d424c;}
