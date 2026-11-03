@@ -452,3 +452,50 @@
 .app-shell #profileDialog #profileBannerFile {width:1px;height:1px;clip-path:inset(50%);opacity:1;}
 .app-shell #profileDialog .banner-file-button {pointer-events:auto;cursor:pointer;}
 .app-shell #profileDialog .banner-file-button:hover {background:#41314f;}
+
+/* Profile preferences use the same violet and charcoal surfaces as the card. */
+.app-shell #profileDialog.profile-page-card,
+.app-shell #profileDialog.profile-page-card .profile-dialog-body {
+  background:#1b1723;color:#e9e0f0;
+}
+.app-shell #profileDialog .profile-sections {border-bottom-color:#403348;}
+.app-shell #profileDialog .profile-section[data-profile-panel="appearance"],
+.app-shell #profileDialog .profile-section[data-profile-panel="account"] {gap:14px;padding-top:22px;}
+.app-shell #profileDialog .profile-sounds-option {
+  display:grid;grid-template-columns:36px minmax(0,1fr) 36px;gap:14px;
+  padding:18px;margin:0;border:1px solid #45364e;border-radius:12px;background:#211b2a;
+}
+.app-shell #profileDialog .profile-sounds-option .profile-sound-icon {
+  display:grid;place-items:center;width:36px;height:36px;border-radius:9px;
+  background:#33273f;color:#cbb3ed;font-size:19px;
+}
+.profile-sound-icon svg {width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round;}
+.app-shell #profileDialog .profile-sounds-option strong {font-size:12px;font-weight:600;color:#eee4f7;}
+.app-shell #profileDialog .profile-sounds-option small {font-size:10px;color:#b4a4c0;line-height:1.6;}
+.app-shell #profileDialog .profile-sounds-option input {
+  margin:0;justify-self:end;background:#4a3b54;border-color:#66526f;
+}
+.app-shell #profileDialog .profile-sounds-option input:checked {background:#a58ac6;border-color:#c5a8e6;}
+.app-shell #profileDialog .profile-sounds-option:hover {border-color:#6e557f;background:#251e2e;}
+.app-shell #profileDialog .profile-google {
+  margin:0;padding:22px;border-radius:12px;background:#211b2a;border:1px solid #45364e;
+}
+.app-shell #profileDialog .profile-account-heading {align-items:center;gap:12px;}
+.app-shell #profileDialog .profile-account-icon {
+  width:38px;height:38px;border:1px solid #594268;border-radius:10px;background:#33273f;color:#dbc5f5;
+}
+.app-shell #profileDialog .profile-account-heading strong {font-size:14px;font-weight:650;color:#f0e5f8;}
+.app-shell #profileDialog .profile-account-heading p {font-size:11px;color:#bfaaca;margin-top:6px;}
+.app-shell #profileDialog .profile-account-badge {background:#312539;border:1px solid #523b61;color:#d8bde9;padding:5px 9px;border-radius:6px;}
+.app-shell #profileDialog .profile-account-badge.linked {background:#382948;color:#e0c9f7;border-color:#5b4370;}
+.app-shell #profileDialog .profile-google>.row {margin-top:20px;gap:12px;flex-wrap:wrap;}
+.app-shell #profileDialog .profile-google .quiet {color:#c9b2d7;min-height:36px;}
+.app-shell #profileDialog .profile-google .quiet:hover {background:#382a43;}
+.app-shell #profileDialog .profile-google .fine {
+  border-top:1px solid #403047;padding-top:14px;margin-top:20px;font-size:10px;color:#b4a0c2;
+}
+.app-shell #profileDialog:has([data-profile-panel="identity"][hidden]) .profile-privacy {display:none;}
+@media(max-width:600px) {
+  .app-shell #profileDialog .profile-sounds-option {grid-template-columns:minmax(0,1fr) 36px;gap:12px;}
+  .app-shell #profileDialog .profile-sounds-option .profile-sound-icon {display:none;}
+}
