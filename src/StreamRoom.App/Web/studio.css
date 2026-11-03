@@ -141,3 +141,28 @@
   .app-shell #profileDialog .profile-identity-card { grid-row:span 2; }
   .app-shell #profileDialog .profile-name-field { margin:0; }
 }
+
+.app-shell .sidebar-toggle {
+  display:grid;place-items:center;align-self:flex-end;width:34px;height:34px;
+  margin:6px 14px 0;padding:0;color:var(--shell-accent);
+}
+.sidebar-toggle svg { width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round; }
+.app-shell.sidebar-compact .layout { grid-template-columns:64px minmax(0,1fr); }
+.app-shell.sidebar-compact .sidebar-toggle { align-self:center;margin-inline:auto; }
+.app-shell.sidebar-compact .sidebar-toggle svg { transform:scaleX(-1); }
+.app-shell.sidebar-compact .main-tabs { padding-inline:8px; }
+.app-shell.sidebar-compact .main-tabs button { justify-content:center;padding:7px; }
+.app-shell.sidebar-compact .main-tabs button>span:not(.nav-icon),
+.app-shell.sidebar-compact .sidebar-content,
+.app-shell.sidebar-compact .profile-copy,
+.app-shell.sidebar-compact .profile-edit-mark,
+.app-shell.sidebar-compact .tray-note { display:none; }
+.app-shell.sidebar-compact .sidebar-presence {
+  width:44px;margin: auto auto 12px;padding:4px;justify-content:center;
+}
+.app-shell.sidebar-compact .sidebar-presence .avatar { width:34px;height:34px;flex-basis:34px; }
+@media(max-width:680px) {
+  .app-shell.sidebar-compact .layout { grid-template-columns:minmax(0,1fr); }
+  .app-shell.sidebar-compact .main-tabs { flex:1; }
+  .app-shell.sidebar-compact .sidebar-presence { margin:0 8px; }
+}

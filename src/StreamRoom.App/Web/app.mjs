@@ -25,6 +25,25 @@ function selectPage(page, focus = false) {
   if (previous !== page && previous === 'profile') profileUi.close();
   if (previous !== page && page === 'profile') profileUi.open();
 }
+const sidebarToggle = $('sidebarToggle');
+function setSidebarCompact(compact) {
+  document.body.classList.toggle('sidebar-compact', compact);
+  sidebarToggle.setAttribute('aria-expanded', String(!compact));
+  const label = compact ? 'Expandir barra lateral' : 'Recolher barra lateral';
+  sidebarToggle.title = label;
+  sidebarToggle.setAttribute('aria-label', label);
+}
+try { setSidebarCompact(localStorage.getItem('streamroom.sidebarCompact') === 'true'); } catch {}
+for (const tab of document.querySelectorAll('[data-page]')) {
+  const label = tab.lastElementChild.firstChild.textContent.trim();
+  tab.title = label;
+  tab.setAttribute('aria-label', label);
+}
+sidebarToggle.addEventListener('click', () => {
+  const compact = !document.body.classList.contains('sidebar-compact');
+  setSidebarCompact(compact);
+  try { localStorage.setItem('streamroom.sidebarCompact', String(compact)); } catch {}
+});
 const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
