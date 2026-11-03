@@ -166,3 +166,31 @@
   .app-shell.sidebar-compact .main-tabs { flex:1; }
   .app-shell.sidebar-compact .sidebar-presence { margin:0 8px; }
 }
+
+/* A fixed icon grid keeps the compact rail aligned. */
+.app-shell.sidebar-compact .layout > aside { padding:14px 8px;gap:16px; }
+.app-shell.sidebar-compact aside .main-tabs {
+  padding:0;align-items:center;gap:10px;border-bottom:0;
+}
+.app-shell.sidebar-compact .main-tabs button {
+  position:relative;width:44px;height:44px;min-height:44px;flex:0 0 44px;
+  padding:0;gap:0;border:1px solid transparent;border-radius:12px;
+}
+.app-shell.sidebar-compact .main-tabs button .nav-icon {
+  display:grid;width:24px;height:24px;background:transparent;border-radius:0;
+  font-size:21px;color:#9b96b2;
+}
+.app-shell.sidebar-compact .main-tabs button[aria-selected="true"] {
+  background:#292239;border-color:#4b3f65;
+}
+.app-shell.sidebar-compact .main-tabs button[aria-selected="true"] .nav-icon { background:transparent;color:#cfbaff; }
+.app-shell.sidebar-compact .main-tabs button[aria-selected="true"]::before {
+  content:"";position:absolute;left:-8px;top:12px;width:3px;height:18px;border-radius:0 3px 3px 0;background:#bba5f5;
+}
+.app-shell.sidebar-compact .main-tabs button:hover { background:#211d2f;border-color:#3a334c; }
+.app-shell.sidebar-compact .sidebar-toggle { margin:0;min-height:34px; }
+@media(prefers-reduced-motion:no-preference) {
+  :root:not([data-reduce-motion]) .app-shell .layout { transition:grid-template-columns 180ms ease; }
+  :root:not([data-reduce-motion]) .sidebar-toggle svg { transition:transform 180ms ease; }
+  :root:not([data-reduce-motion]) .main-tabs button { transition:background-color 140ms ease,border-color 140ms ease; }
+}
