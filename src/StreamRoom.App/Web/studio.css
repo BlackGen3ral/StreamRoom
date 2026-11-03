@@ -62,7 +62,7 @@
 .app-shell .preferences-page > .page-heading {
   position:relative;overflow:hidden;padding:32px clamp(18px,4vw,42px);margin-bottom:20px;
   border:1px solid var(--shell-edge);border-radius:18px;
-  background:radial-gradient(ellipse at 90% 15%,#50407666,transparent 60%),var(--studio-surface);
+  background:radial-gradient(ellipse at 90% 15%,#47474766,transparent 60%),var(--studio-surface);
 }
 .app-shell .preferences-page > .page-heading h1 {font-size:clamp(25px,4vw,42px);letter-spacing:-.045em;}
 .app-shell #settingsTransmission,.app-shell #settingsConnections .connection-card {
@@ -89,14 +89,14 @@
 .app-shell .header-friends span { margin-inline-start:4px;color:var(--shell-accent); }
 
 .app-shell .profile-page-card .profile-dialog-header {
-  background:radial-gradient(ellipse at 100% 0,#53417a88,transparent 65%),var(--studio-surface);
+  background:radial-gradient(ellipse at 100% 0,#49494988,transparent 65%),var(--studio-surface);
   border-bottom:1px solid var(--shell-edge);
 }
 .app-shell .profile-page-card .profile-dialog-header h2 {font-size:clamp(26px,4vw,42px);letter-spacing:-.045em;}
 .app-shell .profile-page-card .profile-identity-card {padding:0;overflow:hidden;background:var(--studio-surface);}
 .app-shell .profile-page-card .profile-banner {
   border-radius:0;min-height:120px;max-height:220px;
-  background:radial-gradient(ellipse at 76% 4%,#6b519b,transparent 62%),linear-gradient(125deg,#1b1930,#362548);
+  background:radial-gradient(ellipse at 76% 4%,#5c5c5c,transparent 62%),linear-gradient(125deg,#1b1b1b,#2b2b2b);
 }
 .app-shell .profile-page-card .profile-photo-row {
   position:relative;margin:-34px 20px 0;z-index:1;align-items:end;
@@ -108,7 +108,7 @@
 
 .app-shell .friends-dialog { width:min(680px,calc(100% - 28px)); }
 .app-shell .friends-dialog .profile-dialog-header {
-  background:radial-gradient(ellipse at 100% 0,#594081aa,transparent 70%),var(--studio-surface);
+  background:radial-gradient(ellipse at 100% 0,#4a4a4aaa,transparent 70%),var(--studio-surface);
 }
 .app-shell .friends-dialog .profile-dialog-body { display:grid;gap:14px; }
 .app-shell .friends-dialog .people-search,.app-shell .friends-shelf {
@@ -116,7 +116,7 @@
   background:var(--studio-surface);
 }
 .app-shell .friends-dialog .people-search .row { margin-top:8px; }
-.app-shell .friends-dialog .people-search label,.app-shell .friends-shelf h3 { color:#e8dfff;font-weight:700;margin:0 0 8px; }
+.app-shell .friends-dialog .people-search label,.app-shell .friends-shelf h3 { color:#e3e3e3;font-weight:700;margin:0 0 8px; }
 .app-shell .friends-dialog .friends-list:empty,.app-shell .friends-dialog p:empty { display:none; }
 .app-shell .friends-dialog .friends-empty { margin:0;border:0;background:var(--shell-panel); }
 
@@ -126,13 +126,13 @@
 .app-shell #profileDialog.profile-page-card .profile-dialog-body { overflow:visible; }
 .app-shell #profileDialog.profile-page-card .profile-dialog-header {
   padding:24px clamp(18px,4vw,34px);
-  background:radial-gradient(ellipse at 100% 0,#53417a88,transparent 65%),var(--studio-surface);
+  background:radial-gradient(ellipse at 100% 0,#49494988,transparent 65%),var(--studio-surface);
 }
 .app-shell #profileDialog.profile-page-card .profile-dialog-header h2 { font-size:clamp(26px,4vw,42px); }
 .app-shell #profileDialog.profile-page-card .profile-photo-row { margin:-28px 20px 0; }
 .app-shell #profileDialog.profile-page-card .profile-section { padding-top:16px; }
 .app-shell #profileDialog.profile-page-card input[type="file"]::file-selector-button {
-  color:#e9dfff;background:var(--shell-tint);border:1px solid var(--shell-edge);border-radius:7px;padding:6px 10px;margin-right:8px;cursor:pointer;
+  color:#e3e3e3;background:var(--shell-tint);border:1px solid var(--shell-edge);border-radius:7px;padding:6px 10px;margin-right:8px;cursor:pointer;
 }
 @media (min-width:1060px) {
   .app-shell #profileDialog [data-profile-panel="identity"]:not([hidden]) {
@@ -178,16 +178,16 @@
 }
 .app-shell.sidebar-compact .main-tabs button .nav-icon {
   display:grid;width:24px;height:24px;background:transparent;border-radius:0;
-  font-size:21px;color:#9b96b2;
+  font-size:21px;color:#999999;
 }
 .app-shell.sidebar-compact .main-tabs button[aria-selected="true"] {
-  background:#292239;border-color:#4b3f65;
+  background:#252525;border-color:#444444;
 }
-.app-shell.sidebar-compact .main-tabs button[aria-selected="true"] .nav-icon { background:transparent;color:#cfbaff; }
+.app-shell.sidebar-compact .main-tabs button[aria-selected="true"] .nav-icon { background:transparent;color:#c3c3c3; }
 .app-shell.sidebar-compact .main-tabs button[aria-selected="true"]::before {
-  content:"";position:absolute;left:-8px;top:12px;width:3px;height:18px;border-radius:0 3px 3px 0;background:#bba5f5;
+  content:"";position:absolute;left:-8px;top:12px;width:3px;height:18px;border-radius:0 3px 3px 0;background:#afafaf;
 }
-.app-shell.sidebar-compact .main-tabs button:hover { background:#211d2f;border-color:#3a334c; }
+.app-shell.sidebar-compact .main-tabs button:hover { background:#1f1f1f;border-color:#363636; }
 .app-shell.sidebar-compact .sidebar-toggle { margin:0;min-height:34px; }
 @media(prefers-reduced-motion:no-preference) {
   :root:not([data-reduce-motion]) .app-shell .layout { transition:grid-template-columns 180ms ease; }
@@ -199,10 +199,10 @@
   margin:16px 20px;padding:14px;border:1px solid var(--shell-edge);border-radius:12px;
   display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;min-width:0;
 }
-.image-framing legend {color:#cdb9f5;padding-inline:6px;}
+.image-framing legend {color:#c2c2c2;padding-inline:6px;}
 .image-framing label {min-width:0;display:grid;gap:10px;}
 .image-framing label>span {display:flex;justify-content:space-between;gap:6px;font-size:10px;}
-.image-framing output {color:#cdb9f5;}
+.image-framing output {color:#c2c2c2;}
 .image-framing input {width:100%;padding:0;}
 .image-framing:disabled {opacity:.4;}
 .app-shell #profileDialog .profile-photo-preview {position:relative;overflow:hidden;}
@@ -212,38 +212,38 @@
 .app-shell .header-right {gap:10px;align-items:center;}
 .app-shell .header-friends {
   display:inline-flex;align-items:center;gap:7px;padding:7px 11px;
-  background:#1a1825;border:1px solid #373044;border-radius:9px;
+  background:#191919;border:1px solid #333333;border-radius:9px;
 }
-.app-shell .header-friends::before {content:"♧";font-size:16px;color:#c9b3f3;}
+.app-shell .header-friends::before {content:"♧";font-size:16px;color:#bcbcbc;}
 .app-shell .header-friends #friendsCount {
   display:grid;place-items:center;min-width:20px;height:20px;
-  border-radius:6px;background:#30263f;font-variant-numeric:tabular-nums;margin:0;padding:0 4px;
+  border-radius:6px;background:#2a2a2a;font-variant-numeric:tabular-nums;margin:0;padding:0 4px;
 }
 .app-shell #networkBadge {
-  display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid #30383a;
-  border-radius:9px;background:#161e20;font-size:10px;
+  display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid #363636;
+  border-radius:9px;background:#1c1c1c;font-size:10px;
 }
 .app-shell #updateButton {
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
-  min-height:36px;padding:8px 13px;color:#e9dcff;
-  background:linear-gradient(120deg,#322643,#251d34);
-  border:1px solid #5d487d;border-radius:9px;font-weight:600;
+  min-height:36px;padding:8px 13px;color:#e1e1e1;
+  background:linear-gradient(120deg,#2b2b2b,#202020);
+  border:1px solid #505050;border-radius:9px;font-weight:600;
 }
-.app-shell #updateButton::before {content:"↓";font-size:17px;line-height:1;color:#cbb1ff;}
-.app-shell #updateButton:hover:not(:disabled) {background:#3e2f54;border-color:#a48acb;}
+.app-shell #updateButton::before {content:"↓";font-size:17px;line-height:1;color:#bcbcbc;}
+.app-shell #updateButton:hover:not(:disabled) {background:#353535;border-color:#949494;}
 .app-shell #updateButton:disabled {opacity:.65;cursor:progress;}
-.app-shell #updateButton:focus-visible {outline:2px solid #cbb1ff;outline-offset:3px;}
+.app-shell #updateButton:focus-visible {outline:2px solid #bcbcbc;outline-offset:3px;}
 
 .app-shell #profileDialog .image-framing {display:none;}
 .app-shell .crop-editor {
-  width:min(640px,calc(100vw - 32px));padding:24px;background:#191824;color:#eee7fa;
-  border:1px solid #544166;border-radius:18px;max-height:90dvh;overflow:auto;
+  width:min(640px,calc(100vw - 32px));padding:24px;background:#191919;color:#eaeaea;
+  border:1px solid #484848;border-radius:18px;max-height:90dvh;overflow:auto;
 }
 .crop-editor h2 {margin:0 0 8px;}
-.crop-editor p {color:#aca1be;}
+.crop-editor p {color:#a5a5a5;}
 .crop-viewport {
-  position:relative;overflow:hidden;width:100%;background:#08070b;touch-action:none;cursor:grab;
-  border:1px solid #a58acb;border-radius:8px;
+  position:relative;overflow:hidden;width:100%;background:#080808;touch-action:none;cursor:grab;
+  border:1px solid #949494;border-radius:8px;
 }
 .crop-viewport:active {cursor:grabbing;}
 .crop-viewport img {position:absolute;display:block;object-fit:cover;max-width:none;pointer-events:none;}
@@ -254,9 +254,9 @@
 
 /* Desktop finish: consistent type, hit areas and control hierarchy. */
 .app-shell {
-  --text-primary:#eceaf3;
-  --text-secondary:#b5afc5;
-  --text-tertiary:#918a9f;
+  --text-primary:#ebebeb;
+  --text-secondary:#b2b2b2;
+  --text-tertiary:#8d8d8d;
   color:var(--text-primary);
 }
 .app-shell button,.app-shell select,.app-shell input,.app-shell textarea {
@@ -266,7 +266,7 @@
 .app-shell button.primary {font-weight:650;}
 .app-shell button:focus-visible,.app-shell select:focus-visible,
 .app-shell input:focus-visible,.app-shell textarea:focus-visible {
-  outline:2px solid #baa3eb;outline-offset:3px;
+  outline:2px solid #adadad;outline-offset:3px;
 }
 .app-shell button:disabled {cursor:default;}
 .app-shell .nav-icon svg,.friends-glyph {
@@ -275,21 +275,21 @@
 }
 .app-shell .header-friends::before {content:none;}
 .app-shell .header-friends {min-height:36px;}
-.app-shell #networkBadge {min-height:32px;font-size:11px;background:#171b20;border-color:#31343c;color:#b9c0cc;}
+.app-shell #networkBadge {min-height:32px;font-size:11px;background:#1b1b1b;border-color:#343434;color:#bfbfbf;}
 .app-shell > header {padding-inline:22px;}
 .app-shell .header-right {gap:12px;}
 .app-shell .brand {font-size:15px;font-weight:700;letter-spacing:-.3px;}
 .app-shell .main-tabs button {font-size:12px;}
 .app-shell .main-tabs button small {font-size:10px;color:var(--text-tertiary);}
-.app-shell .main-tabs button[aria-selected=true] {border-color:#4c3f63;background:#2c243b;}
-.app-shell .main-tabs button[aria-selected=true] small {color:#c5b6de;}
+.app-shell .main-tabs button[aria-selected=true] {border-color:#444444;background:#272727;}
+.app-shell .main-tabs button[aria-selected=true] small {color:#bcbcbc;}
 .app-shell .lobby-identity label,.app-shell .profile-name-field label {font-size:12px;color:var(--text-secondary);}
 .app-shell .lobby-actions h2 {font-size:19px;line-height:1.3;}
 .app-shell .lobby-actions p,.app-shell .page-heading p {color:var(--text-secondary);font-size:12px;line-height:1.7;}
 .app-shell .lobby-actions .lobby-step,.app-shell .eyebrow {font-size:10px;letter-spacing:.12em;}
 .app-shell .lobby-actions #invite {font-size:12px;line-height:1.6;}
 .app-shell .lobby-actions #join,.app-shell .lobby-actions .primary {min-height:40px;}
-.app-shell .entry-mark {width:30px;height:30px;font-size:11px;border:1px solid #453652;background:#272033;}
+.app-shell .entry-mark {width:30px;height:30px;font-size:11px;border:1px solid #3b3b3b;background:#232323;}
 .app-shell .sidebar-welcome p,.app-shell .fine {line-height:1.7;}
 .app-shell .profile-copy strong {font-size:12px;}
 .app-shell .profile-copy>span {font-size:10px;}
@@ -297,10 +297,10 @@
 .app-shell .profile-sections button {min-height:36px;font-size:12px;}
 .app-shell .profile-dialog-footer {gap:10px;}
 .app-shell .profile-dialog-footer button {min-height:38px;}
-.app-shell .stream-card .stream-controls {padding:8px;gap:6px;border-color:#393043;background:#191720;}
+.app-shell .stream-card .stream-controls {padding:8px;gap:6px;border-color:#333333;background:#181818;}
 .app-shell .stream-controls button,.app-shell .stream-controls select {min-height:34px;font-size:11px;}
-.app-shell .stream-controls .danger {background:#42232f;border-color:#704052;color:#f1c3cd;}
-.app-shell .stream-controls button:not(.danger) {color:#d0c7e0;}
+.app-shell .stream-controls .danger {background:#42232f;border-color:#704052;color:#cecece;}
+.app-shell .stream-controls button:not(.danger) {color:#cbcbcb;}
 .app-shell .stream-controls .stream-extra button {min-height:32px;}
 .app-shell .connection-help h3 {font-size:12px;}
 .app-shell .connection-help p {font-size:11px;color:var(--text-secondary);}
@@ -313,19 +313,19 @@
 
 /* Workspace hierarchy and surfaces */
 .app-shell {
-  --shell-bg:#111118;
-  --shell-panel:#1a1923;
-  --shell-edge:#33303e;
-  --shell-tint:#30263f;
-  --shell-accent:#c5b1f6;
+  --shell-bg:#121212;
+  --shell-panel:#1a1a1a;
+  --shell-edge:#323232;
+  --shell-tint:#2a2a2a;
+  --shell-accent:#bababa;
 }
-.app-shell .layout > aside {background:#15141d;}
-.app-shell > header {background:#16151d;min-height:58px;}
+.app-shell .layout > aside {background:#151515;}
+.app-shell > header {background:#161616;min-height:58px;}
 .app-shell .brand-glyph {width:28px;height:28px;border-radius:8px;}
 .app-shell #stage {padding-top:24px;}
 .app-shell .lobby-intro {
   min-height:200px;padding:26px 32px;border-radius:16px;
-  background:radial-gradient(ellipse at 95% 10%,#37294d88,transparent 65%),#191722;
+  background:radial-gradient(ellipse at 95% 10%,#2f2f2f88,transparent 65%),#181818;
 }
 .app-shell .lobby-intro h1 {font-size:clamp(30px,3.7vw,44px);letter-spacing:-.045em;line-height:1.07;margin:12px 0 14px;}
 .app-shell .lobby-intro p {max-width:45ch;font-size:12px;line-height:1.8;}
@@ -333,41 +333,41 @@
 .app-shell .lobby-identity {
   padding:14px 0;margin:0 0 8px;gap:16px;grid-template-columns:140px minmax(0,300px);
 }
-.app-shell .lobby-identity input {height:38px;background:#17161f;border-color:#3b3547;}
+.app-shell .lobby-identity input {height:38px;background:#171717;border-color:#383838;}
 .app-shell .lobby-actions {gap:18px;align-items:stretch;}
-.app-shell .lobby-actions>section {position:relative;padding:24px;border-radius:14px;background:#1a1823;border-color:#37313f;}
-.app-shell .lobby-actions .lobby-create {background:linear-gradient(145deg,#211b2d,#191720);}
-.app-shell .entry-mark {width:36px;height:36px;margin-bottom:16px;border:1px solid #4a3b60;background:#2b2238;border-radius:10px;}
-.entry-mark svg {width:20px;height:20px;fill:none;stroke:#c5b1f6;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
+.app-shell .lobby-actions>section {position:relative;padding:24px;border-radius:14px;background:#191919;border-color:#333333;}
+.app-shell .lobby-actions .lobby-create {background:linear-gradient(145deg,#1e1e1e,#181818);}
+.app-shell .entry-mark {width:36px;height:36px;margin-bottom:16px;border:1px solid #414141;background:#262626;border-radius:10px;}
+.entry-mark svg {width:20px;height:20px;fill:none;stroke:#bababa;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
 .app-shell .lobby-actions h2 {margin:8px 0 12px;font-size:21px;letter-spacing:-.45px;}
 .app-shell .lobby-actions p {max-width:36ch;margin-bottom:22px;}
-.app-shell .lobby-actions #invite {min-height:84px;border-radius:8px;background:#13121a;}
+.app-shell .lobby-actions #invite {min-height:84px;border-radius:8px;background:#131313;}
 .app-shell .lobby-actions .primary {min-height:40px;box-shadow:inset 0 1px #ffffff20;}
-.app-shell .lobby-actions #join {background:#292135;border-color:#554168;color:#eadcff;}
-.app-shell .lobby-actions #join:hover {background:#382b48;}
-.app-shell .lobby-step {color:#b7a1d3;}
+.app-shell .lobby-actions #join {background:#242424;border-color:#484848;color:#e2e2e2;}
+.app-shell .lobby-actions #join:hover {background:#303030;}
+.app-shell .lobby-step {color:#a9a9a9;}
 .app-shell .sidebar-welcome {padding-bottom:16px;}
 .app-shell .sidebar-welcome strong {font-size:13px;line-height:1.6;font-weight:600;}
-.app-shell .sidebar-welcome p {color:#a39aac;font-size:11px;}
-.app-shell aside .room-panel {border-radius:12px;border-color:#393044;background:linear-gradient(135deg,#241d30,#191720);}
-.app-shell .sidebar-presence {border-color:#38303f;background:#1d1926;}
+.app-shell .sidebar-welcome p {color:#9d9d9d;font-size:11px;}
+.app-shell aside .room-panel {border-radius:12px;border-color:#333333;background:linear-gradient(135deg,#202020,#181818);}
+.app-shell .sidebar-presence {border-color:#333333;background:#1b1b1b;}
 .app-shell #participants>li {border-radius:10px;}
 .app-shell .preferences-page>.page-heading {padding:24px 28px;border-radius:14px;}
 .app-shell .preferences-page>.page-heading h1 {font-size:30px;}
-.app-shell .quality-overview {padding:20px;border-color:#46364f;background:#241d30;}
-.app-shell .quality-settings>div {border-color:#38313f;background:#17151f;}
-.app-shell .connection-heading {background:#211b2b;border-color:#3f334d;}
-.app-shell .connection-help>section {border-radius:12px;background:#191720;}
-.app-shell .stream-card .player-card {border-color:#3b3248;border-radius:12px;background:#08070c;}
-.app-shell .stream-card .stream-controls {box-shadow:0 8px 24px #0003;border:1px solid #45374e;}
-.app-shell #profileDialog.profile-page-card .profile-dialog-footer {position:sticky;bottom:0;z-index:2;background:#1a1722;}
-.app-shell .friends-dialog {border-color:#473951;box-shadow:0 24px 80px #0008;}
+.app-shell .quality-overview {padding:20px;border-color:#3b3b3b;background:#202020;}
+.app-shell .quality-settings>div {border-color:#333333;background:#161616;}
+.app-shell .connection-heading {background:#1d1d1d;border-color:#373737;}
+.app-shell .connection-help>section {border-radius:12px;background:#181818;}
+.app-shell .stream-card .player-card {border-color:#363636;border-radius:12px;background:#080808;}
+.app-shell .stream-card .stream-controls {box-shadow:0 8px 24px #00000033;border:1px solid #3c3c3c;}
+.app-shell #profileDialog.profile-page-card .profile-dialog-footer {position:sticky;bottom:0;z-index:2;background:#181818;}
+.app-shell .friends-dialog {border-color:#3e3e3e;box-shadow:0 24px 80px #00000088;}
 .app-shell .profile-dialog-header .tail-kicker {font-size:10px;}
-.app-shell .profile-dialog-body {scrollbar-width:thin;scrollbar-color:#4e425d transparent;}
+.app-shell .profile-dialog-body {scrollbar-width:thin;scrollbar-color:#474747 transparent;}
 .app-shell .header-friends,.app-shell #updateButton {border-radius:8px;}
 .app-shell .header-right button:focus-visible {outline-offset:2px;}
-.app-shell .main-tabs button:hover:not([aria-selected=true]) {background:#211c2b;}
-.app-shell .main-tabs button[aria-selected=true] {box-shadow:inset 2px 0 #b69be1;}
+.app-shell .main-tabs button:hover:not([aria-selected=true]) {background:#1e1e1e;}
+.app-shell .main-tabs button[aria-selected=true] {box-shadow:inset 2px 0 #a6a6a6;}
 .app-shell.sidebar-compact .main-tabs button[aria-selected=true] {box-shadow:none;}
 @media(max-width:900px) {
   .app-shell .lobby-intro {padding:22px;}
@@ -380,27 +380,27 @@
 
 /* Profile editor and card preview */
 .app-shell #profileDialog.profile-page-card .profile-dialog-header {
-  background:#1a1722;padding:24px 28px;
+  background:#181818;padding:24px 28px;
 }
 .app-shell #profileDialog.profile-page-card .profile-dialog-header h2 {
   font-size:26px;letter-spacing:-.6px;
 }
 .app-shell #profileDialog.profile-page-card .profile-dialog-header .tail-kicker {display:none;}
 .app-shell #profileDialog .profile-sections {
-  border:0;border-bottom:1px solid #3b3246;background:transparent;padding:0 0 12px;border-radius:0;gap:8px;
+  border:0;border-bottom:1px solid #353535;background:transparent;padding:0 0 12px;border-radius:0;gap:8px;
 }
 .app-shell #profileDialog .profile-sections button {
-  flex:0 1 auto;padding:9px 16px;outline:0;color:#aaa0b8;
+  flex:0 1 auto;padding:9px 16px;outline:0;color:#a4a4a4;
 }
-.app-shell #profileDialog .profile-sections button[aria-pressed=true] {background:#30263e;color:#e2d1fd;}
+.app-shell #profileDialog .profile-sections button[aria-pressed=true] {background:#2a2a2a;color:#d8d8d8;}
 .app-shell #profileDialog [data-profile-panel="identity"]:not([hidden]) {
   display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,1fr);gap:30px;align-items:start;
 }
 .profile-editor-fields {display:grid;gap:22px;min-width:0;}
 .app-shell #profileDialog .profile-name-field {margin:0;}
-.app-shell #profileDialog .profile-edit-block {padding:0 0 20px;border-bottom:1px solid #39313f;}
-.app-shell #profileDialog .profile-edit-block h3 {font-size:13px;font-weight:650;color:#e6dcef;margin:0 0 8px;}
-.app-shell #profileDialog .profile-edit-block p {font-size:11px;line-height:1.7;color:#b2a7c0;margin:0 0 12px;}
+.app-shell #profileDialog .profile-edit-block {padding:0 0 20px;border-bottom:1px solid #343434;}
+.app-shell #profileDialog .profile-edit-block h3 {font-size:13px;font-weight:650;color:#dfdfdf;margin:0 0 8px;}
+.app-shell #profileDialog .profile-edit-block p {font-size:11px;line-height:1.7;color:#ababab;margin:0 0 12px;}
 .app-shell #profileDialog .profile-edit-block .row {flex-wrap:wrap;gap:8px;}
 .app-shell #profileDialog .profile-edit-block button {font-size:11px;min-height:34px;}
 .app-shell #profileDialog .profile-banner-actions {margin:0;gap:8px;position:relative;}
@@ -408,17 +408,17 @@
   position:absolute;top:0;left:0;width:132px;height:34px;padding:0;opacity:0;cursor:pointer;
 }
 .app-shell #profileDialog .banner-file-button {
-  display:inline-flex;align-items:center;min-height:34px;padding:7px 12px;border:1px solid #4c3e5d;
-  border-radius:8px;background:#30263e;color:#eadcfb;pointer-events:none;
+  display:inline-flex;align-items:center;min-height:34px;padding:7px 12px;border:1px solid #434343;
+  border-radius:8px;background:#2a2a2a;color:#e1e1e1;pointer-events:none;
 }
-.app-shell #profileDialog .profile-banner-actions:focus-within .banner-file-button {outline:2px solid #b89cdd;outline-offset:2px;}
+.app-shell #profileDialog .profile-banner-actions:focus-within .banner-file-button {outline:2px solid #a7a7a7;outline-offset:2px;}
 .app-shell #profileDialog .profile-edit-block .profile-photo-hint {margin:12px 0 0;padding:0;border:0;font-size:10px;}
-.app-shell #profileDialog .profile-directory-option {margin:0;padding:14px;border:1px solid #3d3248;border-radius:10px;background:#19151f;}
+.app-shell #profileDialog .profile-directory-option {margin:0;padding:14px;border:1px solid #363636;border-radius:10px;background:#171717;}
 .app-shell #profileDialog .profile-card-preview {position:sticky;top:12px;min-width:0;}
-.profile-preview-caption {display:block;color:#b3a4c4;font-size:10px;letter-spacing:.1em;margin-bottom:12px;}
+.profile-preview-caption {display:block;color:#a9a9a9;font-size:10px;letter-spacing:.1em;margin-bottom:12px;}
 .app-shell #profileDialog .profile-card-preview .profile-identity-card {
-  display:block;grid-row:auto;margin:0;padding:0;background:#15121c;border:1px solid #463451;
-  border-radius:14px;overflow:hidden;box-shadow:0 12px 32px #0003;
+  display:block;grid-row:auto;margin:0;padding:0;background:#131313;border:1px solid #3a3a3a;
+  border-radius:14px;overflow:hidden;box-shadow:0 12px 32px #00000033;
 }
 .app-shell #profileDialog .profile-card-preview .profile-banner {
   height:132px;min-height:132px;max-height:none;aspect-ratio:auto;border-radius:0;
@@ -427,19 +427,19 @@
   display:flex;align-items:start;flex-direction:column;margin:-34px 18px 0;gap:14px;
 }
 .app-shell #profileDialog .profile-card-preview .profile-photo-preview {
-  width:86px;height:86px;flex-basis:86px;border:6px solid #15121c;box-shadow:none;
+  width:86px;height:86px;flex-basis:86px;border:6px solid #131313;box-shadow:none;
 }
 .app-shell #profileDialog .profile-card-preview .profile-identity-copy {padding:0 4px 20px;}
 .app-shell #profileDialog .profile-card-preview .profile-identity-copy strong {font-size:21px;letter-spacing:-.3px;}
-.app-shell #profileDialog .profile-card-preview .profile-identity-copy>span {margin-top:6px;color:#aa9ab9;font-size:11px;}
-.profile-preview-note {display:flex;gap:8px;align-items:center;border-top:1px solid #382b40;padding:16px 22px;color:#a594b6;font-size:11px;}
-.app-shell #profileDialog .profile-privacy {font-size:10px;line-height:1.7;color:#9b8dab;}
-.app-shell #profileDialog.profile-page-card .profile-dialog-footer {padding:16px 26px;background:#18141f;box-shadow:0 -5px 20px #0001;}
+.app-shell #profileDialog .profile-card-preview .profile-identity-copy>span {margin-top:6px;color:#a0a0a0;font-size:11px;}
+.profile-preview-note {display:flex;gap:8px;align-items:center;border-top:1px solid #2f2f2f;padding:16px 22px;color:#9a9a9a;font-size:11px;}
+.app-shell #profileDialog .profile-privacy {font-size:10px;line-height:1.7;color:#929292;}
+.app-shell #profileDialog.profile-page-card .profile-dialog-footer {padding:16px 26px;background:#161616;box-shadow:0 -5px 20px #00000011;}
 .app-shell .header-right {gap:10px;}
 .app-shell .header-friends,.app-shell #updateButton {height:36px;min-height:36px;padding:7px 12px;font-size:11px;line-height:20px;}
 .app-shell #networkBadge {height:30px;min-height:30px;padding:4px 10px;border-color:transparent;background:transparent;font-size:10px;}
-.app-shell .header-friends {background:#1c1824;border-color:#3c3246;}
-.app-shell #updateButton {min-width:148px;background:#2b2138;border-color:#594369;box-shadow:inset 0 1px #ffffff08;}
+.app-shell .header-friends {background:#1a1a1a;border-color:#363636;}
+.app-shell #updateButton {min-width:148px;background:#252525;border-color:#4a4a4a;box-shadow:inset 0 1px #ffffff08;}
 @media(max-width:960px) {
   .app-shell #profileDialog [data-profile-panel="identity"]:not([hidden]) {grid-template-columns:minmax(0,1fr);}
   .app-shell #profileDialog .profile-card-preview {position:static;grid-row:1;width:min(100%,380px);}
@@ -451,48 +451,48 @@
 
 .app-shell #profileDialog #profileBannerFile {width:1px;height:1px;clip-path:inset(50%);opacity:1;}
 .app-shell #profileDialog .banner-file-button {pointer-events:auto;cursor:pointer;}
-.app-shell #profileDialog .banner-file-button:hover {background:#41314f;}
+.app-shell #profileDialog .banner-file-button:hover {background:#373737;}
 
 /* Profile preferences use the same violet and charcoal surfaces as the card. */
 .app-shell #profileDialog.profile-page-card,
 .app-shell #profileDialog.profile-page-card .profile-dialog-body {
-  background:#1b1723;color:#e9e0f0;
+  background:#191919;color:#e3e3e3;
 }
-.app-shell #profileDialog .profile-sections {border-bottom-color:#403348;}
+.app-shell #profileDialog .profile-sections {border-bottom-color:#373737;}
 .app-shell #profileDialog .profile-section[data-profile-panel="appearance"],
 .app-shell #profileDialog .profile-section[data-profile-panel="account"] {gap:14px;padding-top:22px;}
 .app-shell #profileDialog .profile-sounds-option {
   display:grid;grid-template-columns:36px minmax(0,1fr) 36px;gap:14px;
-  padding:18px;margin:0;border:1px solid #45364e;border-radius:12px;background:#211b2a;
+  padding:18px;margin:0;border:1px solid #3b3b3b;border-radius:12px;background:#1d1d1d;
 }
 .app-shell #profileDialog .profile-sounds-option .profile-sound-icon {
   display:grid;place-items:center;width:36px;height:36px;border-radius:9px;
-  background:#33273f;color:#cbb3ed;font-size:19px;
+  background:#2b2b2b;color:#bcbcbc;font-size:19px;
 }
 .profile-sound-icon svg {width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round;}
-.app-shell #profileDialog .profile-sounds-option strong {font-size:12px;font-weight:600;color:#eee4f7;}
-.app-shell #profileDialog .profile-sounds-option small {font-size:10px;color:#b4a4c0;line-height:1.6;}
+.app-shell #profileDialog .profile-sounds-option strong {font-size:12px;font-weight:600;color:#e7e7e7;}
+.app-shell #profileDialog .profile-sounds-option small {font-size:10px;color:#a9a9a9;line-height:1.6;}
 .app-shell #profileDialog .profile-sounds-option input {
-  margin:0;justify-self:end;background:#4a3b54;border-color:#66526f;
+  margin:0;justify-self:end;background:#404040;border-color:#585858;
 }
-.app-shell #profileDialog .profile-sounds-option input:checked {background:#a58ac6;border-color:#c5a8e6;}
-.app-shell #profileDialog .profile-sounds-option:hover {border-color:#6e557f;background:#251e2e;}
+.app-shell #profileDialog .profile-sounds-option input:checked {background:#949494;border-color:#b3b3b3;}
+.app-shell #profileDialog .profile-sounds-option:hover {border-color:#5d5d5d;background:#212121;}
 .app-shell #profileDialog .profile-google {
-  margin:0;padding:22px;border-radius:12px;background:#211b2a;border:1px solid #45364e;
+  margin:0;padding:22px;border-radius:12px;background:#1d1d1d;border:1px solid #3b3b3b;
 }
 .app-shell #profileDialog .profile-account-heading {align-items:center;gap:12px;}
 .app-shell #profileDialog .profile-account-icon {
-  width:38px;height:38px;border:1px solid #594268;border-radius:10px;background:#33273f;color:#dbc5f5;
+  width:38px;height:38px;border:1px solid #4a4a4a;border-radius:10px;background:#2b2b2b;color:#cdcdcd;
 }
-.app-shell #profileDialog .profile-account-heading strong {font-size:14px;font-weight:650;color:#f0e5f8;}
-.app-shell #profileDialog .profile-account-heading p {font-size:11px;color:#bfaaca;margin-top:6px;}
-.app-shell #profileDialog .profile-account-badge {background:#312539;border:1px solid #523b61;color:#d8bde9;padding:5px 9px;border-radius:6px;}
-.app-shell #profileDialog .profile-account-badge.linked {background:#382948;color:#e0c9f7;border-color:#5b4370;}
+.app-shell #profileDialog .profile-account-heading strong {font-size:14px;font-weight:650;color:#e9e9e9;}
+.app-shell #profileDialog .profile-account-heading p {font-size:11px;color:#b1b1b1;margin-top:6px;}
+.app-shell #profileDialog .profile-account-badge {background:#292929;border:1px solid #434343;color:#c6c6c6;padding:5px 9px;border-radius:6px;}
+.app-shell #profileDialog .profile-account-badge.linked {background:#2e2e2e;color:#d1d1d1;border-color:#4b4b4b;}
 .app-shell #profileDialog .profile-google>.row {margin-top:20px;gap:12px;flex-wrap:wrap;}
-.app-shell #profileDialog .profile-google .quiet {color:#c9b2d7;min-height:36px;}
-.app-shell #profileDialog .profile-google .quiet:hover {background:#382a43;}
+.app-shell #profileDialog .profile-google .quiet {color:#bababa;min-height:36px;}
+.app-shell #profileDialog .profile-google .quiet:hover {background:#2f2f2f;}
 .app-shell #profileDialog .profile-google .fine {
-  border-top:1px solid #403047;padding-top:14px;margin-top:20px;font-size:10px;color:#b4a0c2;
+  border-top:1px solid #353535;padding-top:14px;margin-top:20px;font-size:10px;color:#a7a7a7;
 }
 .app-shell #profileDialog:has([data-profile-panel="identity"][hidden]) .profile-privacy {display:none;}
 @media(max-width:600px) {

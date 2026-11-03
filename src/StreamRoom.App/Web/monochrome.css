@@ -1,0 +1,79 @@
+:root, :root[data-theme] {
+  --shell-bg:#111214;
+  --shell-panel:#1c1d20;
+  --shell-edge:#383a40;
+  --shell-accent:#eeeef0;
+  --shell-tint:#303136;
+  --panel:#1c1d20;
+  --border:#383a40;
+  --muted:#a8abb1;
+  --accent:#eeeef0;
+  color:#eeeef0;
+}
+.app-shell {--studio-surface:#17181b;--studio-highlight:#2a2b30;--text-primary:#eeeef0;--text-secondary:#b5b8c0;--text-tertiary:#8f939c;}
+.app-shell input:not([type=checkbox]):not([type=range]),
+.app-shell select,.app-shell textarea {background:#141518;color:#e5e6e9;border-color:#41434a;}
+.app-shell button {color:#dddfe3;border-color:#404249;}
+.app-shell .primary,.app-shell button.primary {
+  background:linear-gradient(135deg,#f6f6f7,#bfc1c7);border-color:#d0d2d7;color:#17181b;
+}
+.app-shell .primary:hover:not(:disabled) {background:linear-gradient(135deg,#ffffff,#d9dbe0);border-color:#ffffff;}
+.app-shell .main-tabs .nav-icon,.app-shell .room-symbol,
+.app-shell .profile-account-icon,.app-shell .profile-sound-icon {background:#2c2e33;color:#d6d8df;}
+.app-shell .main-tabs button[aria-selected=true] {background:linear-gradient(125deg,#35373d,#27292e);border-color:#51545e;color:#fff;box-shadow:inset 2px 0 #e5e6eb;}
+.app-shell .main-tabs button[aria-selected=true] .nav-icon {background:#d9dbe1;color:#22242a;}
+.app-shell .main-tabs button[aria-selected=true] small {color:#bfc2cb;}
+.app-shell .profile-dialog,.app-shell .app-settings-dialog,.app-shell #settingsTransmission,
+.app-shell .connection-card,.app-shell .info-card,.app-shell .stream-extra {
+  background:#1b1c20;border-color:#3a3c43;color:#e9eaee;
+}
+.app-shell .quality-overview,.app-shell .quality-settings>div,
+.app-shell .connection-heading,.app-shell .connection-help>section {
+  background:linear-gradient(115deg,#25272c,#1b1c20);border-color:#3c3f47;
+}
+.app-shell #profileDialog.profile-page-card,
+.app-shell #profileDialog.profile-page-card .profile-dialog-body {background:#1d1e22;color:#eeeef1;}
+.app-shell #profileDialog .profile-sounds-option,
+.app-shell #profileDialog .profile-google {background:linear-gradient(115deg,#26282d,#202126);border-color:#41434c;}
+.app-shell #profileDialog .profile-sounds-option strong,
+.app-shell #profileDialog .profile-account-heading strong {color:#eeeef1;}
+.app-shell #profileDialog .profile-sounds-option small,
+.app-shell #profileDialog .profile-account-heading p,
+.app-shell #profileDialog .profile-google .fine {color:#b4b7bf;}
+.app-shell #profileDialog .profile-sounds-option input:checked {background:#a5a8b2;border-color:#d4d6dd;}
+.app-shell #profileDialog .profile-account-icon,
+.app-shell #profileDialog .profile-sounds-option .profile-sound-icon {background:#36383f;color:#e1e3e9;border-color:#555862;}
+.app-shell #profileDialog .profile-sections button[aria-pressed=true],
+.app-shell #profileDialog .profile-account-badge.linked {background:#3c3e46;color:#f2f3f6;border-color:#626570;}
+.app-shell #profileDialog .profile-card-preview .profile-banner,
+.app-shell #profileDialog .profile-banner {background:radial-gradient(ellipse at 80% 0,#787c88,transparent 70%),linear-gradient(120deg,#26282e,#41444e);}
+.app-shell #profileDialog .banner-file-button {background:#363840;border-color:#595c68;color:#f0f1f5;}
+.app-shell #updateButton {background:linear-gradient(120deg,#34363d,#24262c);border-color:#656974;color:#f2f3f7;}
+.app-shell #updateButton:hover:not(:disabled) {background:#464952;border-color:#a1a6b2;}
+.app-shell #updateButton::before {color:#e0e3ec;}
+.app-shell :focus-visible {outline-color:#d6dae5!important;}
+.app-shell input[type=checkbox],.app-shell input[type=range] {accent-color:#c9cdd7;}
+
+.app-shell .brand.quiet,.app-shell .lobby-actions #create,.app-shell .lobby-actions #paste {border-color:transparent;background:transparent;}
+.app-shell .avatar {background:#383a42;color:#eceef4;border-color:#626670;}
+.app-shell .sidebar-presence .avatar {box-shadow:none;}
+.app-shell .profile-copy,.app-shell .profile-copy strong,.app-shell .profile-edit-mark {color:#d3d6df;}
+.app-shell .header-friends {background:#22242a;border-color:#41444e;}
+.app-shell .header-friends #friendsCount {background:#3b3e48;color:#eef0f6;}
+.app-shell .lobby-kicker,.app-shell .lobby-step,.app-shell .eyebrow,.app-shell .tail-kicker {color:#c8ccd6;}
+.app-shell #source,.app-shell .muted,.app-shell .fine {color:#a7abb5;}
+.app-shell .profile-sections button {color:#b9bdc8;}
+.app-shell #profileDialog .profile-directory-option {background:#23252a;border-color:#41444d;}
+.app-shell #profileDialog .profile-identity-copy strong {color:#f0f1f5;}
+.app-shell #profileDialog .profile-identity-copy>span,
+.app-shell #profileDialog .profile-preview-caption,
+.app-shell #profileDialog .profile-privacy {color:#afb4bf;}
+.app-shell #profileDialog .profile-card-preview .profile-identity-card {background:#17181c;border-color:#4c505a;}
+.app-shell #profileDialog .profile-card-preview .profile-photo-preview {border-color:#17181c;}
+.app-shell #profileDialog .profile-preview-note {color:#adb2bd;border-color:#373a43;}
+.app-shell #profileDialog.profile-page-card .profile-dialog-header,
+.app-shell #profileDialog.profile-page-card .profile-dialog-footer {background:#191a1f;border-color:#3b3e46;}
+.app-shell #profileDialog .banner-file-button:hover {background:#484b55;}
+.app-shell .source-choice[aria-selected=true],.app-shell .source-choice.selected,
+.app-shell .picker-tab[aria-selected=true] {background:#343741;border-color:#9da4b3;color:#f2f3f7;}
+.app-shell .stream-count,.app-shell .quality-tag,.app-shell .connection-mode-badge {background:#343741;color:#e1e4eb;}
