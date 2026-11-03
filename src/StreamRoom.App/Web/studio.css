@@ -251,3 +251,62 @@
 .crop-editor>label {display:grid;gap:12px;margin-top:20px;}
 .crop-editor input[type=range] {width:100%;}
 .crop-actions {display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+
+/* Desktop finish: consistent type, hit areas and control hierarchy. */
+.app-shell {
+  --text-primary:#eceaf3;
+  --text-secondary:#b5afc5;
+  --text-tertiary:#918a9f;
+  color:var(--text-primary);
+}
+.app-shell button,.app-shell select,.app-shell input,.app-shell textarea {
+  border-radius:8px;
+}
+.app-shell button {font-weight:500;}
+.app-shell button.primary {font-weight:650;}
+.app-shell button:focus-visible,.app-shell select:focus-visible,
+.app-shell input:focus-visible,.app-shell textarea:focus-visible {
+  outline:2px solid #baa3eb;outline-offset:3px;
+}
+.app-shell button:disabled {cursor:default;}
+.app-shell .nav-icon svg,.friends-glyph {
+  display:block;width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;
+  stroke-linecap:round;stroke-linejoin:round;
+}
+.app-shell .header-friends::before {content:none;}
+.app-shell .header-friends {min-height:36px;}
+.app-shell #networkBadge {min-height:32px;font-size:11px;background:#171b20;border-color:#31343c;color:#b9c0cc;}
+.app-shell > header {padding-inline:22px;}
+.app-shell .header-right {gap:12px;}
+.app-shell .brand {font-size:15px;font-weight:700;letter-spacing:-.3px;}
+.app-shell .main-tabs button {font-size:12px;}
+.app-shell .main-tabs button small {font-size:10px;color:var(--text-tertiary);}
+.app-shell .main-tabs button[aria-selected=true] {border-color:#4c3f63;background:#2c243b;}
+.app-shell .main-tabs button[aria-selected=true] small {color:#c5b6de;}
+.app-shell .lobby-identity label,.app-shell .profile-name-field label {font-size:12px;color:var(--text-secondary);}
+.app-shell .lobby-actions h2 {font-size:19px;line-height:1.3;}
+.app-shell .lobby-actions p,.app-shell .page-heading p {color:var(--text-secondary);font-size:12px;line-height:1.7;}
+.app-shell .lobby-actions .lobby-step,.app-shell .eyebrow {font-size:10px;letter-spacing:.12em;}
+.app-shell .lobby-actions #invite {font-size:12px;line-height:1.6;}
+.app-shell .lobby-actions #join,.app-shell .lobby-actions .primary {min-height:40px;}
+.app-shell .entry-mark {width:30px;height:30px;font-size:11px;border:1px solid #453652;background:#272033;}
+.app-shell .sidebar-welcome p,.app-shell .fine {line-height:1.7;}
+.app-shell .profile-copy strong {font-size:12px;}
+.app-shell .profile-copy>span {font-size:10px;}
+.app-shell .profile-dialog-header p {color:var(--text-secondary);font-size:12px;}
+.app-shell .profile-sections button {min-height:36px;font-size:12px;}
+.app-shell .profile-dialog-footer {gap:10px;}
+.app-shell .profile-dialog-footer button {min-height:38px;}
+.app-shell .stream-card .stream-controls {padding:8px;gap:6px;border-color:#393043;background:#191720;}
+.app-shell .stream-controls button,.app-shell .stream-controls select {min-height:34px;font-size:11px;}
+.app-shell .stream-controls .danger {background:#42232f;border-color:#704052;color:#f1c3cd;}
+.app-shell .stream-controls button:not(.danger) {color:#d0c7e0;}
+.app-shell .stream-controls .stream-extra button {min-height:32px;}
+.app-shell .connection-help h3 {font-size:12px;}
+.app-shell .connection-help p {font-size:11px;color:var(--text-secondary);}
+.app-shell .connection-actions .primary {min-height:38px;}
+.app-shell .friends-dialog .friends-empty {color:var(--text-secondary);line-height:1.7;}
+@media(max-width:760px) {
+  .app-shell > header {padding-inline:12px;}
+  .app-shell .header-right {gap:6px;}
+}
