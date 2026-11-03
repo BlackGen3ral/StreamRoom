@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; media-src 'self' blob: mediastream:; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>StreamRoom</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="layout.css"><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="appearance.css"><script type="module" src="app.mjs"></script></head>
+<title>StreamRoom</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="layout.css"><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="appearance.css"><link rel="stylesheet" href="studio.css"><script type="module" src="app.mjs"></script></head>
 <body class="app-shell">
 <section id="welcomePage" class="welcome-page" aria-labelledby="welcomeTitle" hidden>
   <div class="welcome-brand"><span class="brand-glyph" aria-hidden="true">▣</span>StreamRoom</div>
@@ -21,11 +21,29 @@
 
   <section id="screensPage" class="page-panel" role="tabpanel" aria-labelledby="pageScreensTab"><div class="stage-title"><div><span class="eyebrow" id="roomState">TELA COMPARTILHADA</span><h1 id="title">Transmissões</h1><span id="streamCount" class="stream-count">0 ao vivo</span></div><button id="stageShare" class="quiet" hidden>Compartilhar minha tela</button><span id="directStatus" class="muted" hidden></span></div>
 <section id="lobby" class="lobby" aria-labelledby="lobbyTitle">
-  <div class="lobby-intro"><span class="lobby-kicker">COMPARTILHE O MOMENTO</span><h1 id="lobbyTitle">Sua tela, junto dos seus amigos.</h1><p>Mostre seu jogo, acompanhe outras telas e escolha o que assistir. Tudo na mesma sala.</p><div class="lobby-visual" aria-hidden="true"><svg viewBox="0 0 180 120"><rect x="20" y="14" width="124" height="78" rx="9"/><path d="M64 108h36M82 92v16M72 39l27 15-27 16z"/><rect x="114" y="63" width="49" height="34" rx="5"/></svg></div></div>
+  <div class="lobby-intro">
+    <div class="hero-copy"><span class="lobby-kicker"><span></span> STREAMROOM</span>
+      <h1 id="lobbyTitle">Jogue junto.<br><em>Assista junto.</em></h1>
+      <p>Compartilhe a tela, acompanhe seus amigos e volte à mesma sala quando quiser.</p>
+    </div>
+    <div class="lobby-visual studio-visual" aria-hidden="true">
+      <svg viewBox="0 0 440 260">
+        <defs><linearGradient id="heroScreen" x2="1" y2="1"><stop offset="0" stop-color="#161e33"/><stop offset="1" stop-color="#090c14"/></linearGradient></defs>
+        <path class="hero-orbit" d="M12 178 224 20l202 62-210 158zM10 211 220 54l207 63-212 138z"/>
+        <rect class="hero-monitor" x="80" y="35" width="283" height="165" rx="16"/>
+        <path class="hero-line" d="M81 62h281M204 200v19m-34 0h101"/>
+        <circle cx="98" cy="49" r="3"/><circle cx="109" cy="49" r="3"/><circle cx="120" cy="49" r="3"/>
+        <path class="hero-wave" d="M82 164l62-36 44 22 70-62 103 36v58a15 15 0 0 1-15 15H97a15 15 0 0 1-15-15z"/>
+        <circle class="hero-play" cx="216" cy="122" r="26"/><path class="hero-line" d="m211 111 17 11-17 11z"/>
+        <rect class="hero-camera" x="286" y="151" width="101" height="64" rx="10"/>
+        <circle cx="336" cy="175" r="9"/><path class="hero-line" d="M318 201a18 18 0 0 1 36 0"/>
+      </svg>
+    </div>
+  </div>
   <div class="lobby-identity"><label for="name">Como seus amigos te chamam?</label><input id="name" maxlength="32" placeholder="Seu nome" autocomplete="off"></div>
   <div id="entryControls" class="lobby-actions">
-    <section class="lobby-create"><span class="lobby-step">SEU GRUPO</span><h2>Sala dos amigos</h2><p id="groupHint">Compartilhe o convite uma vez. O acesso fica salvo no app de cada amigo.</p><button id="createGroup" class="primary wide">Criar sala fixa <span aria-hidden="true">→</span></button><button id="enterGroup" class="primary wide" hidden>Entrar na sala do grupo <span aria-hidden="true">→</span></button><button id="forgetGroup" class="quiet" hidden>Remover acesso deste PC</button><button id="create" class="quiet wide">Criar sala temporária</button></section>
-    <section class="lobby-join"><span class="lobby-step">ENTRAR COM CONVITE</span><h2>Já recebeu um convite?</h2><textarea id="invite" rows="2" aria-label="Convite da sala" placeholder="Cole o convite completo aqui" spellcheck="false"></textarea><div class="row"><button id="paste" class="quiet">Colar convite</button><button id="join" class="wide">Entrar na sala</button></div></section>
+    <section class="lobby-create"><div class="entry-mark" aria-hidden="true">01</div><span class="lobby-step">SEU GRUPO</span><h2>Sala dos amigos</h2><p id="groupHint">Compartilhe o convite uma vez. O acesso fica salvo no app de cada amigo.</p><button id="createGroup" class="primary wide">Criar sala fixa <span aria-hidden="true">→</span></button><button id="enterGroup" class="primary wide" hidden>Entrar na sala do grupo <span aria-hidden="true">→</span></button><button id="forgetGroup" class="quiet" hidden>Remover acesso deste PC</button><button id="create" class="quiet wide">Criar sala temporária</button></section>
+    <section class="lobby-join"><div class="entry-mark" aria-hidden="true">02</div><span class="lobby-step">ENTRAR COM CONVITE</span><h2>Já recebeu um convite?</h2><textarea id="invite" rows="2" aria-label="Convite da sala" placeholder="Cole o convite completo aqui" spellcheck="false"></textarea><div class="row"><button id="paste" class="quiet">Colar convite</button><button id="join" class="wide">Entrar na sala</button></div></section>
   </div>
 </section>
   <section class="capture-launch" aria-label="Compartilhar tela">
