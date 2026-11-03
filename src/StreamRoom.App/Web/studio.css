@@ -310,3 +310,70 @@
   .app-shell > header {padding-inline:12px;}
   .app-shell .header-right {gap:6px;}
 }
+
+/* Workspace hierarchy and surfaces */
+.app-shell {
+  --shell-bg:#111118;
+  --shell-panel:#1a1923;
+  --shell-edge:#33303e;
+  --shell-tint:#30263f;
+  --shell-accent:#c5b1f6;
+}
+.app-shell .layout > aside {background:#15141d;}
+.app-shell > header {background:#16151d;min-height:58px;}
+.app-shell .brand-glyph {width:28px;height:28px;border-radius:8px;}
+.app-shell #stage {padding-top:24px;}
+.app-shell .lobby-intro {
+  min-height:200px;padding:26px 32px;border-radius:16px;
+  background:radial-gradient(ellipse at 95% 10%,#37294d88,transparent 65%),#191722;
+}
+.app-shell .lobby-intro h1 {font-size:clamp(30px,3.7vw,44px);letter-spacing:-.045em;line-height:1.07;margin:12px 0 14px;}
+.app-shell .lobby-intro p {max-width:45ch;font-size:12px;line-height:1.8;}
+.app-shell .lobby-intro .studio-visual {max-width:300px;justify-self:end;opacity:.7;}
+.app-shell .lobby-identity {
+  padding:14px 0;margin:0 0 8px;gap:16px;grid-template-columns:140px minmax(0,300px);
+}
+.app-shell .lobby-identity input {height:38px;background:#17161f;border-color:#3b3547;}
+.app-shell .lobby-actions {gap:18px;align-items:stretch;}
+.app-shell .lobby-actions>section {position:relative;padding:24px;border-radius:14px;background:#1a1823;border-color:#37313f;}
+.app-shell .lobby-actions .lobby-create {background:linear-gradient(145deg,#211b2d,#191720);}
+.app-shell .entry-mark {width:36px;height:36px;margin-bottom:16px;border:1px solid #4a3b60;background:#2b2238;border-radius:10px;}
+.entry-mark svg {width:20px;height:20px;fill:none;stroke:#c5b1f6;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
+.app-shell .lobby-actions h2 {margin:8px 0 12px;font-size:21px;letter-spacing:-.45px;}
+.app-shell .lobby-actions p {max-width:36ch;margin-bottom:22px;}
+.app-shell .lobby-actions #invite {min-height:84px;border-radius:8px;background:#13121a;}
+.app-shell .lobby-actions .primary {min-height:40px;box-shadow:inset 0 1px #ffffff20;}
+.app-shell .lobby-actions #join {background:#292135;border-color:#554168;color:#eadcff;}
+.app-shell .lobby-actions #join:hover {background:#382b48;}
+.app-shell .lobby-step {color:#b7a1d3;}
+.app-shell .sidebar-welcome {padding-bottom:16px;}
+.app-shell .sidebar-welcome strong {font-size:13px;line-height:1.6;font-weight:600;}
+.app-shell .sidebar-welcome p {color:#a39aac;font-size:11px;}
+.app-shell aside .room-panel {border-radius:12px;border-color:#393044;background:linear-gradient(135deg,#241d30,#191720);}
+.app-shell .sidebar-presence {border-color:#38303f;background:#1d1926;}
+.app-shell #participants>li {border-radius:10px;}
+.app-shell .preferences-page>.page-heading {padding:24px 28px;border-radius:14px;}
+.app-shell .preferences-page>.page-heading h1 {font-size:30px;}
+.app-shell .quality-overview {padding:20px;border-color:#46364f;background:#241d30;}
+.app-shell .quality-settings>div {border-color:#38313f;background:#17151f;}
+.app-shell .connection-heading {background:#211b2b;border-color:#3f334d;}
+.app-shell .connection-help>section {border-radius:12px;background:#191720;}
+.app-shell .stream-card .player-card {border-color:#3b3248;border-radius:12px;background:#08070c;}
+.app-shell .stream-card .stream-controls {box-shadow:0 8px 24px #0003;border:1px solid #45374e;}
+.app-shell #profileDialog.profile-page-card .profile-dialog-footer {position:sticky;bottom:0;z-index:2;background:#1a1722;}
+.app-shell .friends-dialog {border-color:#473951;box-shadow:0 24px 80px #0008;}
+.app-shell .profile-dialog-header .tail-kicker {font-size:10px;}
+.app-shell .profile-dialog-body {scrollbar-width:thin;scrollbar-color:#4e425d transparent;}
+.app-shell .header-friends,.app-shell #updateButton {border-radius:8px;}
+.app-shell .header-right button:focus-visible {outline-offset:2px;}
+.app-shell .main-tabs button:hover:not([aria-selected=true]) {background:#211c2b;}
+.app-shell .main-tabs button[aria-selected=true] {box-shadow:inset 2px 0 #b69be1;}
+.app-shell.sidebar-compact .main-tabs button[aria-selected=true] {box-shadow:none;}
+@media(max-width:900px) {
+  .app-shell .lobby-intro {padding:22px;}
+  .app-shell .lobby-intro .studio-visual {max-width:220px;}
+}
+@media(max-width:640px) {
+  .app-shell .lobby-identity {grid-template-columns:minmax(0,1fr);gap:8px;}
+  .app-shell .lobby-actions>section {padding:18px;}
+}
