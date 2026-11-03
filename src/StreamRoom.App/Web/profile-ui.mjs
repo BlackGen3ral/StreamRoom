@@ -1,3 +1,4 @@
+import { setupProfileBanner } from './profile-banner.mjs';
 import { setupAppearance } from './appearance.mjs';
 const avatars = new WeakMap();
 export function showAvatar(element, name, avatar) {
@@ -16,6 +17,7 @@ export function createProfileUi(native, onSaved) {
   const selectPanel = setupAppearance(dialog);
   let profile = { name: '', avatar: null }, draft = null, busy = false, google = {}, configured = false, signing = false;
   let listed=false;
+  const banner = setupProfileBanner(dialog, feedback);
   function drawGoogle() {
     $('googleAccountStatus').textContent = signing ? 'Aguardando você no navegador…' : google.linked ? google.name : configured ? 'Use seu nome e foto do Google.' : 'Indisponível. Verifique a conexão e reabra o app.';
     $('googleLinkedBadge').textContent=google.linked?'Conectada':'Opcional';$('googleLinkedBadge').classList.toggle('linked',Boolean(google.linked));
@@ -38,7 +40,7 @@ export function createProfileUi(native, onSaved) {
     selectPanel('identity');
     draft = profile.avatar; $('profileDisplayName').value = $('name').value.trim() || profile.name;
     $('profileSounds').checked = profile.sounds !== false;
-    preview(); feedback(''); drawGoogle(); dialog.showModal();
+    preview(); feedback(''); drawGoogle(); dialog.showModal(); banner.open();
     $('profileDiscoverable').disabled=true;
     try{const state=await native('peopleStatus');listed=state.listed;$('profileDiscoverable').checked=listed;}catch(error){feedback(error.message,true);}finally{if(!busy)$('profileDiscoverable').disabled=false;}
   });
@@ -71,7 +73,7 @@ export function createProfileUi(native, onSaved) {
       try{const published=await native('peoplePublish',{listed:$('profileDiscoverable').checked});profile=published.profile;listed=published.status.listed;}
       catch(error){onSaved(profile,result.message);throw Error('Perfil salvo neste PC. '+error.message);}
     }
-    onSaved(profile, result.message); dialog.close();
+    onSaved(profile, result.message); banner.save(); dialog.close();
   }));
   return { start(value, account, available = false) { if (value) { profile = value; $('name').value = value.name; } google = account ?? {}; configured = available; drawGoogle(); }, get avatar() { return profile.avatar; }, get soundsEnabled() { return profile.sounds !== false; } };
 }

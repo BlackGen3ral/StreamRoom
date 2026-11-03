@@ -71,3 +71,44 @@
 :root[data-reduce-motion] .app-shell *, :root[data-reduce-motion] .app-shell dialog[open] {
   animation:none!important;transition:none!important;scroll-behavior:auto!important;
 }
+
+/* Keep the accent on controls and details, with neutral surfaces underneath. */
+:root[data-theme="ocean"] {
+  --shell-bg:#10151a; --shell-panel:#191f25; --shell-edge:#323d46;
+  --shell-accent:#96d8de; --shell-tint:#24393f;
+}
+.app-shell .lobby-actions>section,
+.app-shell .lobby-actions .lobby-create {
+  background:var(--shell-panel); border-color:var(--shell-edge);
+}
+.app-shell .main-tabs button[aria-selected="true"],
+.app-shell .lobby-actions #join:hover {
+  background:var(--shell-tint); border-color:var(--shell-edge); color:var(--shell-accent);
+}
+.app-shell .main-tabs button[aria-selected="true"] small,
+.app-shell .main-tabs button[aria-selected="true"] .nav-icon { color:var(--shell-accent); }
+.app-shell .lobby-actions #invite,.app-shell .lobby-actions #join {
+  background:var(--shell-bg); border-color:var(--shell-edge);
+}
+.app-shell .lobby-visual { color:var(--shell-accent); }
+.app-shell .lobby-visual svg { fill:var(--shell-panel); }
+.app-shell .lobby-visual path { stroke:var(--shell-accent); }
+.app-shell .lobby { position:relative;isolation:isolate;overflow:clip; }
+.app-shell .lobby::before {
+  content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(ellipse at 82% 12%,color-mix(in srgb,var(--shell-accent) 16%,transparent),transparent 55%);
+}
+@media (prefers-reduced-motion:no-preference) {
+  :root:not([data-reduce-motion]) .app-shell:not(.in-room) .lobby::before {
+    animation:ambient-drift 14s ease-in-out infinite alternate;
+  }
+}
+@keyframes ambient-drift { from { transform:translateX(3%);opacity:.65; } to { transform:translateX(-3%);opacity:1; } }
+.profile-banner {
+  position:relative;aspect-ratio:3/1;border-radius:10px;overflow:hidden;
+  background:linear-gradient(120deg,var(--shell-tint),var(--shell-panel));
+}
+.profile-banner img { display:block;width:100%;height:100%;object-fit:cover; }
+.profile-banner-actions { display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0; }
+.profile-banner-actions input { flex:1;min-width:0;max-width:100%; }
+.profile-banner-actions small { flex-basis:100%;color:var(--muted); }
