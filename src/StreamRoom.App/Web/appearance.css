@@ -1,0 +1,73 @@
+/* Shared colors for the desktop workspace and profile. */
+:root {
+  --shell-bg:#11121b;
+  --shell-panel:#1a1b28;
+  --shell-edge:#353448;
+  --shell-accent:#c0afff;
+  --shell-tint:#332a49;
+}
+:root[data-theme="ocean"] {
+  --shell-bg:#101920;
+  --shell-panel:#182932;
+  --shell-edge:#304854;
+  --shell-accent:#8cdbeb;
+  --shell-tint:#224350;
+}
+:root[data-theme="graphite"] {
+  --shell-bg:#141516;
+  --shell-panel:#202224;
+  --shell-edge:#3a3e42;
+  --shell-accent:#d1d9e0;
+  --shell-tint:#333a40;
+}
+:root[data-theme="ember"] {
+  --shell-bg:#1b1415;
+  --shell-panel:#292020;
+  --shell-edge:#503b37;
+  --shell-accent:#ffbf95;
+  --shell-tint:#4a2f29;
+}
+:root[data-theme] {
+  --panel:var(--shell-panel);
+  --border:var(--shell-edge);
+  --accent:var(--shell-accent);
+  background:var(--shell-bg);
+}
+.app-shell, .app-shell #stage { background:var(--shell-bg); }
+.app-shell > header, .app-shell aside,
+.app-shell aside .room-panel, .app-shell .sidebar-presence,
+.app-shell .profile-dialog, .app-shell .profile-identity-card {
+  background:var(--shell-panel);
+  border-color:var(--shell-edge);
+}
+.app-shell .stage-title { border-bottom:1px solid var(--shell-edge);padding-bottom:14px; }
+.app-shell .eyebrow, .app-shell .tail-kicker { color:var(--shell-accent); }
+.app-shell .stream-count, .app-shell .room-symbol, .app-shell [role="tab"][aria-selected="true"] {
+  background:var(--shell-tint);
+  color:var(--shell-accent);
+}
+.app-shell .primary { background:var(--shell-accent);color:#17141d; }
+.profile-sections { display:flex;gap:6px;flex-wrap:wrap;padding:5px;border:1px solid var(--shell-edge);border-radius:12px;background:var(--shell-bg); }
+.profile-sections button { flex:1;padding:8px 10px;border:0;background:transparent;white-space:nowrap; }
+.profile-sections button[aria-pressed="true"], .theme-options button[aria-pressed="true"] {
+  background:var(--shell-tint);color:var(--shell-accent);outline:1px solid var(--shell-accent);
+}
+.profile-section { display:grid;gap:14px; }
+.profile-section[hidden] { display:none; }
+.profile-section h3, .profile-section p { margin-block:0; }
+.theme-options { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px; }
+.theme-options button { display:flex;align-items:center;gap:10px;text-align:left;padding:12px; }
+.theme-options button span { width:24px;height:24px;border-radius:50%;background:var(--swatch); }
+[data-theme-choice="violet"] { --swatch:#c0afff; }
+[data-theme-choice="ocean"] { --swatch:#8cdbeb; }
+[data-theme-choice="graphite"] { --swatch:#d1d9e0; }
+[data-theme-choice="ember"] { --swatch:#ffbf95; }
+@media (prefers-reduced-motion:no-preference) {
+  :root:not([data-reduce-motion]) .profile-section:not([hidden]) { animation:profile-enter 150ms ease-out; }
+  :root:not([data-reduce-motion]) .profile-sections button,
+  :root:not([data-reduce-motion]) .theme-options button { transition:background-color 130ms,color 130ms; }
+}
+@keyframes profile-enter { from { opacity:0;transform:translateY(4px); } to { opacity:1;transform:translateY(0); } }
+:root[data-reduce-motion] .app-shell *, :root[data-reduce-motion] .app-shell dialog[open] {
+  animation:none!important;transition:none!important;scroll-behavior:auto!important;
+}

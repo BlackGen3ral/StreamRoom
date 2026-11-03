@@ -1,3 +1,4 @@
+import { setupAppearance } from './appearance.mjs';
 const avatars = new WeakMap();
 export function showAvatar(element, name, avatar) {
   const valid = typeof avatar === 'string' && avatar.length <= (avatar.startsWith('data:image/gif;')?12000:8192) && /^data:image\/(?:jpeg|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar);
@@ -12,6 +13,7 @@ export function showAvatar(element, name, avatar) {
 
 export function createProfileUi(native, onSaved) {
   const $ = id => document.getElementById(id), dialog = $('profileDialog');
+  const selectPanel = setupAppearance(dialog);
   let profile = { name: '', avatar: null }, draft = null, busy = false, google = {}, configured = false, signing = false;
   let listed=false;
   function drawGoogle() {
@@ -33,6 +35,7 @@ export function createProfileUi(native, onSaved) {
     finally { busy = false; for (const id of ['profileChoosePhoto','profileSave','profileDisplayName','profileSounds','profileDiscoverable']) $(id).disabled = false; preview(); drawGoogle(); }
   }
   $('editProfile').addEventListener('click', async () => {
+    selectPanel('identity');
     draft = profile.avatar; $('profileDisplayName').value = $('name').value.trim() || profile.name;
     $('profileSounds').checked = profile.sounds !== false;
     preview(); feedback(''); drawGoogle(); dialog.showModal();

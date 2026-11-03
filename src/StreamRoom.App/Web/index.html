@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; media-src 'self' blob: mediastream:; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>StreamRoom</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="layout.css"><link rel="stylesheet" href="workspace.css"><script type="module" src="app.mjs"></script></head>
+<title>StreamRoom</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="layout.css"><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="appearance.css"><script type="module" src="app.mjs"></script></head>
 <body class="app-shell">
 <section id="welcomePage" class="welcome-page" aria-labelledby="welcomeTitle" hidden>
   <div class="welcome-brand"><span class="brand-glyph" aria-hidden="true">▣</span>StreamRoom</div>
@@ -97,11 +97,27 @@
 <dialog id="profileDialog" class="profile-dialog" aria-labelledby="profileDialogTitle">
   <div class="profile-dialog-header"><div><span class="tail-kicker">SUA IDENTIDADE</span><h2 id="profileDialogTitle">Seu perfil</h2><p>Um jeito seu de aparecer na sala.</p></div><button id="profileClose" class="quiet" aria-label="Fechar perfil">✕</button></div>
   <div class="profile-dialog-body">
+    <nav class="profile-sections" aria-label="Seções do perfil">
+      <button type="button" data-profile-tab="identity" aria-pressed="true">Perfil</button>
+      <button type="button" data-profile-tab="appearance" aria-pressed="false">Aparência</button>
+      <button type="button" data-profile-tab="account" aria-pressed="false">Conta e privacidade</button>
+    </nav>
+    <div class="profile-section" data-profile-panel="identity">
     <section class="profile-identity-card"><div class="profile-photo-row"><span id="profilePhotoPreview" class="avatar profile-photo-preview" role="img" aria-label="Prévia da foto do perfil">V</span><div class="profile-identity-copy"><strong id="profilePreviewName">Você</strong><span>Visível para os amigos na sala</span><div class="row"><button id="profileChoosePhoto">Trocar foto</button><button id="profileRemovePhoto" class="quiet">Remover</button></div></div></div><p class="profile-photo-hint">JPG, PNG ou GIF · até 10 MB · GIF otimizado automaticamente</p></section>
     <div class="profile-name-field"><label for="profileDisplayName">Como seus amigos te chamam?</label><input id="profileDisplayName" maxlength="32" autocomplete="off" placeholder="Seu nome na sala"><span class="profile-field-note">Até 32 caracteres. Você pode mudar quando quiser.</span></div>
+    </div><div class="profile-section" data-profile-panel="account" hidden>
     <section class="profile-google"><div class="profile-account-heading"><span class="profile-account-icon" aria-hidden="true">G</span><div><strong>Conta Google</strong><p id="googleAccountStatus">Use seu nome e foto do Google.</p></div><span id="googleLinkedBadge" class="profile-account-badge">Opcional</span></div><div class="row"><button id="googleSignIn" class="google-sign-in">Continuar com Google</button><button id="googleDisconnect" class="quiet" hidden>Desvincular</button><button id="googleCancel" class="quiet" hidden>Cancelar login</button></div><p class="fine">Somente nome e foto. Sem acesso a e-mails ou arquivos.</p></section>
+    <label class="profile-directory-option"><input id="profileDiscoverable" type="checkbox"><span><strong>Permitir que me encontrem pelo nome</strong><small>Quem buscar seu nome no StreamRoom poderá ver sua foto. Na primeira ativação, saia da sala antes de salvar.</small></span></label>
+    </div><div class="profile-section" data-profile-panel="appearance" hidden>
+    <h3>Tema do StreamRoom</h3><p class="fine">Veja o tema na hora. Ele fica salvo neste PC.</p>
+    <div class="theme-options" role="group" aria-label="Tema do aplicativo">
+      <button type="button" data-theme-choice="violet"><span aria-hidden="true"></span>Violeta</button>
+      <button type="button" data-theme-choice="ocean"><span aria-hidden="true"></span>Oceano</button>
+      <button type="button" data-theme-choice="graphite"><span aria-hidden="true"></span>Grafite</button>
+      <button type="button" data-theme-choice="ember"><span aria-hidden="true"></span>Âmbar</button>
+    </div>
     <label class="profile-sounds-option"><span class="profile-sound-icon" aria-hidden="true">♪</span><span><strong>Sons do aplicativo</strong><small>Ao transmitir e quando alguém começar ou parar de assistir.</small></span><input id="profileSounds" type="checkbox" role="switch" checked></label>
-    <label class="profile-directory-option"><input id="profileDiscoverable" type="checkbox"><span><strong>Permitir que me encontrem pelo nome</strong><small>Seu nome e foto aparecerão na busca global do StreamRoom. Google é opcional. Na primeira ativação, saia da sala antes de salvar.</small></span></label>
+    <label class="profile-sounds-option"><span><strong>Reduzir animações</strong><small>Desativa as transições da interface.</small></span><input id="reduceAppMotion" type="checkbox" role="switch"></label></div>
     <p class="profile-privacy">Salvo neste PC. Sua foto e seu nome são compartilhados apenas com os participantes da sala.</p><p id="profileFeedback" class="dialog-feedback" role="status" aria-live="polite" hidden></p>
   </div>
   <div class="profile-dialog-footer"><button id="profileCancel" class="quiet">Cancelar</button><button id="profileSave" class="primary">Salvar perfil</button></div>
