@@ -377,3 +377,78 @@
   .app-shell .lobby-identity {grid-template-columns:minmax(0,1fr);gap:8px;}
   .app-shell .lobby-actions>section {padding:18px;}
 }
+
+/* Profile editor and card preview */
+.app-shell #profileDialog.profile-page-card .profile-dialog-header {
+  background:#1a1722;padding:24px 28px;
+}
+.app-shell #profileDialog.profile-page-card .profile-dialog-header h2 {
+  font-size:26px;letter-spacing:-.6px;
+}
+.app-shell #profileDialog.profile-page-card .profile-dialog-header .tail-kicker {display:none;}
+.app-shell #profileDialog .profile-sections {
+  border:0;border-bottom:1px solid #3b3246;background:transparent;padding:0 0 12px;border-radius:0;gap:8px;
+}
+.app-shell #profileDialog .profile-sections button {
+  flex:0 1 auto;padding:9px 16px;outline:0;color:#aaa0b8;
+}
+.app-shell #profileDialog .profile-sections button[aria-pressed=true] {background:#30263e;color:#e2d1fd;}
+.app-shell #profileDialog [data-profile-panel="identity"]:not([hidden]) {
+  display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,1fr);gap:30px;align-items:start;
+}
+.profile-editor-fields {display:grid;gap:22px;min-width:0;}
+.app-shell #profileDialog .profile-name-field {margin:0;}
+.app-shell #profileDialog .profile-edit-block {padding:0 0 20px;border-bottom:1px solid #39313f;}
+.app-shell #profileDialog .profile-edit-block h3 {font-size:13px;font-weight:650;color:#e6dcef;margin:0 0 8px;}
+.app-shell #profileDialog .profile-edit-block p {font-size:11px;line-height:1.7;color:#b2a7c0;margin:0 0 12px;}
+.app-shell #profileDialog .profile-edit-block .row {flex-wrap:wrap;gap:8px;}
+.app-shell #profileDialog .profile-edit-block button {font-size:11px;min-height:34px;}
+.app-shell #profileDialog .profile-banner-actions {margin:0;gap:8px;position:relative;}
+.app-shell #profileDialog #profileBannerFile {
+  position:absolute;top:0;left:0;width:132px;height:34px;padding:0;opacity:0;cursor:pointer;
+}
+.app-shell #profileDialog .banner-file-button {
+  display:inline-flex;align-items:center;min-height:34px;padding:7px 12px;border:1px solid #4c3e5d;
+  border-radius:8px;background:#30263e;color:#eadcfb;pointer-events:none;
+}
+.app-shell #profileDialog .profile-banner-actions:focus-within .banner-file-button {outline:2px solid #b89cdd;outline-offset:2px;}
+.app-shell #profileDialog .profile-edit-block .profile-photo-hint {margin:12px 0 0;padding:0;border:0;font-size:10px;}
+.app-shell #profileDialog .profile-directory-option {margin:0;padding:14px;border:1px solid #3d3248;border-radius:10px;background:#19151f;}
+.app-shell #profileDialog .profile-card-preview {position:sticky;top:12px;min-width:0;}
+.profile-preview-caption {display:block;color:#b3a4c4;font-size:10px;letter-spacing:.1em;margin-bottom:12px;}
+.app-shell #profileDialog .profile-card-preview .profile-identity-card {
+  display:block;grid-row:auto;margin:0;padding:0;background:#15121c;border:1px solid #463451;
+  border-radius:14px;overflow:hidden;box-shadow:0 12px 32px #0003;
+}
+.app-shell #profileDialog .profile-card-preview .profile-banner {
+  height:132px;min-height:132px;max-height:none;aspect-ratio:auto;border-radius:0;
+}
+.app-shell #profileDialog .profile-card-preview .profile-photo-row {
+  display:flex;align-items:start;flex-direction:column;margin:-34px 18px 0;gap:14px;
+}
+.app-shell #profileDialog .profile-card-preview .profile-photo-preview {
+  width:86px;height:86px;flex-basis:86px;border:6px solid #15121c;box-shadow:none;
+}
+.app-shell #profileDialog .profile-card-preview .profile-identity-copy {padding:0 4px 20px;}
+.app-shell #profileDialog .profile-card-preview .profile-identity-copy strong {font-size:21px;letter-spacing:-.3px;}
+.app-shell #profileDialog .profile-card-preview .profile-identity-copy>span {margin-top:6px;color:#aa9ab9;font-size:11px;}
+.profile-preview-note {display:flex;gap:8px;align-items:center;border-top:1px solid #382b40;padding:16px 22px;color:#a594b6;font-size:11px;}
+.app-shell #profileDialog .profile-privacy {font-size:10px;line-height:1.7;color:#9b8dab;}
+.app-shell #profileDialog.profile-page-card .profile-dialog-footer {padding:16px 26px;background:#18141f;box-shadow:0 -5px 20px #0001;}
+.app-shell .header-right {gap:10px;}
+.app-shell .header-friends,.app-shell #updateButton {height:36px;min-height:36px;padding:7px 12px;font-size:11px;line-height:20px;}
+.app-shell #networkBadge {height:30px;min-height:30px;padding:4px 10px;border-color:transparent;background:transparent;font-size:10px;}
+.app-shell .header-friends {background:#1c1824;border-color:#3c3246;}
+.app-shell #updateButton {min-width:148px;background:#2b2138;border-color:#594369;box-shadow:inset 0 1px #ffffff08;}
+@media(max-width:960px) {
+  .app-shell #profileDialog [data-profile-panel="identity"]:not([hidden]) {grid-template-columns:minmax(0,1fr);}
+  .app-shell #profileDialog .profile-card-preview {position:static;grid-row:1;width:min(100%,380px);}
+}
+@media(max-width:760px) {
+  .app-shell #updateButton {min-width:0;}
+  .app-shell .header-right {gap:6px;}
+}
+
+.app-shell #profileDialog #profileBannerFile {width:1px;height:1px;clip-path:inset(50%);opacity:1;}
+.app-shell #profileDialog .banner-file-button {pointer-events:auto;cursor:pointer;}
+.app-shell #profileDialog .banner-file-button:hover {background:#41314f;}

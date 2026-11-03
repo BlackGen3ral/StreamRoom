@@ -63,8 +63,41 @@
       <button type="button" data-profile-tab="account" aria-pressed="false">Conta e privacidade</button>
     </nav>
     <div class="profile-section" data-profile-panel="identity">
-    <section class="profile-identity-card"><div class="profile-banner" id="profileBannerPreview" aria-hidden="true"></div><div class="profile-photo-row"><span id="profilePhotoPreview" class="avatar profile-photo-preview" role="img" aria-label="Prévia da foto do perfil">V</span><div class="profile-identity-copy"><strong id="profilePreviewName">Você</strong><span>Visível para os amigos na sala</span><div class="row"><button id="profileChoosePhoto">Trocar foto</button><button id="profileRemovePhoto" class="quiet">Remover</button></div></div></div><div class="profile-banner-actions"><label for="profileBannerFile">Banner de fundo</label><input id="profileBannerFile" type="file" accept="image/png,image/jpeg,image/gif"><button id="profileBannerRemove" type="button" class="quiet">Remover banner</button><small>JPG, PNG ou GIF · até 10 MB · formato 4:1 recomendado · salvo neste PC</small></div><p class="profile-photo-hint">JPG, PNG ou GIF · até 10 MB · GIF otimizado automaticamente · enquadramento manual para fotos estáticas</p></section>
-    <div class="profile-name-field"><label for="profileDisplayName">Nome de exibição</label><input id="profileDisplayName" maxlength="32" autocomplete="off" placeholder="Seu nome na sala"><span class="profile-field-note">Até 32 caracteres. Você pode mudar quando quiser.</span></div><label class="profile-directory-option"><input id="profileDiscoverable" type="checkbox" checked><span><strong>Permitir que me encontrem pelo nome</strong><small>Quem buscar seu nome no StreamRoom poderá ver sua foto. Na primeira ativação, saia da sala antes de salvar.</small></span></label>
+      <div class="profile-editor-fields">
+        <div class="profile-name-field">
+          <label for="profileDisplayName">Nome de exibição</label>
+          <input id="profileDisplayName" maxlength="32" autocomplete="off" placeholder="Seu nome na sala">
+          <span class="profile-field-note">Como você aparece para os amigos.</span>
+        </div>
+        <section class="profile-edit-block">
+          <h3>Foto de perfil</h3>
+          <p>Escolha uma imagem ou um GIF para o seu avatar.</p>
+          <div class="row"><button id="profileChoosePhoto">Trocar foto</button><button id="profileRemovePhoto" class="quiet">Remover</button></div>
+          <p class="profile-photo-hint">JPG, PNG ou GIF · até 10 MB. Recorte manual para fotos estáticas.</p>
+        </section>
+        <section class="profile-edit-block">
+          <h3>Banner do perfil</h3>
+          <p>Adicione um fundo ao seu cartão.</p>
+          <div class="profile-banner-actions">
+            <label class="banner-file-button" for="profileBannerFile">Escolher banner</label>
+            <input id="profileBannerFile" type="file" accept="image/png,image/jpeg,image/gif">
+            <button id="profileBannerRemove" type="button" class="quiet">Remover</button>
+            <small>JPG, PNG ou GIF · até 10 MB · salvo neste PC</small>
+          </div>
+        </section>
+        <label class="profile-directory-option"><input id="profileDiscoverable" type="checkbox" checked><span><strong>Permitir que me encontrem pelo nome</strong><small>Quem buscar seu nome poderá ver sua foto. Na primeira ativação, saia da sala antes de salvar.</small></span></label>
+      </div>
+      <div class="profile-card-preview">
+        <span class="profile-preview-caption">PRÉVIA DO PERFIL</span>
+        <section class="profile-identity-card">
+          <div class="profile-banner" id="profileBannerPreview" aria-hidden="true"></div>
+          <div class="profile-photo-row">
+            <span id="profilePhotoPreview" class="avatar profile-photo-preview" role="img" aria-label="Prévia da foto do perfil">V</span>
+            <div class="profile-identity-copy"><strong id="profilePreviewName">Você</strong><span>Seu perfil no StreamRoom</span></div>
+          </div>
+          <div class="profile-preview-note"><span aria-hidden="true">▣</span>Compartilhe o momento.</div>
+        </section>
+      </div>
     </div><div class="profile-section" data-profile-panel="account" hidden>
     <section class="profile-google"><div class="profile-account-heading"><span class="profile-account-icon" aria-hidden="true">G</span><div><strong>Conta Google</strong><p id="googleAccountStatus">Use seu nome e foto do Google.</p></div><span id="googleLinkedBadge" class="profile-account-badge">Opcional</span></div><div class="row"><button id="googleSignIn" class="google-sign-in">Continuar com Google</button><button id="googleDisconnect" class="quiet" hidden>Desvincular</button><button id="googleCancel" class="quiet" hidden>Cancelar login</button></div><p class="fine">Somente nome e foto. Sem acesso a e-mails ou arquivos.</p></section>
 
