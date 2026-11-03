@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.ComponentModel;
 using System.IO;
 using System.Reflection;
@@ -48,6 +49,8 @@ public partial class ShellWindow : Window
     private string? _selfParticipantId;
     private Task<ClientConfiguration>? _clientConfiguration;
     private CancellationTokenSource? _googleLogin;
+    private (string Token, string Nonce)? _roomSyncCredential;
+    private CancellationTokenSource? _roomSync;
     private bool _closing;
     private bool _exitRequested;
     private bool _testCloseToTray;
@@ -238,7 +241,7 @@ public partial class ShellWindow : Window
                         _googleLogin = login;
                         try
                         {
-                            var identity = await GoogleLogin.SignInAsync(googleConfig.GoogleClientId, login.Token, googleConfig.GoogleTokenExchangeReady);
+                            var identity = await GoogleLogin.SignInAsync(googleConfig.GoogleClientId, login.Token, googleConfig.GoogleTokenExchangeReady, (jwt, nonce) => _roomSyncCredential = (jwt, nonce));
                             await GoogleAccountStore.SaveAsync(DataDirectory, identity);
                             result = new { account = GoogleAccountStore.Status(DataDirectory), name = identity.Name, avatar = identity.Avatar };
                         }
@@ -246,6 +249,7 @@ public partial class ShellWindow : Window
                     }
                     break;
                 case "googleDisconnect":
+                    _roomSyncCredential = null; _roomSync?.Cancel();
                     GoogleAccountStore.Remove(DataDirectory); result = GoogleAccountStore.Status(DataDirectory); break;
                 case "friendsStatus": result = FriendBook.Load(DataDirectory); break;
                 case "peopleStatus": result=PeopleService.Status(DataDirectory);break;
@@ -581,6 +585,12 @@ public partial class ShellWindow : Window
                 if (existing is null || sameRoom && (!existing.Owner || welcome.Role == "host"))
                     await new SavedGroupRoom(server.AbsoluteUri, roomId, token, invitation, welcome.Role == "host").SaveAsync(DataDirectory);
             }
+            if (_roomSyncCredential is { } proof && server.AbsoluteUri == "https://streamroom.arthostudio.com/")
+            {
+                var sync = new CancellationTokenSource();
+                _roomSync = sync;
+                _ = PublishActiveRoomAsync(client, invitation, roomId, welcome.ParticipantId, proof, sync);
+            }
             Title = "StreamRoom · " + name;
             return new { welcome, invitation, server = server.AbsoluteUri.TrimEnd('/') };
         }
@@ -595,8 +605,42 @@ public partial class ShellWindow : Window
             _connection = null; await client.DisposeAsync(); throw;
         }
     }
+    private async Task PublishActiveRoomAsync(SignalingClient client, string invitation, string roomId,
+        string participantId, (string Token, string Nonce) proof, CancellationTokenSource sync)
+    {
+        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(8) };
+        var cancellation = sync.Token;
+        var body = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            operation = "publish", credential = proof.Token, nonce = proof.Nonce, roomId,
+            participantId, inviteToken = new Uri(invitation).Fragment.TrimStart('#')
+        });
+        try
+        {
+            while (!cancellation.IsCancellationRequested && client.IsConnected)
+            {
+                try
+                {
+                    using var payload = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+                    using var result = await http.PostAsync("https://streamroom.arthostudio.com/v2/account/active-room", payload, cancellation);
+                    if ((int)result.StatusCode is 400 or 401 or 404 or 503) break;
+                }
+                catch (HttpRequestException) { }
+                catch (OperationCanceledException) when (!cancellation.IsCancellationRequested) { }
+                await Task.Delay(TimeSpan.FromSeconds(30), cancellation);
+            }
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        finally
+        {
+            if (_roomSync == sync) _roomSync = null;
+            sync.Dispose();
+        }
+    }
+
     private async Task DisconnectAsync()
     {
+        _roomSync?.Cancel();
         _cameraAllowedUntil=0;
         StopNativeCapture();
         Title = "StreamRoom";

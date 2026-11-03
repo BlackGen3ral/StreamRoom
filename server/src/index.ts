@@ -2,11 +2,13 @@ import { DurableObject } from 'cloudflare:workers';
 import legacy from './legacy';
 export { Room } from './legacy';
 export { PeopleDirectory } from './people';
+export { ActiveAccountRoom } from './account-room';
 
 import { ROOM_TTL, SWEEP_INTERVAL, renewalExpiry, stale } from './policy';
 import { validAvatar, validName } from './profile';
 import { clientConfig, type ClientConfigEnv } from './client-config';
 import { googleExchange } from './google-oauth';
+import { accountRoomRequest } from './account-room';
 const MAX_MESSAGE = 64 * 1024;
 const json = (body: unknown, status = 200) => Response.json(body, {
   status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
@@ -18,7 +20,7 @@ async function hash(value: string) {
 }
 type Metadata = { roomId: string; inviteHash: string; hostHash: string; expiresAt: number; persistent?: boolean };
 type Watch = { publisherId: string; streamId: string; subscriptionId: string; height: number; fps: number };
-type Session = { id: string; name?: string; avatar?: string | null; profileId?: string | null; cameraSupport?: boolean; profileAt?: number; role?: 'host' | 'viewer'; lastSeen: number; window: number; count: number; streamId?: string; watching?: Watch[] };
+type Session = { id: string; name?: string; avatar?: string | null; profileId?: string | null; cameraSupport?: boolean; profileAt?: number; resumeGrant?: { digest: string; expiresAt: number }; role?: 'host' | 'viewer'; lastSeen: number; window: number; count: number; streamId?: string; watching?: Watch[] };
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v);
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -33,6 +35,7 @@ export default {
       if(!(await env.CREATE_LIMITER.limit({key})).success)return json({error:'Muitas tentativas. Aguarde um minuto.'},429);
       return env.PEOPLE.getByName('public-profiles-v1').fetch(request);
     }
+    if (url.pathname === '/v2/account/active-room' && request.method === 'POST') return accountRoomRequest(request, env);
     if (url.pathname.startsWith('/v1/rooms')) return legacy.fetch(request, env);
     if (url.pathname === '/v2/client-config' && request.method === 'GET') return json(clientConfig(env));
     if (url.pathname === '/v2/google/exchange' && request.method === 'POST') return googleExchange(request, env);
@@ -89,6 +92,40 @@ export class MultiRoom extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(Math.min(alarm ?? Infinity, now + 15_000, this.metadata.expiresAt));
     return new Response(null, { status: 101, webSocket: client });
   }
+  private liveParticipant(participantId: string) {
+    if (!this.metadata || Date.now() >= this.metadata.expiresAt) return undefined;
+    return this.sessions().find(({ ws, session }) =>
+      session.id === participantId && ws.readyState === WebSocket.OPEN &&
+      !stale(session.lastSeen, this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime(), true, Date.now()));
+  }
+
+  async canResume(participantId: string, inviteToken: string): Promise<boolean> {
+    const digest = await hash(inviteToken);
+    return digest === this.metadata?.inviteHash && Boolean(this.liveParticipant(participantId));
+  }
+
+  async issueResumeGrant(participantId: string): Promise<string | null> {
+    const credential = token();
+    const digest = await hash(credential);
+    const pc = this.liveParticipant(participantId);
+    if (!pc) return null;
+    pc.session.resumeGrant = { digest, expiresAt: Date.now() + 30_000 };
+    pc.ws.serializeAttachment(pc.session);
+    return credential;
+  }
+
+  private consumeResumeGrant(digest: string): boolean {
+    for (const { session } of this.sessions()) {
+      const grant = session.resumeGrant;
+      if (grant?.digest !== digest || grant.expiresAt <= Date.now()) continue;
+      const pc = this.liveParticipant(session.id);
+      if (!pc) return false;
+      delete pc.session.resumeGrant;
+      pc.ws.serializeAttachment(pc.session);
+      return true;
+    }
+    return false;
+  }
   private sessions(): { ws: WebSocket; session: Session }[] {
     return this.ctx.getWebSockets().map(ws => ({ ws, session: ws.deserializeAttachment() as Session }))
       .filter(x => x.session.role !== undefined);
@@ -141,7 +178,7 @@ export class MultiRoom extends DurableObject<Env> {
       const digest = await hash(message.token);
       // Re-read after asynchronous hashing; another join may have completed meanwhile.
       if (!this.metadata || Date.now() >= this.metadata.expiresAt) { ws.close(1008, 'room_closed'); return; }
-      const role = digest === this.metadata.hostHash ? 'host' : digest === this.metadata.inviteHash ? 'viewer' : undefined;
+      const role = digest === this.metadata.hostHash ? 'host' : (digest === this.metadata.inviteHash || this.consumeResumeGrant(digest)) ? 'viewer' : undefined;
       if (!role) { this.reject(ws, 'unauthorized', 'Convite inválido.', true); return; }
       const peers = this.sessions();
       if (role === 'host' ? peers.some(x => x.session.role === 'host') : peers.filter(x => x.session.role === 'viewer').length >= 4) {
@@ -267,7 +304,7 @@ export class MultiRoom extends DurableObject<Env> {
   }
   async webSocketClose(ws: WebSocket, code: number, _reason: string, _wasClean: boolean) {
     await this.depart(ws);
-    ws.close(code === 1006 ? 1000 : code, 'closed');
+    ws.close([1005, 1006, 1015].includes(code) ? 1000 : code, 'closed');
   }
   async webSocketError(ws: WebSocket, _error: unknown) { await this.depart(ws); ws.close(1011, 'connection_error'); }
   private async end(reason: string) {

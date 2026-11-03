@@ -22,7 +22,7 @@ internal static class GoogleLogin
             ["access_type"] = "online", ["prompt"] = "select_account"
         }.Select(p => Uri.EscapeDataString(p.Key) + "=" + Uri.EscapeDataString(p.Value))));
 
-    internal static async Task<GoogleIdentity> SignInAsync(string clientId, CancellationToken cancellationToken, bool serverExchange = false)
+    internal static async Task<GoogleIdentity> SignInAsync(string clientId, CancellationToken cancellationToken, bool serverExchange = false, Action<string, string>? verifiedCredential = null)
     {
         if (!ClientConfiguration.ValidGoogleClientId(clientId)) throw new IOException("O login Google ainda não foi configurado pelo proprietário.");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -67,6 +67,7 @@ internal static class GoogleLogin
             catch (Exception error) when (error is HttpRequestException or IOException or NotSupportedException or ArgumentException or FormatException or System.Runtime.InteropServices.COMException || error is TaskCanceledException && !ct.IsCancellationRequested) { }
         }
         // No access, ID or refresh token is persisted, logged, or sent to the WebView.
+        verifiedCredential?.Invoke(jwt, nonce);
         return new(identity.Subject, name, avatar, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
     }
     internal static string ExchangeError(string body, int status)

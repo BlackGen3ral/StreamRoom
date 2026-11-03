@@ -1,0 +1,27 @@
+plugins {
+    id 'com.android.application' version '8.9.2'
+}
+
+android {
+    namespace 'com.arthostudio.streamroom'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.arthostudio.streamroom'
+        minSdk 26
+        targetSdk 35
+        versionCode 5
+        versionName '0.1.4'
+    }
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['src']
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.credentials:credentials:1.5.0'
+    implementation 'androidx.credentials:credentials-play-services-auth:1.5.0'
+    implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.1'
+}

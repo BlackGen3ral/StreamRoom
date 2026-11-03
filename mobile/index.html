@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StreamRoom</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui;background:#111319;color:#eff0f8;--border:#303545;--muted:#adb5c8;--accent:#b5a6fa}
+*{box-sizing:border-box}
+body{margin:0}
+header{background:#191c25;border-bottom:1px solid var(--border);padding:16px clamp(18px,5vw,36px);display:flex;gap:10px;align-items:center;font-weight:750}
+header img{width:28px;height:28px}
+header span{margin-left:auto;color:var(--muted);font-size:.75rem;font-weight:500}
+main{max-width:58rem;margin:auto;padding:clamp(16px,4vw,32px)}
+h1{font-size:clamp(1.5rem,5vw,2rem);margin:6px 0}
+p{color:var(--muted);line-height:1.55}
+.eyebrow{color:var(--accent);font-size:.74rem;font-weight:750;letter-spacing:.12em;text-transform:uppercase}
+[hidden]{display:none!important}
+form,label,section{display:grid;gap:12px}
+form{max-width:34rem;padding:20px;border:1px solid var(--border);border-radius:14px;background:#191c25}
+label{font-size:.9rem;color:var(--muted)}
+input,button{min-width:0;min-height:44px;font:inherit;padding:10px 13px;border:1px solid var(--border);border-radius:9px}
+input{background:#11141d;color:#eff0f8}
+button{cursor:pointer;background:var(--accent);color:#211936;font-weight:700}
+button:disabled{opacity:.6}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.room-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.room-bar strong{font-size:1.15rem}
+#leave,#streams button{background:#242838;color:#eff0f8}
+#streams{display:flex;flex-wrap:wrap;gap:8px;color:var(--muted)}
+.stage{position:relative;border-radius:12px;overflow:hidden}
+video{display:block;width:100%;max-height:70dvh;background:#090a0e;object-fit:contain}
+.camera{position:absolute;right:8px;top:8px;width:27%;max-width:180px;border:1px solid var(--border);border-radius:8px}
+.room-layout{display:grid;gap:14px}
+.room-side,.broadcasts{min-width:0;background:#191c25;border:1px solid var(--border);border-radius:14px;padding:16px}
+.room-side h2,.broadcasts h2{margin:0;font-size:1.05rem}
+.room-side summary{min-height:44px;display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:650}
+.room-side summary::before{content:'›';color:var(--accent)}
+.room-side details[open] summary::before{transform:rotate(90deg)}
+#participants{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.member{display:flex;align-items:center;gap:10px;min-width:0;color:var(--muted);overflow-wrap:anywhere}
+.member-badge{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:#302a46;color:var(--accent);font-weight:750}
+#streams button[aria-pressed="true"]{border-color:var(--accent);background:#302a46}
+#streams button{text-align:left;overflow-wrap:anywhere}
+#status{min-height:1.5em;margin:10px 0;font-size:.875rem}
+@media(min-width:760px){.room-layout{grid-template-columns:minmax(190px,1fr) minmax(0,3fr);align-items:start}}
+@media(max-width:480px){#streams button{flex:1 1 100%}.broadcasts,.room-side{padding:12px}}
+@media(max-width:759px){.broadcasts{grid-row:1}.room-bar strong{display:none}.room-bar{justify-content:flex-end}}
+.join-actions{display:flex;flex-wrap:wrap;gap:8px}.join-actions button{flex:1}
+#forget-room{background:#242838;color:#eff0f8}
+.remember{display:flex;align-items:center;gap:8px}.remember input{min-height:0;width:18px;height:18px}
+</style>
+<body><header><img src="/icon.ico" alt="">StreamRoom <span>Android · teste</span></header><main>
+<span class="eyebrow">Sala privada</span><h1>Sala e telas</h1><p id="intro">Entre com um convite para assistir à tela de um amigo.</p>
+<form id="join">
+<label>Seu nome <input name="displayName" required maxlength="32" autocomplete="nickname"></label>
+<label>Convite da sala <input name="invite" type="url" required autocomplete="off" spellcheck="false"></label>
+<label class="remember"><input type="checkbox" id="remember-room"> Salvar esta sala neste aparelho</label>
+<button type="submit">Entrar na sala</button>
+<div class="join-actions" id="saved-room" hidden>
+<button type="button" id="rejoin-room">Voltar à sala salva</button>
+<button type="button" id="forget-room">Esquecer sala</button>
+</div>
+</form>
+<p id="status" role="status"></p>
+<section id="room" hidden>
+<div class="room-bar"><strong>Sala privada</strong><button id="leave">Sair da sala</button></div>
+<div class="room-layout">
+<aside class="room-side">
+<details><summary>Na sala <span id="participant-count"></span></summary><ul id="participants"></ul></details>
+</aside>
+<section class="broadcasts" aria-labelledby="broadcasts-title">
+<h2 id="broadcasts-title">Transmissões</h2>
+<div id="streams"></div>
+<div class="stage"><video id="screen" autoplay playsinline controls hidden></video>
+<video id="camera" class="camera" autoplay playsinline muted hidden></video>
+</div></section></div></section>
+</main>
+<script type="module" src="./viewer.mjs"></script>
+</body></html>
