@@ -18,7 +18,7 @@ async function hash(value: string) {
 }
 type Metadata = { roomId: string; inviteHash: string; hostHash: string; expiresAt: number; persistent?: boolean };
 type Watch = { publisherId: string; streamId: string; subscriptionId: string; height: number; fps: number };
-type Session = { id: string; name?: string; avatar?: string | null; profileId?: string | null; profileAt?: number; role?: 'host' | 'viewer'; lastSeen: number; window: number; count: number; streamId?: string; watching?: Watch[] };
+type Session = { id: string; name?: string; avatar?: string | null; profileId?: string | null; cameraSupport?: boolean; profileAt?: number; role?: 'host' | 'viewer'; lastSeen: number; window: number; count: number; streamId?: string; watching?: Watch[] };
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v);
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -102,7 +102,7 @@ export class MultiRoom extends DurableObject<Env> {
   }
   private broadcast() {
     const sessions = this.sessions();
-    const participants = sessions.map(({ session: s }) => ({ id: s.id, name: s.name!, avatar: s.avatar ?? null, profileId: s.profileId ?? null, role: s.role!, streamId: s.streamId ?? null, streaming: Boolean(s.streamId) }));
+    const participants = sessions.map(({ session: s }) => ({ id: s.id, name: s.name!, avatar: s.avatar ?? null, profileId: s.profileId ?? null, cameraSupport:s.cameraSupport===true, role: s.role!, streamId: s.streamId ?? null, streaming: Boolean(s.streamId) }));
     // Watch lists are private to the receiving publisher/subscriber, not room-wide.
     for (const { ws, session: s } of sessions) this.send(ws, {
       type: 'room', participants, subscriptions: s.watching ?? [],
@@ -153,7 +153,7 @@ export class MultiRoom extends DurableObject<Env> {
         this.reject(ws, 'invalid_profile', 'Identificador de perfil inválido.', true); return;
       }
       s.avatar = message.avatar ?? null;
-      s.profileId = message.profileId ?? null;
+      s.profileId = message.profileId ?? null; s.cameraSupport=message.cameraSupport===true;
       ws.serializeAttachment(s);
       this.send(ws, { type: 'welcome', participantId: s.id, role, roomId: this.metadata.roomId, expiresAt: this.metadata.expiresAt, persistent: Boolean(this.metadata.persistent), profiles: true, protocol: 2 });
       this.broadcast(); return;
@@ -240,6 +240,10 @@ export class MultiRoom extends DurableObject<Env> {
     if (p.kind === 'restart' && receiving) {
       this.send(target.ws, { type: 'signal', from: s.id, payload: { kind: 'restart', streamId: p.streamId, subscriptionId: p.subscriptionId, session: p.session } }); return;
     }
+    if(p.kind==='camera'&&sending&&typeof p.active==='boolean'){
+      this.send(target.ws,{type:'signal',from:s.id,payload:{kind:'camera',active:p.active,streamId:p.streamId,subscriptionId:p.subscriptionId,session:p.session}});return;
+    }
+    if(p.kind==='offer'&&p.cameraMid!==undefined&&p.cameraMid!==null&&(typeof p.cameraMid!=='string'||!/^[a-zA-Z0-9_-]{1,16}$/.test(p.cameraMid))){this.reject(ws,'invalid_signal','Canal de câmera inválido.');return;}
     const valid = (p.kind === 'offer' && sending || p.kind === 'answer' && receiving)
       ? typeof p.sdp === 'string' && p.sdp.length > 0 && p.sdp.length <= 48_000
       : p.kind === 'ice' && typeof p.candidate === 'string' && p.candidate.length <= 4096
@@ -251,7 +255,7 @@ export class MultiRoom extends DurableObject<Env> {
     }
     const payload = p.kind === 'ice'
       ? { kind: p.kind, candidate: p.candidate, sdpMid: p.sdpMid, sdpMLineIndex: p.sdpMLineIndex }
-      : { kind: p.kind, sdp: p.sdp };
+      : { kind: p.kind, sdp: p.sdp, ...(p.kind==='offer'?{cameraMid:p.cameraMid??null,cameraActive:p.cameraActive===true}:{}) };
     this.send(target.ws, { type: 'signal', from: s.id, payload: { ...payload, streamId: p.streamId, subscriptionId: p.subscriptionId, session: p.session } });
   }
   private async depart(ws: WebSocket) {

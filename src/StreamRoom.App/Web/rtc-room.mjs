@@ -2,15 +2,19 @@ import { directConfiguration, directRoute, DIRECT_FAILURE } from './direct-ice.m
 import { profile, perPeerCap, adapt } from './quality.mjs';
 import { localTailCandidate, tailDescription, tailscaleRoute, deferTailCandidate } from './tailscale-routing.mjs';
 import { zeroTierCandidate, zeroTierRoute } from './zerotier-routing.mjs';
+import { CameraShare } from './camera-share.mjs';
 
 export class RtcRoom extends EventTarget {
   constructor(native) {
     super(); this.native = native; this.peers = new Map(); this.creating = new Set(); this.attempts = new Map(); this.failedConnections = new Map();
+    this.camera=new CameraShare(this);
     this.participants = []; this.pending = []; this.identity = null; this.localStream = null; this.run = 0; this.subscriptions = []; this.subscribers = []; this.localId = null;
     this.config = profile(); this.automatic = true; this.statsBusy = false;
     this.timer = setInterval(() => this.measure().catch(error => this.notice(error.message)), 2000);
   }
   event(type, detail) { this.dispatchEvent(new CustomEvent(type, { detail })); }
+  get cameraStream(){return this.camera.stream;}
+  setCamera(active){return active?this.camera.start():this.camera.stop();}
   notice(message) { this.event('notice', message); }
   setTailscale(snapshot, enabled) {
     this.tailscale = snapshot; this.tailscaleEnabled = Boolean(enabled);
@@ -195,6 +199,8 @@ export class RtcRoom extends EventTarget {
       peer.audioSender=peer.pc.getSenders().find(sender=>sender.track?.kind==='audio');
       // Reserve audio without capturing anything; replaceTrack can enable sound later without new ICE/video.
       if(!peer.audioSender&&peer.pc.addTransceiver)peer.audioSender=peer.pc.addTransceiver('audio',{direction:'sendonly',streams:[stream]}).sender;
+      await this.camera.reserve(peer);
+      if(!this.validPeer(peer)){this.closePeer(key);return;}
       const transceiver = peer.pc.getTransceivers().find(t => t.sender.track?.kind === 'video');
       const codecs = RTCRtpSender.getCapabilities('video')?.codecs;
       if (transceiver?.setCodecPreferences && codecs) {
@@ -202,7 +208,8 @@ export class RtcRoom extends EventTarget {
       }
       await peer.pc.setLocalDescription(await peer.pc.createOffer());
       if (!this.validPeer(peer)) return;
-      await this.signal(peer, { kind: 'offer', sdp: tailDescription(peer.pc.localDescription.sdp, peer.tailPreferred || this.zeroTierProof) });
+      peer.screenMid=transceiver?.mid;
+      await this.signal(peer, { kind: 'offer', sdp: tailDescription(peer.pc.localDescription.sdp, peer.tailPreferred || this.zeroTierProof),cameraMid:peer.cameraTransceiver?.mid??null,cameraActive:Boolean(this.cameraStream) });
       peer.sent = true; await this.flushLocal(peer); await this.configureSender(peer);
     } catch (error) {
       if (peer && this.peers.get(key) === peer) this.closePeer(key);
@@ -235,8 +242,13 @@ export class RtcRoom extends EventTarget {
     };
     pc.onicecandidateerror = () => { if (this.validPeer(peer)) peer.stunError = true; };
     pc.ontrack = e => {
-      if (direction === 'receive' && this.validPeer(peer))
-        this.event('remote', { id, streamId: peer.streamId, stream: e.streams[0] ?? new MediaStream([e.track]) });
+      if(direction!=='receive'||!this.validPeer(peer))return;
+      const stream=e.streams[0]??new MediaStream([e.track]);
+      if(e.track.kind==='video'&&peer.cameraMid&&e.transceiver?.mid===peer.cameraMid){
+        peer.remoteCameraStream=stream;
+        const update=()=>{if(this.validPeer(peer))this.event('remoteCamera',{id,streamId:peer.streamId,stream:peer.cameraActive&&!e.track.muted&&e.track.readyState==='live'?stream:null});};
+        e.track.onunmute=update;e.track.onmute=update;e.track.onended=update;update();
+      }else{if(e.track.kind==='video')peer.screenMid=e.transceiver?.mid;this.event('remote',{id,streamId:peer.streamId,stream});}
     };
     pc.onconnectionstatechange = () => {
       if (!this.validPeer(peer)) return;
@@ -321,6 +333,7 @@ export class RtcRoom extends EventTarget {
       const config = await this.ice();
       if (!this.identity || !this.subscriptions.some(s => s.subscriptionId === key && s.streamId === payload.streamId)) return;
       peer = this.newPeer(from, sub, 'receive', payload.session, config);
+      peer.cameraMid=payload.cameraMid??null;peer.cameraActive=payload.cameraActive===true;
       await peer.pc.setRemoteDescription({ type: 'offer', sdp: tailDescription(payload.sdp, this.zeroTierProof) });
       if (!this.validPeer(peer)) return;
       await peer.pc.setLocalDescription(await peer.pc.createAnswer());
@@ -329,6 +342,10 @@ export class RtcRoom extends EventTarget {
       peer.sent = true; await this.flushLocal(peer); return;
     }
     if (!peer || peer.id !== from || payload.streamId !== peer.streamId || payload.session !== peer.session || !this.validPeer(peer)) return;
+    if(payload.kind==='camera'&&peer.direction==='receive'){
+      peer.cameraActive=payload.active===true;
+      this.event('remoteCamera',{id:peer.id,streamId:peer.streamId,stream:peer.cameraActive?peer.remoteCameraStream??null:null});return;
+    }
     if (payload.kind === 'answer' && peer.direction === 'send' && peer.pc.signalingState === 'have-local-offer') {
       await peer.pc.setRemoteDescription({ type: 'answer', sdp: tailDescription(payload.sdp, this.zeroTierProof) });
       for (const ice of peer.remoteIce.splice(0)) if (this.validPeer(peer)) await peer.pc.addIceCandidate(ice);
@@ -354,6 +371,13 @@ export class RtcRoom extends EventTarget {
     parameters.encodings[0].maxFramerate = Math.min(suggestion?.fps ?? this.config.fps, this.config.fps, requested?.fps ?? 60);
     parameters.encodings[0].scaleResolutionDownBy = Math.max(suggestion?.scale ?? 1, requested ? this.config.height / requested.height : 1, 1);
     const encoding = parameters.encodings[0];
+    if(peer.cameraSender){
+      const cameraBudget=peer.cameraSender.track?Math.min(800000,Math.min(peer.budget,cap)*.15):0;
+      encoding.maxBitrate=Math.max(64000,encoding.maxBitrate-cameraBudget);
+      const cameraParameters=peer.cameraSender.getParameters();
+      if(cameraParameters.encodings?.length){cameraParameters.encodings[0].maxBitrate=Math.max(32000,cameraBudget||32000);cameraParameters.encodings[0].maxFramerate=15;
+        const signature=[cameraParameters.encodings[0].maxBitrate,15].join(':');if(peer.cameraEncoding!==signature){await peer.cameraSender.setParameters(cameraParameters);peer.cameraEncoding=signature;}}
+    }
     const signature = [encoding.maxBitrate, encoding.maxFramerate, encoding.scaleResolutionDownBy, parameters.degradationPreference].join(':');
     if (peer.appliedEncoding === signature) return;
     await sender.setParameters(parameters);
@@ -369,11 +393,11 @@ export class RtcRoom extends EventTarget {
         const reports = await peer.pc.getStats();
         let video, audio, remote, pair, codec;
         for (const r of reports.values()) {
-          if ((r.type === (peer.direction === 'send' ? 'outbound-rtp' : 'inbound-rtp')) && r.kind === 'video') video = r;
+          if ((r.type === (peer.direction === 'send' ? 'outbound-rtp' : 'inbound-rtp')) && r.kind === 'video'&&(!peer.screenMid||!r.mid||r.mid===peer.screenMid)) video = r;
           if ((r.type === 'outbound-rtp' || r.type === 'inbound-rtp') && r.kind === 'audio') audio = r;
-          if (r.type === 'remote-inbound-rtp' && r.kind === 'video') remote = r;
           if (r.type === 'transport' && r.selectedCandidatePairId) pair = reports.get(r.selectedCandidatePairId);
         }
+        if(video)remote=video.remoteId?reports.get(video.remoteId):[...reports.values()].find(r=>r.type==='remote-inbound-rtp'&&r.localId===video.id);
         if (video?.codecId) codec = reports.get(video.codecId);
         const tailStatus = this.tailscale?.addresses?.length ? this.tailscale : this.tailscaleKnown
           ? { ...this.tailscaleKnown, connected: false, state: this.tailscale?.state ?? 'Unavailable' } : null;
@@ -413,6 +437,7 @@ export class RtcRoom extends EventTarget {
     if (peer.direction === "receive") for (const receiver of peer.pc.getReceivers?.() ?? []) receiver.track?.stop();
     peer.pc.close();
     if (peer.direction === 'receive') this.event('remote', { id: peer.id, streamId: peer.streamId, stream: null });
+    if(peer.direction==='receive')this.event('remoteCamera',{id:peer.id,streamId:peer.streamId,stream:null});
   }
   stopCapture() {
     if (!this.stopPending) this.stopPending = this.disposeCapture().finally(() => { this.stopPending = null; });
@@ -420,6 +445,7 @@ export class RtcRoom extends EventTarget {
   }
   async disposeCapture() {
     this.run++; const stream = this.localStream, streamId = this.localId; this.localStream = null; this.localId = null;
+    await this.camera.stop();
     if(this.audioChange)try{await this.audioChange;}catch{}
     if (this.nativeBridge) { const bridge = this.nativeBridge; this.nativeBridge = null; try { await bridge.stop(); } catch { } }
     for (const track of stream?.getTracks() ?? []) { track.onended = null; track.stop(); }

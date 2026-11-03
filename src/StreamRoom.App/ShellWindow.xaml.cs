@@ -44,6 +44,7 @@ public partial class ShellWindow : Window
     private Participant[] _participants = [];
     private DirectoryPerson[] _peopleResults=[];
     private DateTime _peopleSearchAt;
+    private long _cameraAllowedUntil;
     private string? _selfParticipantId;
     private Task<ClientConfiguration>? _clientConfiguration;
     private CancellationTokenSource? _googleLogin;
@@ -100,6 +101,7 @@ public partial class ShellWindow : Window
             catch (Exception ex) when (ex is IOException or JsonException) { }
             if (App.ZeroTierEnabled) _tailscaleWebRtcReady = false;
             var browserOptions = new CoreWebView2EnvironmentOptions { Language = "pt-BR", AdditionalBrowserArguments = "--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows" };
+            if(App.MediaTestRole is not null&&Environment.GetEnvironmentVariable("STREAMROOM_TEST_CAMERA")=="2")browserOptions.AdditionalBrowserArguments+=" --use-fake-device-for-media-stream";
             browserOptions.AreBrowserExtensionsEnabled = App.ZeroTierEnabled;
             // Opt-in only: expose real host candidates to room participants so ICE
             // can reach the Tailscale adapter. No invented/replaced candidate IPs.
@@ -127,7 +129,12 @@ public partial class ShellWindow : Window
             core.NavigationStarting += (_, args) => { if (!Trusted(args.Uri)) args.Cancel = true; };
             core.NewWindowRequested += (_, args) => args.Handled = true;
             core.DownloadStarting += (_, args) => args.Cancel = true;
-            core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
+            core.PermissionRequested += (_, args) => {
+                args.SavesInProfile=false;
+                bool allow=args.PermissionKind==CoreWebView2PermissionKind.Camera&&Trusted(core.Source)&&Trusted(args.Uri)&&Environment.TickCount64<_cameraAllowedUntil;
+                args.State=allow?CoreWebView2PermissionState.Allow:CoreWebView2PermissionState.Deny;
+                if(allow)_cameraAllowedUntil=0;
+            };
             core.ScreenCaptureStarting += (_, args) => args.Cancel = !Trusted(core.Source);
             core.WebMessageReceived += MessageAsync;
             core.ContainsFullScreenElementChanged += (_, _) =>
@@ -401,7 +408,7 @@ public partial class ShellWindow : Window
                 case "mediaTestSetup" when App.MediaTestRole is not null:
                     if (App.MediaTestRole == "host") { _mediaTestScene = new CaptureTestScene(); if (Environment.GetEnvironmentVariable("STREAMROOM_TEST_MONITOR_WINDOW") is null) _mediaTestScene.Show(); }
                     else { MinWidth = 400; MinHeight = 300; Width = 500; Height = 350; Left = SystemParameters.PrimaryScreenWidth - 510; Top = 0; }
-                    result = new { role = App.MediaTestRole, server = "https://streamroom.arthostudio.com", quality = App.MediaTestHeight, fps = 60 };
+                    result = new { role = App.MediaTestRole, server = "https://streamroom.arthostudio.com", quality = App.MediaTestHeight, fps = 60, testCamera=Environment.GetEnvironmentVariable("STREAMROOM_TEST_CAMERA") is "1" or "2", fakeCamera=Environment.GetEnvironmentVariable("STREAMROOM_TEST_CAMERA")=="2" };
                     break;
                 case "mediaTestInvite" when App.MediaTestRole is not null:
                     var invitationPath = Path.Combine(App.MediaTestDirectory!, "invitation.txt");
@@ -478,6 +485,10 @@ public partial class ShellWindow : Window
                     }, error => Emit(new { type = "audioError", message = error }));
                     result = new { sampleRate = rate, channels = 2 };
                     break;
+                case "cameraPermissionBegin":
+                    if(_connection?.IsConnected!=true)throw new IOException("Entre na sala e compartilhe sua tela antes de ligar a câmera.");
+                    _cameraAllowedUntil=Environment.TickCount64+15000;break;
+                case "cameraPermissionEnd": _cameraAllowedUntil=0;break;
                 case "audioStop": _audio.Dispose(); break;
                 case "checkUpdates": result = await CheckUpdatesAsync(); break;
                 case "downloadUpdate":
@@ -586,6 +597,7 @@ public partial class ShellWindow : Window
     }
     private async Task DisconnectAsync()
     {
+        _cameraAllowedUntil=0;
         StopNativeCapture();
         Title = "StreamRoom";
         _audio.Dispose();

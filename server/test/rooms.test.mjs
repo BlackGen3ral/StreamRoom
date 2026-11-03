@@ -97,6 +97,10 @@ test('salas e múltiplas publicações reais no workerd',async t=>{
     for(let i=0;i<ids.length;i++)assert.equal(animated.participants.find(p=>p.id===ids[i]).streamId,streams[i]);
   });
   await t.test('isolamento de direção, transmissão e identificadores',async()=>{
+    signal(1,0,subAB,1,'offer',{sdp:'v=0',cameraMid:'2',cameraActive:true});
+    const cameraOffer=await host.wait('signal',m=>m.payload.kind==='offer'&&m.payload.cameraMid==='2');assert.equal(cameraOffer.payload.cameraActive,true);
+    signal(1,0,subAB,1,'camera',{active:false});assert.equal((await host.wait('signal',m=>m.payload.kind==='camera')).payload.active,false);
+    signal(0,1,subAB,1,'camera',{active:true});assert.equal((await host.wait('error')).code,'invalid_signal');
     signal(0,1,subAB,1,'offer',{sdp:'bad'});assert.equal((await host.wait('error')).code,'invalid_signal');
     signal(1,3,subAB,1,'offer',{sdp:'bad'});assert.equal((await guests[0].wait('error')).code,'not_subscribed');
     guests[0].send({type:'stream',active:true,streamId:streams[0]});assert.equal((await guests[0].wait('error')).code,'duplicate_stream');

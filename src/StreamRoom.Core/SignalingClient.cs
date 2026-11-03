@@ -71,7 +71,7 @@ public sealed class SignalingClient : IAsyncDisposable
         {
             await _socket.ConnectAsync(socketUri.Uri, timeout.Token);
             _receiver = ReceiveAsync();
-            await SendAsync(new { type = "join", token, displayName, avatar, profileId, protocol = 2 }, timeout.Token);
+            await SendAsync(new { type = "join", token, displayName, avatar, profileId, cameraSupport=true, protocol = 2 }, timeout.Token);
             var welcome = await _welcome.Task.WaitAsync(timeout.Token);
             _profiles = welcome.Profiles;
             _role = welcome.Role; _expiresAt = welcome.ExpiresAt; _persistent = welcome.Persistent;

@@ -35,6 +35,7 @@ const state = { connected: false, role: null, persistent: false, groupSaved: fal
 let updateBusy = false, updateReady = false;
 let latestStats = [], buildVersion = '', runtimeVersion = '';
 const cards = new Map(), remoteStreams = new Map();
+const remoteCameras=new Map();
 function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
 const zeroTierUi = createZeroTierUi(native, rtc, () => state.connected, status);
 const friendsUi = createFriendsUi(native, () => render());
@@ -69,6 +70,10 @@ function createCard(id, streamId) {
   card.video.addEventListener('loadeddata', () => { card.empty.hidden = true; });
   card.video.addEventListener('emptied', () => { card.empty.hidden = false; });
   card.frame.append(card.video, card.empty, card.play);
+  card.cameraRoot=node('div','camera-pane');card.cameraRoot.hidden=true;card.cameraVideo=node('video');card.cameraVideo.autoplay=true;card.cameraVideo.playsInline=true;card.cameraVideo.muted=true;
+  card.cameraRoot.append(card.cameraVideo,node('span','camera-caption',own?'Sua câmera':'Câmera'));card.frame.append(card.cameraRoot);
+  card.cameraToggle=button('Ligar câmera',()=>busy(()=>rtc.setCamera(!rtc.cameraStream)));card.cameraToggle.hidden=!own;card.cameraToggle.title='Câmera junto da tela · sem microfone';
+  card.cameraHidden=false;card.hideCamera=button('Ocultar câmera',()=>{card.cameraHidden=!card.cameraHidden;renderStreams();});
   const controls = node('div', 'stream-controls');
   card.watch = button(own ? 'Parar minha transmissão' : 'Assistir', () => busy(async () => {
     if (own) { await rtc.stopCapture(); status(''); return; }
@@ -116,12 +121,12 @@ function createCard(id, streamId) {
   fit.addEventListener('change', () => { card.video.style.objectFit = fit.value; });
   const more = node('details', 'stream-more');
   const moreButton = node('summary', '', 'Opções'); moreButton.setAttribute('aria-label','Mais opções e tamanho do vídeo'); more.append(moreButton);
-  const extra = node('div', 'stream-extra'); extra.append(card.pause); more.append(extra);
+  const extra = node('div', 'stream-extra'); extra.append(card.pause,card.hideCamera); more.append(extra);
   card.watch.classList.add('stream-action'); if (own) card.watch.classList.add('stream-stop');
   fullscreen.classList.add('stream-fullscreen'); enlarge.classList.add('stream-enlarge');
   card.retry.classList.add('stream-retry');card.mute.classList.add('stream-audio');
   const primaryActions=node('div','stream-primary-actions'),playbackActions=node('div','stream-playback-actions'),viewActions=node('div','stream-view-actions');
-  primaryActions.append(card.watch,card.retry,card.sendMute);playbackActions.append(card.quality,card.mute,card.volume);viewActions.append(enlarge,fit,fullscreen,more);
+  primaryActions.append(card.watch,card.retry,card.sendMute,card.cameraToggle);playbackActions.append(card.quality,card.mute,card.volume);viewActions.append(enlarge,fit,fullscreen,more);
   playbackActions.hidden=own;controls.append(primaryActions,playbackActions,viewActions);
   card.metrics = node('p', 'fine', own ? 'Prévia local · aguardando espectadores' : 'Clique em Assistir para abrir esta tela.');
   card.root.append(heading, card.frame, controls, card.metrics); cards.set(id, card); $('streamGrid').append(card.root);
@@ -137,7 +142,7 @@ function renderStreams() {
   }
   const valid = new Set(streams.map(p => p.id));
   for (const [id, card] of cards) if (!valid.has(id) || streams.find(p => p.id === id).streamId !== card.streamId) {
-    card.viewport.dispose(); card.video.pause(); card.video.srcObject = null; card.root.remove(); cards.delete(id); remoteStreams.delete(id);
+    card.viewport.dispose(); card.video.pause(); card.video.srcObject = null;card.cameraVideo.pause();card.cameraVideo.srcObject=null;card.root.remove(); cards.delete(id); remoteStreams.delete(id);remoteCameras.delete(id);
   }
   for (const p of streams) {
     const card = cards.get(p.id) ?? createCard(p.id, p.streamId);
@@ -150,6 +155,10 @@ function renderStreams() {
       card.video.srcObject = stream; card.play.hidden = true;
       if (stream) card.video.play().catch(() => { card.play.hidden = card.video.srcObject !== stream || Boolean(card.failure); });
     }
+    const camera=card.own?rtc.cameraStream:watched&&remoteCameras.get(p.id)?.streamId===p.streamId?remoteCameras.get(p.id).stream:null;
+    if(card.cameraVideo.srcObject!==camera){card.cameraVideo.srcObject=camera;if(camera)void card.cameraVideo.play().catch(()=>{});}
+    card.cameraRoot.hidden=!camera||card.cameraHidden;card.hideCamera.hidden=!camera;card.hideCamera.textContent=card.cameraHidden?'Mostrar câmera':'Ocultar câmera';
+    card.cameraToggle.textContent=rtc.cameraStream?'Desligar câmera':'Ligar câmera';card.cameraToggle.setAttribute('aria-pressed',String(Boolean(rtc.cameraStream)));card.cameraToggle.disabled=state.busy;
     card.empty.hidden = !card.failure && Boolean(stream && card.video.readyState >= 2 && card.video.videoWidth > 0);
     if (card.failure) card.play.hidden = true;
     card.empty.textContent = card.own ? 'Prévia local sem som' : card.failure ? card.failure : watched ? 'Conectando com seu amigo… O vídeo aparece quando a conexão estiver pronta.' : 'Escolha Assistir para receber esta gameplay.';
@@ -288,6 +297,10 @@ rtc.addEventListener('capture', ({ detail }) => {
   render();
 });
 rtc.addEventListener('captureAudio', () => renderStreams());
+rtc.addEventListener('camera',()=>renderStreams());
+rtc.addEventListener('remoteCamera',({detail})=>{
+  if(detail.stream)remoteCameras.set(detail.id,detail);else if(remoteCameras.get(detail.id)?.streamId===detail.streamId)remoteCameras.delete(detail.id);renderStreams();
+});
 rtc.addEventListener('remote', ({ detail }) => {
   if (detail.stream) remoteStreams.set(detail.id, detail);
   else if (remoteStreams.get(detail.id)?.streamId === detail.streamId) remoteStreams.delete(detail.id);

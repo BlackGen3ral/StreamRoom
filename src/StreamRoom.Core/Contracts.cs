@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace StreamRoom.Core;
 
 public sealed record RoomCredentials(string RoomId, string InviteToken, string HostToken, long ExpiresAt, int Protocol, bool Persistent = false);
-public sealed record Participant(string Id, string Name, string Role, bool Streaming = false, string? StreamId = null, string? Avatar = null, string? ProfileId = null)
+public sealed record Participant(string Id, string Name, string Role, bool Streaming = false, string? StreamId = null, string? Avatar = null, string? ProfileId = null, bool CameraSupport = false)
 {
     public string RoleLabel => Role == "host" ? "Criador da sala" : "Amigo";
 }
