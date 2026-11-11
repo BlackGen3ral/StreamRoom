@@ -208,11 +208,16 @@ public partial class ShellWindow : Window
             object? result = null;
             switch (type)
             {
-                case "discordSetupStatus": result = new { available = DiscordSetup.Available }; break;
+                case "discordSetupStatus":
+                    result = new { available = DiscordSetup.Available, repairNeeded = DiscordSetup.Available && DiscordSetup.RepairNeeded() }; break;
                 case "discordSetupProton": DiscordSetup.OpenProton(); break;
                 case "discordSetupImport": result = _discordSetup.PickProfile(this); break;
                 case "discordSetupApply":
-                    await _discordSetup.ConfigureAsync((percent, label) => Emit(new { type = "discordSetupProgress", percent, label }));
+                    var enableFakeNitro = p.TryGetProperty("fakeNitro", out var fakeNitro) && fakeNitro.ValueKind == JsonValueKind.True;
+                    await _discordSetup.ConfigureAsync(enableFakeNitro, (percent, label) => Emit(new { type = "discordSetupProgress", percent, label }));
+                    break;
+                case "discordSetupRepair":
+                    await DiscordSetup.RepairAsync((percent, label) => Emit(new { type = "discordSetupProgress", percent, label }));
                     break;
                 case "testCreate" when App.NetworkTestOutput is not null:
                     result = await CreateNetworkTestAsync();

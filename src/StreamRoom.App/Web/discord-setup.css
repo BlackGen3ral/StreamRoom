@@ -32,6 +32,8 @@
 .discord-setup h3 { font-size: 13px; }
 .discord-setup p { margin-top: 5px; color: var(--text-secondary); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
 .discord-setup-badge { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); font-size: 10px; }
+.discord-setup-repair { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 0 23px 14px; padding: 13px 14px; border: 1px solid #565960; border-radius: 8px; background: var(--studio-highlight); }
+.discord-setup-repair[hidden] { display: none; }
 .discord-setup-steps { list-style: none; counter-reset: discord-step; margin: 0; padding: 0 23px; }
 .discord-setup-steps li {
   display: grid;
@@ -53,6 +55,10 @@
   font-size: 11px;
 }
 .discord-setup-steps button { min-height: 36px; white-space: nowrap; }
+.discord-setup-option { display: flex; align-items: flex-start; gap: 10px; margin: 0 23px 14px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); cursor: pointer; }
+.discord-setup-option input { width: 16px; height: 16px; flex: 0 0 16px; margin: 1px 0 0; accent-color: var(--accent); }
+.discord-setup-option strong { display: block; font-size: 12px; }
+.discord-setup-option small { display: block; margin-top: 4px; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
 .discord-setup-feedback { margin: 0 23px 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
 .discord-setup-feedback progress { width: 100%; height: 6px; accent-color: var(--accent); }
 .discord-setup-feedback[data-error] { border-color: #81545b; }

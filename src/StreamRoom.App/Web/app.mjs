@@ -25,6 +25,7 @@ function selectPage(page, focus = false) {
   }
   if (previous !== page && previous === 'profile') profileUi.close();
   if (previous !== page && page === 'profile') profileUi.open();
+  if (previous !== page && page === 'connections') void discordSetup.start().catch(() => {});
 }
 const sidebarToggle = $('sidebarToggle');
 function setSidebarCompact(compact) {
@@ -49,7 +50,7 @@ const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
     const id = String(++sequence);
-    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'googleSignIn' ? 330000 : ['profilePhoto','discordSetupApply','discordSetupImport','downloadUpdate'].includes(type) ? 900000 : type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
+    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'googleSignIn' ? 330000 : ['profilePhoto','discordSetupApply','discordSetupImport','discordSetupRepair','downloadUpdate'].includes(type) ? 900000 : type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
     requests.set(id, { resolve, reject, timer }); window.chrome.webview.postMessage({ id, type, payload });
   });
 }

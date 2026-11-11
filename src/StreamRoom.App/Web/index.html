@@ -148,11 +148,13 @@
       <div><h2 id="discordSetupTitle">Compartilhar no Discord</h2><p>Configure uma vez para abrir lives com o Proton em segundo plano.</p></div>
       <span class="discord-setup-badge">Experimental</span>
     </div>
+    <div id="discordSetupRepairBox" class="discord-setup-repair" hidden><div><h3>O Discord precisa do Vencord novamente</h3><p>Saia do Discord pela bandeja e repare o Vencord usando o perfil já configurado.</p></div><button id="discordSetupRepair" type="button" class="primary">Reparar Vencord</button></div>
     <ol class="discord-setup-steps">
       <li><div><h3>Baixe o perfil do Proton</h3><p>Entre na sua conta. Em Downloads → WireGuard, escolha Windows e o servidor <strong>US-FREE#76</strong> ou outro gratuito dos EUA.</p></div><button id="discordSetupProton" class="quiet" type="button">Abrir Proton ↗</button></li>
       <li><div><h3>Importe o arquivo .conf</h3><p id="discordSetupFile">Selecione o arquivo baixado. A chave fica neste PC.</p></div><button id="discordSetupImport" class="quiet" type="button">Importar arquivo</button></li>
       <li><div><h3>Configure o Discord</h3><p>Saia do Discord pela bandeja e desconecte outras VPNs. Confirme a instalação do WireSock se o Windows solicitar.</p></div><button id="discordSetupApply" class="primary" type="button" disabled>Configurar Discord</button></li>
     </ol>
+    <label class="discord-setup-option" for="discordSetupFakeNitro"><input id="discordSetupFakeNitro" type="checkbox" checked><span><strong>Ativar FakeNitro no Vencord</strong><small>Adiciona opções de qualidade para a live e recursos de personalização do Vencord.</small></span></label>
     <div id="discordSetupFeedback" class="discord-setup-feedback" hidden><progress id="discordSetupProgress" max="100" value="0" aria-label="Progresso da configuração" hidden></progress><p id="discordSetupStatus" role="status" aria-live="polite"></p></div>
     <p class="discord-setup-note">Usa Vencord com StreamFix. A atualização automática do Vencord fica pausada durante o teste.</p>
   </section>

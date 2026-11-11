@@ -75,6 +75,9 @@ um perfil WireGuard Windows do US-FREE#76 ou outro servidor gratuito dos EUA.
 Importe o .conf, saia do Discord pela bandeja e clique em Configurar Discord.
 Aceite a instalação do WireSock se o Windows pedir. Depois abra o Discord
 normalmente com o ProtonVPN fechado. Use o Discord estável para Windows.
+O assistente também oferece ativar FakeNitro junto com o StreamFix.
+Se o Discord atualizar e perder o Vencord, saia do Discord pela bandeja e
+use Conexões → Reparar Vencord. O reparo usa as preferências e os perfis já salvos.
 
 O assistente usa uma compilação experimental do Vencord com StreamFix e pausa
 as atualizações automáticas do Vencord. O backup fica em
