@@ -26,7 +26,8 @@ public partial class ShellWindow : Window
     private readonly TailscaleService _tailscale = new();
     private bool _tailscaleWebRtcReady;
     private readonly SystemAudioCapture _audio = new();
-    private readonly UpdateManager _updates = new(new GithubSource("https://github.com/BlackGen3ral/StreamRoom", null, false));
+    private readonly UpdateManager _updates = new(new GithubSource("https://github.com/BlackGen3ral/StreamRoom", null,
+        prerelease: Velopack.Locators.VelopackLocator.Current.Channel == "win-discord"));
     private readonly CaptureSources _captureSources = new();
     private NativeCapture? _nativeCapture;
     private CoreWebView2SharedBuffer? _nativeBuffer;
@@ -202,6 +203,7 @@ public partial class ShellWindow : Window
             if (type == "googleCancel") { _googleLogin?.Cancel(); Emit(new { type = "reply", id, ok = true, result = new { } }); return; }
             var discordCommand = type?.StartsWith("discordSetup", StringComparison.Ordinal) == true;
             if (discordCommand && type != "discordSetupStatus" && !DiscordSetup.Available) throw new InvalidOperationException("Assistente disponível no pacote experimental para Windows.");
+            if (discordCommand && _exitRequested) throw new InvalidOperationException("Aguarde a reinicialização do StreamRoom.");
             commandGate = discordCommand ? _discordSetupCommands : type is "profilePhoto" or "profileSave" or "googleSignIn" or "googleDisconnect" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
@@ -522,6 +524,7 @@ public partial class ShellWindow : Window
                     break;
                 case "installUpdate":
                     if (_retiringTailscale) throw new InvalidOperationException("Aguarde a remoção do Tailscale terminar antes de reiniciar.");
+                    if (_discordSetupCommands.CurrentCount == 0) throw new InvalidOperationException("Aguarde a configuração do Discord terminar antes de reiniciar.");
                     if (App.ZeroTierProof) throw new InvalidOperationException("Atualizações estáveis desativadas neste protótipo.");
                     if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de atualizar.");
                     if (_availableUpdate is null) throw new InvalidOperationException("Nenhuma atualização aprovada disponível.");

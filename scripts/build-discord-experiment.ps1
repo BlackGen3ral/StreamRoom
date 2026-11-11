@@ -1,4 +1,9 @@
-param([string]$VencordSource, [string]$StreamFixSource)
+param(
+    [string]$VencordSource,
+    [string]$StreamFixSource,
+    [ValidatePattern('^\d+\.\d+\.\d+-discord\.\d+$')][string]$Version = '0.4.72-discord.1',
+    [switch]$PackUpdates
+)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -40,7 +45,7 @@ try {
 
 $output = Join-Path $root ('artifacts/discord-experiment-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
 dotnet publish (Join-Path $root 'src/StreamRoom.App') -c Release -r win-x64 --self-contained true `
-    -p:PublishSingleFile=true -p:Version=0.4.71-discord-experiment.1 -o $output --nologo
+    -p:PublishSingleFile=true "-p:Version=$Version" -o $output --nologo
 if ($LASTEXITCODE -ne 0) { throw 'Falha na publicação local do StreamRoom experimental.' }
 $assets = New-Item -ItemType Directory -Path (Join-Path $output 'DiscordExperiment')
 $bundles = @('patcher.js','preload.js','renderer.js','renderer.css','patcher.js.LEGAL.txt','renderer.js.LEGAL.txt',
@@ -92,3 +97,17 @@ $archive = "$output.zip"
 tar.exe -a -cf $archive -C $output .
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar o ZIP experimental.' }
 Get-FileHash -LiteralPath $archive -Algorithm SHA256 | Format-List Hash,Path
+
+if ($PackUpdates) {
+    $updateOutput = "$output-updates"
+    Push-Location $root
+    try {
+        dotnet tool restore
+        if ($LASTEXITCODE -ne 0) { throw 'Falha ao preparar o Velopack.' }
+        dotnet tool run vpk pack --packId StreamRoom --packVersion $Version --packDir $output --mainExe StreamRoom.exe `
+            --packTitle StreamRoom --icon src/StreamRoom.App/Assets/StreamRoom.ico --framework webview2 `
+            --runtime win-x64 --outputDir $updateOutput --channel win-discord
+        if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar o pacote de atualização experimental.' }
+    } finally { Pop-Location }
+    Write-Output "Pacotes de atualização do canal win-discord em $updateOutput"
+}
