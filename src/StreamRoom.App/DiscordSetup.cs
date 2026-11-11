@@ -27,6 +27,9 @@ internal sealed class DiscordSetup
     private static readonly string Patcher = Path.Combine(Vencord, "dist", "patcher.js");
     private static readonly HttpClient Downloads = new() { Timeout = TimeSpan.FromMinutes(2) };
     private DiscordProtonProfile? _profile;
+    private string? _preparedDirectory;
+    private bool _repairOnly;
+    public bool IsPrepared => _preparedDirectory is not null;
 
     public static bool Available => File.Exists(Path.Combine(Assets, "patcher.js")) && File.Exists(Path.Combine(Assets, "renderer.js"));
 
@@ -43,79 +46,116 @@ internal sealed class DiscordSetup
         File.Exists(Path.Combine(Vencord, "dist", "renderer.js")) &&
         File.Exists(Path.Combine(Vencord, "settings", "settings.json"));
 
-    public static async Task RepairAsync(Action<int, string> progress)
+    public async Task PrepareAsync(bool repairOnly, Action<int, string> progress)
     {
-        if (!CanRepair()) throw new IOException("Configure o StreamFix neste PC antes de usar o reparo.");
+        DiscardPreparation();
+        if (repairOnly && !CanRepair()) throw new IOException("Configure o StreamFix neste PC antes de usar o reparo.");
+        if (!repairOnly && _profile is null) throw new IOException("Importe o arquivo .conf primeiro.");
         var resources = DiscordResources();
-        var asar = Path.Combine(resources, "app.asar");
-        if (IsPatched(asar, Patcher)) return;
-        RequireClosedDiscord();
-        EnsureUnmodified(resources);
+        if (!IsPatched(Path.Combine(resources, "app.asar"), Patcher)) EnsureUnmodified(resources);
         var scratch = Directory.CreateDirectory(Path.Combine(LocalData, "StreamRoom", "DiscordSetup", Guid.NewGuid().ToString("N"))).FullName;
         try
         {
-            progress(30, "Baixando o instalador oficial do Vencord…");
-            var installer = await DownloadVencordInstallerAsync(scratch);
-            RequireClosedDiscord();
-            EnsureUnmodified(resources);
-            progress(65, "Reaplicando o Vencord à versão atual do Discord…");
-            await PatchDiscordAsync(installer, asar);
+            if (!repairOnly && !File.Exists(WireSock)) await InstallWireSockAsync(scratch, progress);
+            progress(60, "Verificando o instalador oficial do Vencord…");
+            await DownloadVencordInstallerAsync(scratch);
+            _repairOnly = repairOnly;
+            _preparedDirectory = scratch;
         }
-        finally { CleanScratch(scratch); }
+        finally
+        {
+            if (_preparedDirectory != scratch) CleanScratch(scratch);
+        }
+    }
+
+    public void DiscardPreparation()
+    {
+        var directory = _preparedDirectory;
+        _preparedDirectory = null;
+        if (directory is not null) CleanScratch(directory);
+    }
+
+    public async Task<object> ApplyAndRestartAsync(bool enableQuality, Action<int, string> progress)
+    {
+        var scratch = _preparedDirectory ?? throw new IOException("Prepare a configuração primeiro.");
+        var repairOnly = _repairOnly;
+        var restart = false;
+        try
+        {
+            var resources = DiscordResources();
+            var asar = Path.Combine(resources, "app.asar");
+            var installer = Path.Combine(scratch, "VencordInstallerCli.exe");
+            await using (var file = File.OpenRead(installer))
+                if (Convert.ToHexString(await SHA256.HashDataAsync(file)) != InstallerHash)
+                    throw new IOException("O instalador preparado não passou na verificação. Prepare novamente.");
+            if (!IsPatched(asar, Patcher)) EnsureUnmodified(resources);
+            if (repairOnly && !CanRepair()) throw new IOException("Os arquivos do StreamFix não estão mais disponíveis.");
+
+            progress(12, "Fechando o Discord para aplicar a configuração…");
+            restart = true;
+            await DiscordRestart.CloseAsync(Path.Combine(LocalData, "Discord"));
+            RequireClosedDiscord();
+            resources = DiscordResources();
+            asar = Path.Combine(resources, "app.asar");
+            if (repairOnly)
+            {
+                progress(65, "Reaplicando o Vencord à versão atual do Discord…");
+                if (!IsPatched(asar, Patcher))
+                {
+                    EnsureUnmodified(resources);
+                    await PatchDiscordAsync(installer, asar);
+                }
+            }
+            else await ConfigureAsync(resources, scratch, installer, enableQuality, progress);
+        }
+        catch (Exception ex) when (restart)
+        {
+            if (!TryReopenDiscord()) throw new IOException(ex.Message + " Abra o Discord manualmente para voltar.", ex);
+            throw;
+        }
+        finally { DiscardPreparation(); }
+
+        progress(95, "Abrindo o Discord…");
+        return new { repairOnly, reopened = TryReopenDiscord() };
+    }
+
+    private static bool TryReopenDiscord()
+    {
+        try
+        {
+            var root = Path.Combine(LocalData, "Discord");
+            if (DiscordRestart.IsRunning(root)) return true;
+            var executable = Path.Combine(Path.GetDirectoryName(DiscordResources())!, "Discord.exe");
+            using var process = Process.Start(new ProcessStartInfo(executable)
+            {
+                UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(executable)!
+            });
+            return process is not null;
+        }
+        catch (Exception ex) when (ex is Win32Exception or IOException or UnauthorizedAccessException) { return false; }
     }
 
     public object PickProfile(System.Windows.Window owner)
     {
         var dialog = new OpenFileDialog { Filter = "Perfil WireGuard (*.conf)|*.conf", CheckFileExists = true };
         if (dialog.ShowDialog(owner) != true) return new { imported = false, fileName = "" };
+        DiscardPreparation();
         _profile = null;
         _profile = DiscordProtonProfile.Read(dialog.FileName);
         return new { imported = true, fileName = Path.GetFileName(dialog.FileName) };
     }
 
-    public async Task ConfigureAsync(bool enableFakeNitro, Action<int, string> progress)
+    private async Task ConfigureAsync(string resources, string scratch, string installer, bool enableQuality, Action<int, string> progress)
     {
         var profile = _profile ?? throw new IOException("Importe o arquivo .conf primeiro.");
-        var resources = DiscordResources();
-        RequireClosedDiscord();
         var id = Guid.NewGuid().ToString("N");
         var full = $"streamroom-discord-{id}";
         var control = full + "-controle";
-        var scratch = Directory.CreateDirectory(Path.Combine(LocalData, "StreamRoom", "DiscordSetup", id)).FullName;
         var imported = new List<string>();
         try
         {
-            if (!File.Exists(WireSock))
-            {
-                progress(10, "Baixando o instalador oficial do WireSock…");
-                var setup = Path.Combine(scratch, "WireSockSetup.exe");
-                await DownloadAsync(WireSockUrl, WireSockHash, setup);
-                InstallerTrust.Verify(setup, publisher: "The Anti-Cloud Corporation");
-                progress(25, "Autorize a instalação do WireSock se o Windows perguntar…");
-                try
-                {
-                    var start = new ProcessStartInfo(setup) { UseShellExecute = true, Verb = "runas" };
-                    start.ArgumentList.Add("/passive");
-                    start.ArgumentList.Add("/norestart");
-                    using var installer = Process.Start(start)
-                        ?? throw new IOException("Não foi possível abrir o instalador do WireSock.");
-                    using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-                    await installer.WaitForExitAsync(timeout.Token);
-                    if (installer.ExitCode is 1641 or 3010)
-                        throw new IOException("O WireSock foi instalado. Reinicie o PC e importe o perfil novamente para continuar.");
-                    if (installer.ExitCode != 0)
-                        throw new IOException($"O instalador do WireSock retornou o código {installer.ExitCode}.");
-                }
-                catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
-                {
-                    throw new IOException("Instalação do WireSock cancelada no Windows.");
-                }
-                if (!File.Exists(WireSock)) throw new IOException("A instalação do WireSock não foi concluída.");
-            }
-
             progress(40, "Testando a saída dos EUA e o filtro por aplicativo…");
-            if (!(await WireSockAsync("status")).Trim().Equals("Not connected", StringComparison.OrdinalIgnoreCase))
-                throw new IOException("Desconecte o WireSock antes de configurar o Discord.");
+            await ReleasePreviousDiscordTunnelAsync();
             var egress = await VerifyProtonAsync(profile, scratch, id);
 
             progress(65, "Importando os perfis do Discord…");
@@ -125,16 +165,59 @@ internal sealed class DiscordSetup
                 await ImportAsync(scratch, name, profile.Build("Discord", name == control));
             }
             progress(80, "Guardando um backup e configurando o StreamFix…");
-            await ConfigureVencordAsync(resources, scratch, full, egress, enableFakeNitro);
+            await ConfigureVencordAsync(resources, installer, full, egress, enableQuality);
             _profile = null;
-            progress(100, "Configuração pronta. Abra o Discord e teste em um canal de voz.");
         }
         catch
         {
             foreach (var name in imported) await DeleteProfileAsync(name);
             throw;
         }
-        finally { CleanScratch(scratch); }
+    }
+
+    private static async Task InstallWireSockAsync(string scratch, Action<int, string> progress)
+    {
+        progress(10, "Baixando o instalador oficial do WireSock…");
+        var setup = Path.Combine(scratch, "WireSockSetup.exe");
+        await DownloadAsync(WireSockUrl, WireSockHash, setup);
+        InstallerTrust.Verify(setup, publisher: "The Anti-Cloud Corporation");
+        progress(25, "Autorize a instalação do WireSock se o Windows perguntar…");
+        try
+        {
+            var start = new ProcessStartInfo(setup) { UseShellExecute = true, Verb = "runas" };
+            start.ArgumentList.Add("/passive");
+            start.ArgumentList.Add("/norestart");
+            using var installer = Process.Start(start)
+                ?? throw new IOException("Não foi possível abrir o instalador do WireSock.");
+            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            await installer.WaitForExitAsync(timeout.Token);
+            if (installer.ExitCode is 1641 or 3010)
+                throw new IOException("O WireSock foi instalado. Reinicie o PC e importe o perfil novamente para continuar.");
+            if (installer.ExitCode != 0)
+                throw new IOException($"O instalador do WireSock retornou o código {installer.ExitCode}.");
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            throw new IOException("Instalação do WireSock cancelada no Windows.");
+        }
+        if (!File.Exists(WireSock)) throw new IOException("A instalação do WireSock não foi concluída.");
+    }
+
+    private static async Task ReleasePreviousDiscordTunnelAsync()
+    {
+        var status = (await WireSockAsync("status")).Trim();
+        if (status.Equals("Not connected", StringComparison.OrdinalIgnoreCase)) return;
+        var settings = Path.Combine(Vencord, "settings", "settings.json");
+        var config = File.Exists(settings) ? JsonNode.Parse(await File.ReadAllTextAsync(settings)) : null;
+        var profile = config?["plugins"]?["StreamFix"]?["perfilDoTunel"]?.GetValue<string>();
+        var active = Regex.Match(status, @"^(?:Connected to server|Establishing connection) using profile ([a-zA-Z0-9-]+)\r?$", RegexOptions.Multiline).Groups[1].Value;
+        if (profile is not null && (profile.StartsWith("streamfix-", StringComparison.Ordinal) || profile.StartsWith("streamroom-discord-", StringComparison.Ordinal))
+            && (active == profile || active == profile + "-controle"))
+        {
+            await WireSockAsync("disconnect");
+            if ((await WireSockAsync("status")).Trim().Equals("Not connected", StringComparison.OrdinalIgnoreCase)) return;
+        }
+        throw new IOException("Há outro túnel ativo no WireSock. Desconecte-o e tente novamente.");
     }
 
     private static void CleanScratch(string scratch)
@@ -157,10 +240,10 @@ internal sealed class DiscordSetup
     {
         var processes = Process.GetProcessesByName("Discord");
         foreach (var process in processes) process.Dispose();
-        if (processes.Length > 0) throw new IOException("Saia do Discord pelo ícone ao lado do relógio e clique em Configurar novamente.");
+        if (processes.Length > 0) throw new IOException("O Discord ainda está aberto. Tente aplicar novamente.");
     }
 
-    private static async Task ConfigureVencordAsync(string resources, string scratch, string profile, string egress, bool enableFakeNitro)
+    private static async Task ConfigureVencordAsync(string resources, string preparedInstaller, string profile, string egress, bool enableQuality)
     {
         var asar = Path.Combine(resources, "app.asar");
         var settings = Path.Combine(Vencord, "settings", "settings.json");
@@ -178,10 +261,11 @@ internal sealed class DiscordSetup
             ["enabled"] = true, ["perfilDoTunel"] = profile, ["enderecoDaSaida"] = egress,
             ["exigirTunel"] = true, ["tunelCompletoSempre"] = false
         };
-        if (enableFakeNitro)
+        if (enableQuality)
         {
             var fakeNitro = plugins["FakeNitro"] as JsonObject ?? new JsonObject();
             fakeNitro["enabled"] = true;
+            fakeNitro["enableStreamQualityBypass"] = true;
             if (fakeNitro.Parent is null) plugins["FakeNitro"] = fakeNitro;
         }
         var bundles = Directory.GetFiles(Assets).Where(file => Path.GetFileName(file) is
@@ -198,7 +282,7 @@ internal sealed class DiscordSetup
         }
         var asarBackup = Path.Combine(backup, "app.asar");
         if (!installed) File.Copy(asar, asarBackup);
-        var installer = installed ? null : await DownloadVencordInstallerAsync(scratch);
+        var installer = installed ? null : preparedInstaller;
         RequireClosedDiscord();
         var patched = false;
         try

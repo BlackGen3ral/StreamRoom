@@ -1,10 +1,11 @@
 export function createDiscordSetup(native) {
   const element = suffix => document.getElementById('discordSetup' + suffix);
   const panel = element('');
-  const [proton, pick, apply, file, feedback, meter, status, fakeNitro, repair, repairBox] =
-    ['Proton', 'Import', 'Apply', 'File', 'Feedback', 'Progress', 'Status', 'FakeNitro', 'Repair', 'RepairBox'].map(element);
+  const [proton, pick, apply, file, feedback, meter, status, quality, repair, repairBox, restart, restartBox] =
+    ['Proton', 'Import', 'Apply', 'File', 'Feedback', 'Progress', 'Status', 'Quality', 'Repair', 'RepairBox', 'Restart', 'RestartBox'].map(element);
   let imported = false;
   let busy = false;
+  let prepared = false;
 
   function show(message, error = false) {
     feedback.hidden = false;
@@ -17,56 +18,81 @@ export function createDiscordSetup(native) {
     catch (error) { show(error.message, true); }
   });
   pick.addEventListener('click', async () => {
-    pick.disabled = true;
-    apply.disabled = true;
+    updateButtons(true);
     try {
       const result = await native('discordSetupImport');
       if (result.imported) {
         imported = true;
+        prepared = false;
         file.textContent = result.fileName;
         feedback.hidden = true;
       }
     } catch (error) {
       imported = false;
+      prepared = false;
       file.textContent = 'Selecione um perfil WireGuard válido.';
       show(error.message, true);
     } finally {
-      pick.disabled = false;
-      apply.disabled = !imported;
+      updateButtons(false);
     }
   });
   async function refresh() {
     if (busy) return;
     const result = await native('discordSetupStatus');
+    if (busy) return;
     panel.hidden = !result.available;
     repairBox.hidden = !result.repairNeeded;
+    prepared = result.prepared;
+    updateButtons(false);
+  }
+
+  function updateButtons(working) {
+    busy = working;
+    proton.disabled = pick.disabled = quality.disabled = repair.disabled = working;
+    apply.disabled = working || !imported;
+    restart.disabled = working;
+    restartBox.hidden = !prepared;
   }
 
   async function configure(repairOnly) {
-    busy = true;
-    proton.disabled = pick.disabled = apply.disabled = fakeNitro.disabled = repair.disabled = true;
+    prepared = false;
+    updateButtons(true);
     meter.hidden = false;
     meter.value = 0;
-    show(repairOnly ? 'Verificando a instalação do Discord…' : 'Verificando o Discord e o perfil importado…');
+    show(repairOnly ? 'Preparando o reparo do Vencord…' : 'Verificando o Discord e o perfil importado…');
     try {
-      if (repairOnly) await native('discordSetupRepair');
-      else {
-        await native('discordSetupApply', { fakeNitro: fakeNitro.checked });
+      await native('discordSetupPrepare', { repairOnly });
+      prepared = true;
+      meter.hidden = true;
+      show('Arquivos verificados. Você escolhe quando reiniciar.');
+    } catch (error) {
+      meter.hidden = true;
+      show(error.message, true);
+    } finally { updateButtons(false); }
+  }
+
+  restart.addEventListener('click', async () => {
+    updateButtons(true);
+    meter.hidden = false;
+    meter.value = 0;
+    show('Preparando a reinicialização do Discord…');
+    try {
+      const result = await native('discordSetupRestart', { quality: quality.checked });
+      if (!result.repairOnly) {
         imported = false;
         file.textContent = 'Perfil configurado neste PC.';
       }
       repairBox.hidden = true;
       meter.value = 100;
-      show(repairOnly ? 'Vencord reparado. Abra o Discord novamente.' : 'Pronto para testar. Abra o Discord e entre em um canal de voz.');
+      show(result.reopened ? 'Configuração aplicada. O Discord foi reaberto.' : 'Configuração aplicada. Abra o Discord pelo menu Iniciar.');
     } catch (error) {
       meter.hidden = true;
       show(error.message, true);
     } finally {
-      busy = false;
-      proton.disabled = pick.disabled = fakeNitro.disabled = repair.disabled = false;
-      apply.disabled = !imported;
+      prepared = false;
+      updateButtons(false);
     }
-  }
+  });
   apply.addEventListener('click', () => configure(false));
   repair.addEventListener('click', () => configure(true));
 

@@ -1,7 +1,7 @@
 param(
     [string]$VencordSource,
     [string]$StreamFixSource,
-    [ValidatePattern('^\d+\.\d+\.\d+-discord\.\d+$')][string]$Version = '0.4.72-discord.1',
+    [ValidatePattern('^\d+\.\d+\.\d+-discord\.\d+$')][string]$Version = '0.4.72-discord.2',
     [switch]$PackUpdates
 )
 
@@ -77,12 +77,12 @@ StreamRoom para Windows — experimento Discord
 Extraia toda a pasta do ZIP e abra StreamRoom.exe. Em Conexões, procure
 Compartilhar no Discord. Seu amigo usa uma conta Proton própria para baixar
 um perfil WireGuard Windows do US-FREE#76 ou outro servidor gratuito dos EUA.
-Importe o .conf, saia do Discord pela bandeja e clique em Configurar Discord.
-Aceite a instalação do WireSock se o Windows pedir. Depois abra o Discord
-normalmente com o ProtonVPN fechado. Use o Discord estável para Windows.
-O assistente também oferece ativar FakeNitro junto com o StreamFix.
-Se o Discord atualizar e perder o Vencord, saia do Discord pela bandeja e
-use Conexões → Reparar Vencord. O reparo usa as preferências e os perfis já salvos.
+Importe o .conf e clique em Preparar Discord. Aceite a instalação do WireSock
+se o Windows pedir. Quando estiver pronto, clique em Reiniciar Discord e aplicar.
+O assistente também oferece liberar 1080p e 60 FPS no seletor do Discord.
+Use o Discord estável para Windows, com o aplicativo ProtonVPN fechado.
+Se o Discord perder o Vencord depois de atualizar, use Preparar reparo e
+reinicie pelo StreamRoom. O reparo usa as preferências e os perfis já salvos.
 
 O assistente usa uma compilação experimental do Vencord com StreamFix e pausa
 as atualizações automáticas do Vencord. O backup fica em

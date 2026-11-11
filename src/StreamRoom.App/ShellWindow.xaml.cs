@@ -211,15 +211,16 @@ public partial class ShellWindow : Window
             switch (type)
             {
                 case "discordSetupStatus":
-                    result = new { available = DiscordSetup.Available, repairNeeded = DiscordSetup.Available && DiscordSetup.RepairNeeded() }; break;
+                    result = new { available = DiscordSetup.Available, repairNeeded = DiscordSetup.Available && DiscordSetup.RepairNeeded(), prepared = _discordSetup.IsPrepared }; break;
                 case "discordSetupProton": DiscordSetup.OpenProton(); break;
                 case "discordSetupImport": result = _discordSetup.PickProfile(this); break;
-                case "discordSetupApply":
-                    var enableFakeNitro = p.TryGetProperty("fakeNitro", out var fakeNitro) && fakeNitro.ValueKind == JsonValueKind.True;
-                    await _discordSetup.ConfigureAsync(enableFakeNitro, (percent, label) => Emit(new { type = "discordSetupProgress", percent, label }));
+                case "discordSetupPrepare":
+                    var repairOnly = p.TryGetProperty("repairOnly", out var repair) && repair.ValueKind == JsonValueKind.True;
+                    await _discordSetup.PrepareAsync(repairOnly, (percent, label) => Emit(new { type = "discordSetupProgress", percent, label }));
                     break;
-                case "discordSetupRepair":
-                    await DiscordSetup.RepairAsync((percent, label) => Emit(new { type = "discordSetupProgress", percent, label }));
+                case "discordSetupRestart":
+                    var enableQuality = p.TryGetProperty("quality", out var discordQuality) && discordQuality.ValueKind == JsonValueKind.True;
+                    result = await _discordSetup.ApplyAndRestartAsync(enableQuality, (percent, label) => Emit(new { type = "discordSetupProgress", percent, label }));
                     break;
                 case "testCreate" when App.NetworkTestOutput is not null:
                     result = await CreateNetworkTestAsync();
@@ -751,6 +752,7 @@ public partial class ShellWindow : Window
         }
         e.Cancel = true;
         _closing = true; _googleLogin?.Cancel(); _updateTimer.Stop(); StopNativeCapture();
+        if (_discordSetupCommands.CurrentCount > 0) _discordSetup.DiscardPreparation();
         if (_backgroundNotice?.IsVisible == true) _backgroundNotice.Close(); _backgroundNotice = null;
         _mediaTestScene?.Close();
         try { if (_ready) await Browser.ExecuteScriptAsync("window.streamroom?.shutdown()").WaitAsync(TimeSpan.FromSeconds(2)); } catch { }
