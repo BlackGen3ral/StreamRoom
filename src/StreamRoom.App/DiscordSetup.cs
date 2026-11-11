@@ -58,13 +58,20 @@ internal sealed class DiscordSetup
                 var setup = Path.Combine(scratch, "WireSockSetup.exe");
                 await DownloadAsync(WireSockUrl, WireSockHash, setup);
                 InstallerTrust.Verify(setup, publisher: "The Anti-Cloud Corporation");
-                progress(25, "Conclua a instalação do WireSock na janela do Windows…");
+                progress(25, "Autorize a instalação do WireSock se o Windows perguntar…");
                 try
                 {
-                    using var installer = Process.Start(new ProcessStartInfo(setup) { UseShellExecute = true })
+                    var start = new ProcessStartInfo(setup) { UseShellExecute = true, Verb = "runas" };
+                    start.ArgumentList.Add("/passive");
+                    start.ArgumentList.Add("/norestart");
+                    using var installer = Process.Start(start)
                         ?? throw new IOException("Não foi possível abrir o instalador do WireSock.");
                     using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
                     await installer.WaitForExitAsync(timeout.Token);
+                    if (installer.ExitCode is 1641 or 3010)
+                        throw new IOException("O WireSock foi instalado. Reinicie o PC e importe o perfil novamente para continuar.");
+                    if (installer.ExitCode != 0)
+                        throw new IOException($"O instalador do WireSock retornou o código {installer.ExitCode}.");
                 }
                 catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
                 {
@@ -222,8 +229,16 @@ internal sealed class DiscordSetup
         }
         finally
         {
-            if (connected) await WireSockAsync("disconnect");
-            await DeleteProfileAsync(probe);
+            try
+            {
+                if (connected)
+                {
+                    await WireSockAsync("disconnect");
+                    if (!(await WireSockAsync("status")).Trim().Equals("Not connected", StringComparison.OrdinalIgnoreCase))
+                        throw new IOException("Confirme que o WireSock está desconectado antes de tentar novamente.");
+                }
+            }
+            finally { await DeleteProfileAsync(probe); }
         }
     }
 

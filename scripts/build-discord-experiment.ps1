@@ -5,9 +5,9 @@ $root = Split-Path -Parent $PSScriptRoot
 $parent = Split-Path -Parent $root
 if (-not $VencordSource) { $VencordSource = Join-Path $parent 'Vencord-experimental' }
 if (-not $StreamFixSource) { $StreamFixSource = Join-Path $parent 'StreamFix-experimental' }
-$vencordRevision = 'd07030c'
+$vencordRevision = 'd07030c0968e31e41caa0c35fda0ef8ae63a079e'
 $streamFixRevision = '30c90e1518048b7c24ecede9019489b4233af72b'
-if ((git -C $VencordSource rev-parse --short=7 HEAD) -ne $vencordRevision -or
+if ((git -C $VencordSource rev-parse HEAD) -ne $vencordRevision -or
     (git -C $StreamFixSource rev-parse HEAD) -ne $streamFixRevision) {
     throw 'Use as revisões do Vencord e do StreamFix indicadas neste script.'
 }
