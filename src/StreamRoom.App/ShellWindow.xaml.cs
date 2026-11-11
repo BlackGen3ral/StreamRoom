@@ -21,6 +21,8 @@ public partial class ShellWindow : Window
     private readonly SemaphoreSlim _profileCommands = new(1, 1);
     private readonly SemaphoreSlim _tailscaleCommands = new(1, 1);
     private readonly SemaphoreSlim _zeroTierStatusCommands = new(1, 1);
+    private readonly SemaphoreSlim _discordSetupCommands = new(1, 1);
+    private readonly DiscordSetup _discordSetup = new();
     private readonly TailscaleService _tailscale = new();
     private bool _tailscaleWebRtcReady;
     private readonly SystemAudioCapture _audio = new();
@@ -198,12 +200,20 @@ public partial class ShellWindow : Window
             if (type?.StartsWith("tailscale", StringComparison.Ordinal) == true)
                 throw new InvalidOperationException("A integração Tailscale foi retirada. Use a opção ZeroTier em Conexões.");
             if (type == "googleCancel") { _googleLogin?.Cancel(); Emit(new { type = "reply", id, ok = true, result = new { } }); return; }
-            commandGate = type is "profilePhoto" or "profileSave" or "googleSignIn" or "googleDisconnect" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
+            var discordCommand = type?.StartsWith("discordSetup", StringComparison.Ordinal) == true;
+            if (discordCommand && type != "discordSetupStatus" && !DiscordSetup.Available) throw new InvalidOperationException("Assistente disponível no pacote experimental para Windows.");
+            commandGate = discordCommand ? _discordSetupCommands : type is "profilePhoto" or "profileSave" or "googleSignIn" or "googleDisconnect" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
             object? result = null;
             switch (type)
             {
+                case "discordSetupStatus": result = new { available = DiscordSetup.Available }; break;
+                case "discordSetupProton": DiscordSetup.OpenProton(); break;
+                case "discordSetupImport": result = _discordSetup.PickProfile(this); break;
+                case "discordSetupApply":
+                    await _discordSetup.ConfigureAsync((percent, label) => Emit(new { type = "discordSetupProgress", percent, label }));
+                    break;
                 case "testCreate" when App.NetworkTestOutput is not null:
                     result = await CreateNetworkTestAsync();
                     break;

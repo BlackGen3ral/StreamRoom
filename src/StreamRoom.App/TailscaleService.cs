@@ -129,7 +129,7 @@ internal static class InstallerTrust
     }
     [DllImport("wintrust.dll", ExactSpelling = true)]
     private static extern int WinVerifyTrust(IntPtr hwnd, ref Guid action, ref TrustData data);
-    public static void Verify(string path, bool zeroTier = false)
+    public static void Verify(string path, bool zeroTier = false, string? publisher = null)
     {
         var name = Marshal.StringToCoTaskMemUni(path);
         var info = new FileInfo { Size = (uint)Marshal.SizeOf<FileInfo>(), Path = name };
@@ -146,7 +146,8 @@ internal static class InstallerTrust
             using var signed = X509Certificate.CreateFromSignedFile(path);
             using var cert = new X509Certificate2(signed);
 #pragma warning restore SYSLIB0057
-            bool expected = zeroTier ? cert.GetNameInfo(X509NameType.SimpleName, false).Equals("ZEROTIER, INC.", StringComparison.OrdinalIgnoreCase)
+            bool expected = publisher is not null ? cert.GetNameInfo(X509NameType.SimpleName, false).Equals(publisher, StringComparison.OrdinalIgnoreCase)
+                : zeroTier ? cert.GetNameInfo(X509NameType.SimpleName, false).Equals("ZEROTIER, INC.", StringComparison.OrdinalIgnoreCase)
                 : cert.Subject.Split(',').Any(part => part.Trim() is "O=Tailscale Inc." or "O=Tailscale Inc");
             if (!expected) throw new IOException("O arquivo não foi assinado pelo fornecedor esperado.");
         }
