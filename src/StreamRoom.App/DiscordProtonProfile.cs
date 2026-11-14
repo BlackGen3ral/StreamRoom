@@ -42,11 +42,15 @@ internal sealed record DiscordProtonProfile(string Interface, string Peer, strin
         var routes = IpList(remote.GetValueOrDefault("AllowedIPs"), withMask: true);
         if (!routes.Contains("0.0.0.0/0") || routes.Any(route => route is not ("0.0.0.0/0" or "::/0")))
             throw InvalidProfile();
-        if (!int.TryParse(local.GetValueOrDefault("MTU", "1420"), out var mtu) || mtu is < 576 or > 1500)
-            throw InvalidProfile();
+        var mtuLine = "";
+        if (local.TryGetValue("MTU", out var configuredMtu))
+        {
+            if (!int.TryParse(configuredMtu, out var mtu) || mtu is < 576 or > 1500) throw InvalidProfile();
+            mtuLine = $"\nMTU = {mtu}";
+        }
 
         return new(
-            $"[Interface]\nPrivateKey = {privateKey}\nAddress = {string.Join(", ", addresses)}\nDNS = {string.Join(", ", dns)}\nMTU = {mtu}",
+            $"[Interface]\nPrivateKey = {privateKey}\nAddress = {string.Join(", ", addresses)}\nDNS = {string.Join(", ", dns)}{mtuLine}",
             $"[Peer]\nPublicKey = {publicKey}\n{psk}Endpoint = {endpoint}",
             string.Join(", ", routes),
             string.Join(", ", dns.Select(ip => ip + (ip.Contains(':') ? "/128" : "/32"))));
@@ -55,6 +59,20 @@ internal sealed record DiscordProtonProfile(string Interface, string Peer, strin
     // Control ranges used by the StreamFix revision shipped with the experiment.
     public string Build(string application, bool control = false) =>
         $"{Interface}\n\n{Peer}\nAllowedIPs = {(control ? "162.159.128.0/17, 1.1.1.1/32, " + Dns : Routes)}\nPersistentKeepalive = 25\n#@ws:AllowedApps = {application}\n";
+
+    public int? Mtu => int.TryParse(Regex.Match(Interface, @"^MTU\s*=\s*(\d+)\s*$", RegexOptions.Multiline).Groups[1].Value,
+        out var mtu) ? mtu : null;
+
+    public DiscordProtonProfile? TrySmallerPackets()
+    {
+        if (Mtu is <= 1280) return null;
+        // WireSock does not discover path MTU. Retry small packets only after a
+        // transport failure; retain the original keys, endpoint and split rules.
+        var local = Mtu.HasValue
+            ? Regex.Replace(Interface, @"^MTU\s*=\s*\d+\s*$", "MTU = 1280", RegexOptions.Multiline)
+            : Interface.TrimEnd() + "\nMTU = 1280";
+        return this with { Interface = local };
+    }
 
     private static string Key(Dictionary<string, string> section, string name)
     {

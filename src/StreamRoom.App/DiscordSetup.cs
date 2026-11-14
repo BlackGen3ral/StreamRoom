@@ -273,7 +273,8 @@ internal sealed class DiscordSetup(string dataDirectory)
         {
             progress(40, "Testando a saída dos EUA e o filtro por aplicativo…");
             await CheckWireSockAsync(releaseSavedProfile: true);
-            var egress = await VerifyProtonAsync(profile, scratch, id);
+            var verified = await VerifyProtonAsync(profile, scratch, id, message => progress(50, message));
+            profile = verified.Profile;
 
             progress(65, "Importando os perfis do Discord…");
             foreach (var name in new[] { full, control })
@@ -282,14 +283,14 @@ internal sealed class DiscordSetup(string dataDirectory)
                 await ImportAsync(scratch, name, profile.Build("Discord", name == control));
             }
             progress(80, "Guardando um backup e configurando o StreamFix…");
-            await ConfigureVencordAsync(resources, installer, full, egress, enableQuality);
+            await ConfigureVencordAsync(resources, installer, full, verified.Address, enableQuality);
         }
         catch
         {
             foreach (var name in imported) await DeleteProfileAsync(name);
             throw;
         }
-        _savedProfile = saved with { Pending = false };
+        _savedProfile = saved with { Profile = profile, Pending = false };
         try { SaveProfile(_savedProfile); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         { throw new IOException("O StreamFix foi aplicado, mas o Windows não conseguiu registrar a conclusão do perfil salvo.", ex); }
@@ -554,75 +555,48 @@ internal sealed class DiscordSetup(string dataDirectory)
         catch (Exception ex) when (ex is JsonException or ArgumentException or NotSupportedException) { return false; }
     }
 
-    private static async Task<string> VerifyProtonAsync(DiscordProtonProfile profile, string scratch, string id)
+    private static async Task<VerifiedDiscordTunnel> VerifyProtonAsync(DiscordProtonProfile profile, string scratch, string id, Action<string> progress)
     {
         var curl = Path.Combine(Environment.SystemDirectory, "curl.exe");
         var probe = $"sr-wg-probe-{id}";
         var executable = Path.Combine(scratch, probe + ".exe");
         File.Copy(curl, executable);
-        var baselines = await Task.WhenAll(
-            ReadProbeAsync(curl, "https://www.cloudflare.com/cdn-cgi/trace"),
-            ReadProbeAsync(curl, "https://1.1.1.1/cdn-cgi/trace"));
-        if (baselines.All(baseline => baseline.Address is null))
-            throw new IOException($"O teste de internet sem VPN falhou nos dois endereços. Confira a conexão deste PC e tente novamente. (VPN-DIRETA: {ProbeCodes(baselines)})");
+        return await DiscordTunnelVerifier.VerifyAsync(profile, new WireSockTunnelProbe(scratch, probe, executable, curl), progress);
+    }
 
-        var connected = false;
-        try
+    private sealed class WireSockTunnelProbe(string scratch, string application, string executable, string curl) : IDiscordTunnelProbe
+    {
+        private string? _profile;
+        private bool _connectionStarted;
+
+        public Task<DiscordProbeResult> ReadAsync(bool isolated, string url) => ReadProbeAsync(isolated ? executable : curl, url);
+
+        public async Task StartAsync(DiscordProtonProfile profile)
         {
-            await ImportAsync(scratch, probe, profile.Build(probe));
-            connected = true;
-            var log = await RunAsync(WireSock, ["connect", probe, "-log-level", "info", "-exit"], 18);
-            if (!Regex.IsMatch(log, $@"AllowedApps\s*=\s*{probe}(?:\.exe)?(?=[""\s])", RegexOptions.IgnoreCase))
+            _profile = $"sr-wg-probe-{Guid.NewGuid():N}";
+            await ImportAsync(scratch, _profile, profile.Build(application));
+            _connectionStarted = true;
+            var log = await RunAsync(WireSock, ["connect", _profile, "-log-level", "info", "-exit"], 18);
+            if (!Regex.IsMatch(log, $@"AllowedApps\s*=\s*{Regex.Escape(application)}(?:\.exe)?(?=[""\s])", RegexOptions.IgnoreCase))
                 throw new IOException("O WireSock não confirmou o filtro de aplicativos. O túnel foi encerrado.");
-            return await ConfirmProbeRouteAsync(baselines, executable, curl);
         }
-        finally
+
+        public async Task StopAsync()
         {
             try
             {
-                if (connected) await DisconnectWireSockAsync();
+                if (_connectionStarted) await DisconnectWireSockAsync();
             }
-            finally { await DeleteProfileAsync(probe); }
+            finally
+            {
+                if (_profile is not null) await DeleteProfileAsync(_profile);
+                _profile = null;
+                _connectionStarted = false;
+            }
         }
     }
 
-    private sealed record ProbeResult(string Url, IPAddress? Address, string Country, string Error);
-
-    private static async Task<string> ConfirmProbeRouteAsync(ProbeResult[] baselines, string executable, string curl)
-    {
-        var failures = new List<ProbeResult>();
-        string? routeError = null;
-        foreach (var baseline in baselines)
-        {
-            if (baseline.Address is null) continue;
-            var tunneled = await ReadProbeAsync(executable, baseline.Url);
-            if (tunneled.Address is null) { failures.Add(tunneled); continue; }
-            var direct = await ReadProbeAsync(curl, baseline.Url);
-            if (direct.Address is null) { failures.Add(direct); continue; }
-            if (!direct.Address.Equals(baseline.Address))
-                throw new IOException("A conexão normal do PC também mudou durante o teste. Em WireSock → Preferências → Rede, confira se as regras globais estão substituindo as do perfil. (VPN-ROTA-DIRETA)");
-            if (tunneled.Address.Equals(baseline.Address))
-            {
-                routeError = "O teste saiu pela mesma conexão do PC. Em WireSock → Preferências → Rede, confira se as regras globais estão substituindo as do perfil. (VPN-ROTA-FILTRO)";
-                continue;
-            }
-            if (tunneled.Country != "US")
-            {
-                routeError = $"A saída da VPN foi identificada como {tunneled.Country}. Gere outro perfil WireGuard em um servidor gratuito dos EUA e importe no StreamRoom. (VPN-ROTA-PAÍS)";
-                continue;
-            }
-            return tunneled.Address.ToString();
-        }
-        if (routeError is not null) throw new IOException(routeError);
-        if (failures.Any(result => IsTlsHandshakeFailure(result.Error)))
-            throw new IOException($"O teste HTTPS pelo túnel falhou. Importe um perfil de outro servidor gratuito dos EUA e tente novamente. Se repetir, envie este código para identificar a falha do Windows. (VPN-TLS: {ProbeCodes(failures)})");
-        throw new IOException($"O WireSock iniciou o túnel, mas o teste HTTPS não conseguiu verificar a conexão. Tente aplicar novamente. Se persistir, envie o código do aviso. (VPN-TESTE: {ProbeCodes(failures)})");
-    }
-
-    private static string ProbeCodes(IEnumerable<ProbeResult> results) =>
-        string.Join(", ", results.Select(result => result.Error).Distinct());
-
-    private static async Task<ProbeResult> ReadProbeAsync(string executable, string url)
+    private static async Task<DiscordProbeResult> ReadProbeAsync(string executable, string url)
     {
         var result = await RunProbeAsync(executable, url, compatibility: false);
         if (!IsTlsHandshakeFailure(result.Error)) return result;
@@ -642,7 +616,7 @@ internal sealed class DiscordSetup(string dataDirectory)
         return $"curl {exitCode}" + (identifiers.Length == 0 ? "" : " [" + string.Join(", ", identifiers) + "]");
     }
 
-    private static async Task<ProbeResult> RunProbeAsync(string executable, string url, bool compatibility)
+    private static async Task<DiscordProbeResult> RunProbeAsync(string executable, string url, bool compatibility)
     {
         string response;
         try
