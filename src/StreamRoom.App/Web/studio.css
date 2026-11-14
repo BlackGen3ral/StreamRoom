@@ -223,16 +223,6 @@
   display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid #363636;
   border-radius:9px;background:#1c1c1c;font-size:10px;
 }
-.app-shell #updateButton {
-  display:inline-flex;align-items:center;justify-content:center;gap:8px;
-  min-height:36px;padding:8px 13px;color:#e1e1e1;
-  background:linear-gradient(120deg,#2b2b2b,#202020);
-  border:1px solid #505050;border-radius:9px;font-weight:600;
-}
-.app-shell #updateButton::before {content:"↓";font-size:17px;line-height:1;color:#bcbcbc;}
-.app-shell #updateButton:hover:not(:disabled) {background:#353535;border-color:#949494;}
-.app-shell #updateButton:disabled {opacity:.65;cursor:progress;}
-.app-shell #updateButton:focus-visible {outline:2px solid #bcbcbc;outline-offset:3px;}
 
 .app-shell #profileDialog .image-framing {display:none;}
 .app-shell .crop-editor {
@@ -364,7 +354,7 @@
 .app-shell .friends-dialog {border-color:#3e3e3e;box-shadow:0 24px 80px #00000088;}
 .app-shell .profile-dialog-header .tail-kicker {font-size:10px;}
 .app-shell .profile-dialog-body {scrollbar-width:thin;scrollbar-color:#474747 transparent;}
-.app-shell .header-friends,.app-shell #updateButton {border-radius:8px;}
+.app-shell .header-friends {border-radius:8px;}
 .app-shell .header-right button:focus-visible {outline-offset:2px;}
 .app-shell .main-tabs button:hover:not([aria-selected=true]) {background:#1e1e1e;}
 .app-shell .main-tabs button[aria-selected=true] {box-shadow:inset 2px 0 #a6a6a6;}
@@ -436,16 +426,14 @@
 .app-shell #profileDialog .profile-privacy {font-size:10px;line-height:1.7;color:#929292;}
 .app-shell #profileDialog.profile-page-card .profile-dialog-footer {padding:16px 26px;background:#161616;box-shadow:0 -5px 20px #00000011;}
 .app-shell .header-right {gap:10px;}
-.app-shell .header-friends,.app-shell #updateButton {height:36px;min-height:36px;padding:7px 12px;font-size:11px;line-height:20px;}
+.app-shell .header-friends {height:36px;min-height:36px;padding:7px 12px;font-size:11px;line-height:20px;}
 .app-shell #networkBadge {height:30px;min-height:30px;padding:4px 10px;border-color:transparent;background:transparent;font-size:10px;}
 .app-shell .header-friends {background:#1a1a1a;border-color:#363636;}
-.app-shell #updateButton {min-width:148px;background:#252525;border-color:#4a4a4a;box-shadow:inset 0 1px #ffffff08;}
 @media(max-width:960px) {
   .app-shell #profileDialog [data-profile-panel="identity"]:not([hidden]) {grid-template-columns:minmax(0,1fr);}
   .app-shell #profileDialog .profile-card-preview {position:static;grid-row:1;width:min(100%,380px);}
 }
 @media(max-width:760px) {
-  .app-shell #updateButton {min-width:0;}
   .app-shell .header-right {gap:6px;}
 }
 

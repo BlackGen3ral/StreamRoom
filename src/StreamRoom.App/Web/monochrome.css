@@ -48,9 +48,6 @@
 .app-shell #profileDialog .profile-card-preview .profile-banner,
 .app-shell #profileDialog .profile-banner {background:radial-gradient(ellipse at 80% 0,#787c88,transparent 70%),linear-gradient(120deg,#26282e,#41444e);}
 .app-shell #profileDialog .banner-file-button {background:#363840;border-color:#595c68;color:#f0f1f5;}
-.app-shell #updateButton {background:linear-gradient(120deg,#34363d,#24262c);border-color:#656974;color:#f2f3f7;}
-.app-shell #updateButton:hover:not(:disabled) {background:#464952;border-color:#a1a6b2;}
-.app-shell #updateButton::before {color:#e0e3ec;}
 .app-shell :focus-visible {outline-color:#d6dae5!important;}
 .app-shell input[type=checkbox],.app-shell input[type=range] {accent-color:#c9cdd7;}
 

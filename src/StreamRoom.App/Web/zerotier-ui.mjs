@@ -114,7 +114,6 @@ export function createZeroTierUi(native, rtc, inRoom, message) {
       if (ready.zeroTierContextUnavailable) { $('zeroTierMode').textContent = 'WebView2 não liberou este modo. O compartilhamento normal foi mantido.'; message('ZeroTier não pôde ser ativado neste motor. Atualize o WebView2 ou desative a opção.', true); }
       for (const id of ['zeroTierEnabled','zeroTierNetwork','zeroTierSave']) $(id).disabled = proof;
       if (active) $('zeroTierPanel').open = true;
-      if (proof) $('updateButton').hidden = true;
       timer = setInterval(() => { if (!busy && (active || $('zeroTierPanel').open || $('zeroTierDialog').open)) void run(refresh); }, 15000);
     },
     dispose() { clearInterval(timer); },

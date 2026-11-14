@@ -42,14 +42,26 @@ internal sealed class DiscordSetup
 
     public static bool RepairAvailable()
     {
-        try { return CanRepair() && File.Exists(Path.Combine(DiscordResources(), "app.asar")); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+        try
+        {
+            if (!CanRepair()) return false;
+            var resources = DiscordResources();
+            var asar = Path.Combine(resources, "app.asar");
+            return IsPatched(asar, Patcher) || (File.Exists(asar) && !File.Exists(Path.Combine(resources, "_app.asar")) &&
+                !Directory.Exists(Path.Combine(resources, "_app.asar")));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException) { return false; }
     }
 
-    private static bool CanRepair() => File.Exists(Patcher) &&
-        File.ReadAllText(Patcher).Contains("StreamFix", StringComparison.Ordinal) &&
-        File.Exists(Path.Combine(Vencord, "dist", "renderer.js")) &&
-        File.Exists(Path.Combine(Vencord, "settings", "settings.json"));
+    private static bool CanRepair()
+    {
+        var renderer = Path.Combine(Vencord, "dist", "renderer.js");
+        var settings = Path.Combine(Vencord, "settings", "settings.json");
+        if (!File.Exists(Patcher) || !File.Exists(renderer) || !File.Exists(settings)) return false;
+        var plugin = JsonNode.Parse(File.ReadAllText(settings))?["plugins"]?["StreamFix"] as JsonObject;
+        return plugin?["perfilDoTunel"] is JsonValue profile && profile.TryGetValue<string>(out var name) &&
+            !string.IsNullOrWhiteSpace(name) && File.ReadAllText(renderer).Contains("StreamFix", StringComparison.Ordinal);
+    }
 
     public async Task PrepareAsync(bool repairOnly, Action<int, string> progress)
     {
@@ -57,13 +69,17 @@ internal sealed class DiscordSetup
         if (repairOnly && !CanRepair()) throw new IOException("Configure o StreamFix neste PC antes de usar o reparo.");
         if (!repairOnly && _profile is null) throw new IOException("Importe o arquivo .conf primeiro.");
         var resources = DiscordResources();
-        if (!IsPatched(Path.Combine(resources, "app.asar"), Patcher)) EnsureUnmodified(resources);
+        var installed = IsPatched(Path.Combine(resources, "app.asar"), Patcher);
+        if (!installed) EnsureUnmodified(resources);
         var scratch = Directory.CreateDirectory(Path.Combine(LocalData, "StreamRoom", "DiscordSetup", Guid.NewGuid().ToString("N"))).FullName;
         try
         {
             if (!repairOnly && !File.Exists(WireSock)) await InstallWireSockAsync(scratch, progress);
-            progress(60, "Verificando o instalador oficial do Vencord…");
-            await DownloadVencordInstallerAsync(scratch);
+            if (!installed)
+            {
+                progress(60, "Verificando o instalador oficial do Vencord…");
+                await DownloadVencordInstallerAsync(scratch);
+            }
             _repairOnly = repairOnly;
             _preparedDirectory = scratch;
         }
@@ -96,9 +112,6 @@ internal sealed class DiscordSetup
             var resources = DiscordResources();
             var asar = Path.Combine(resources, "app.asar");
             var installer = Path.Combine(scratch, "VencordInstallerCli.exe");
-            await using (var file = File.OpenRead(installer))
-                if (Convert.ToHexString(await SHA256.HashDataAsync(file)) != InstallerHash)
-                    throw new IOException("O instalador preparado não passou na verificação. Prepare novamente.");
             if (!IsPatched(asar, Patcher)) EnsureUnmodified(resources);
             if (repairOnly && !CanRepair()) throw new IOException("Os arquivos do StreamFix não estão mais disponíveis.");
             var verifiedExit = repairOnly ? await ReadActiveDiscordExitAsync() : null;
@@ -344,7 +357,8 @@ internal sealed class DiscordSetup
     {
         if (!Directory.Exists(DiscordRoot)) throw new IOException("Instale e abra o Discord para Windows uma vez antes de configurar.");
         return Directory.EnumerateDirectories(DiscordRoot, "app-*")
-            .Where(app => File.Exists(Path.Combine(app, "Discord.exe")) && File.Exists(Path.Combine(app, "resources", "app.asar")))
+            .Where(app => File.Exists(Path.Combine(app, "Discord.exe")) &&
+                (File.Exists(Path.Combine(app, "resources", "app.asar")) || Directory.Exists(Path.Combine(app, "resources", "app.asar"))))
             .OrderByDescending(app => Version.TryParse(Path.GetFileName(app)[4..], out var version) ? version : new Version())
             .Select(app => Path.Combine(app, "resources")).FirstOrDefault()
             ?? throw new IOException("Não encontrei uma instalação compatível do Discord estável para Windows.");
@@ -432,6 +446,11 @@ internal sealed class DiscordSetup
 
     private static async Task PatchDiscordAsync(string installer, string asar)
     {
+        if (!File.Exists(installer))
+            throw new IOException("O Discord mudou desde a preparação. Clique em Preparar Discord e aplique novamente. (VC-VERSÃO)");
+        await using (var file = File.OpenRead(installer))
+            if (Convert.ToHexString(await SHA256.HashDataAsync(file)) != InstallerHash)
+                throw new IOException("O instalador preparado não passou na verificação. Prepare novamente.");
         var resources = Path.GetDirectoryName(asar)!;
         if (!DiscordResources().Equals(resources, StringComparison.OrdinalIgnoreCase))
             throw new IOException("O Discord foi atualizado durante a configuração. Clique novamente para usar a versão nova.");
@@ -458,7 +477,7 @@ internal sealed class DiscordSetup
     private static void EnsureUnmodified(string resources)
     {
         var backup = Path.Combine(resources, "_app.asar");
-        if (File.Exists(backup) || Directory.Exists(backup))
+        if (File.Exists(backup) || Directory.Exists(backup) || Directory.Exists(Path.Combine(resources, "app.asar")))
             throw new IOException("O Discord já usa outra modificação. Restaure a instalação original antes de continuar.");
     }
 
@@ -468,11 +487,21 @@ internal sealed class DiscordSetup
         File.Delete(Path.Combine(resources, "_app.asar"));
     }
 
-    private static bool IsPatched(string asar, string patcher)
+    internal static bool IsPatched(string asar, string patcher)
     {
-        if (!File.Exists(asar) || new FileInfo(asar).Length > 1024 * 1024) return false;
-        var content = Encoding.UTF8.GetString(File.ReadAllBytes(asar)).Replace("\\\\", "\\");
-        return content.Contains(patcher, StringComparison.OrdinalIgnoreCase);
+        var loader = Directory.Exists(asar) ? Path.Combine(asar, "index.js") : asar;
+        if (!File.Exists(loader) || new FileInfo(loader).Length > 1024 * 1024 ||
+            !File.Exists(Path.Combine(Path.GetDirectoryName(asar)!, "_app.asar"))) return false;
+        var content = Encoding.UTF8.GetString(File.ReadAllBytes(loader));
+        var require = Regex.Match(content, """require\(\s*("(?:[^"\\]|\\.)*")\s*\)""");
+        if (!require.Success) return false;
+        try
+        {
+            var target = JsonSerializer.Deserialize<string>(require.Groups[1].Value);
+            return target is not null && Path.IsPathFullyQualified(target) &&
+                Path.GetFullPath(target).Equals(patcher, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException or NotSupportedException) { return false; }
     }
 
     private static async Task<string> VerifyProtonAsync(DiscordProtonProfile profile, string scratch, string id)

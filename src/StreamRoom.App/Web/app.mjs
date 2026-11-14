@@ -50,7 +50,7 @@ const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
     const id = String(++sequence);
-    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'googleSignIn' ? 330000 : ['profilePhoto','discordSetupPrepare','discordSetupImport','discordSetupRestart','downloadUpdate'].includes(type) ? 900000 : type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
+    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'googleSignIn' ? 330000 : ['profilePhoto','discordSetupPrepare','discordSetupImport','discordSetupRestart'].includes(type) ? 900000 : type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'connect' ? 45000 : 25000);
     requests.set(id, { resolve, reject, timer }); window.chrome.webview.postMessage({ id, type, payload });
   });
 }
@@ -60,7 +60,7 @@ for (const id of ['profileClose', 'profileCancel']) {
 }
 const rtc = new RtcRoom(native);
 const state = { connected: false, role: null, persistent: false, groupSaved: false, groupInvalid: false, invitation: '', participants: [], room: null, busy: false, shuttingDown: false };
-let updateBusy = false, updateReady = false;
+let updateReady = false;
 let latestStats = [], buildVersion = '', runtimeVersion = '';
 const cards = new Map(), remoteStreams = new Map();
 const remoteCameras=new Map();
@@ -384,47 +384,17 @@ function showExpiry(expiresAt) {
   $('roomLifetime').textContent = state.role === 'host' ? 'Renovação automática enquanto você estiver conectado. Sem limite total de duração.' : 'A sala continua ativa enquanto o criador estiver conectado.';
 }
 function showUpdate(r) {
-  if (!r.available) { if (r.message) status(r.message); return; }
+  updateReady = r.state === 'ready';
+  const downloading = r.state === 'downloading';
   $('updateNotice').hidden = false;
   $('updateHeading').textContent = r.version ? 'StreamRoom ' + r.version : 'Atualização do StreamRoom';
-  if (r.downloaded) { markUpdateReady(); return; }
-  if (!updateBusy) void downloadUpdate();
-}
-function markUpdateReady() {
-  updateReady = true;
-  $('updateDownloadProgress').hidden = true;
-  $('updateText').textContent = 'Atualização pronta. Reinicie quando quiser.';
-  $('updateButton').textContent = 'Atualização pronta';
-  $('updateButton').disabled = true;
-  render();
-}
-async function downloadUpdate() {
-  if (updateBusy || updateReady) return;
-  updateBusy = true;
-  $('updateNotice').hidden = false;
-  $('updateButton').disabled = true;
-  $('updateButton').textContent = 'Baixando…';
-  $('installUpdate').disabled = true;
-  $('updateText').textContent = 'Preparando download…';
-  $('updateDownloadProgress').hidden = false;
+  $('updateDownloadProgress').hidden = !downloading;
   $('updateDownloadProgress').value = 0;
-  try { await native('downloadUpdate'); markUpdateReady(); }
-  catch (e) {
-    $('updateText').textContent = 'Download não concluído: ' + e.message;
-    $('updateButton').textContent = 'Tentar novamente';
-    $('updateDownloadProgress').hidden = true;
-  } finally { updateBusy = false; if (!updateReady) $('updateButton').disabled = false; }
-}
-async function checkUpdates() {
-  if (updateBusy || updateReady) return;
-  updateBusy = true;
-  $('updateButton').disabled = true;
-  $('updateButton').textContent = 'Verificando…';
-  let result;
-  try { result = await native('checkUpdates'); }
-  catch (e) { status(e.message, true); }
-  finally { updateBusy = false; $('updateButton').disabled = false; $('updateButton').textContent = 'Verificar atualização'; }
-  if (result) showUpdate(result);
+  $('updateText').textContent = updateReady
+    ? 'Será instalada automaticamente quando você sair do StreamRoom pela bandeja e abrir de novo.'
+    : downloading ? 'Baixando a atualização em segundo plano…' : 'O download será retomado automaticamente.';
+  $('installUpdate').hidden = !updateReady;
+  render();
 }
 $('name').addEventListener('input', renderProfile);
 $('showStage').addEventListener('click', () => { selectPage('screens', true); $('stage').scrollIntoView({ block: 'start' }); });
@@ -467,7 +437,6 @@ const capturePicker = createCapturePicker(native, rtc, options, status);
 $('start').addEventListener('click', () => capturePicker.open());
 $('startCompatible').addEventListener('click', () => busy(() => rtc.startCapture(options())));
 $('stop').addEventListener('click', () => busy(async () => { await rtc.stopCapture(); status(''); }));
-$('updateButton').addEventListener('click', checkUpdates);
 $('installUpdate').addEventListener('click', () => busy(async () => {
   if (state.connected) throw Error('Saia da sala antes de atualizar.');
   $('updateApplying').showModal();
@@ -524,7 +493,6 @@ try {
   }
   if (r.capturePreview) { capturePicker.open(); setTimeout(() => native('capturePreview'), 6000); }
   if (r.installed && !r.uiPreview) {
-    setTimeout(checkUpdates, 5000);
     const outcome = await native('updateOutcome');
     if (outcome?.message) status(outcome.message);
     setTimeout(async () => {

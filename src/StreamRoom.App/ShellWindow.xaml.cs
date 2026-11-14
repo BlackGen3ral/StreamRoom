@@ -37,8 +37,8 @@ public partial class ShellWindow : Window
     private readonly System.Windows.Threading.DispatcherTimer _nativeWatchdog = new() { Interval = TimeSpan.FromSeconds(3) };
     private long _nativeSentAt;
     private bool _nativeDelayed;
-    private UpdateInfo? _availableUpdate;
-    private bool _updateDownloaded;
+    private VelopackAsset? _downloadedUpdate;
+    private readonly CancellationTokenSource _updateShutdown = new();
     private bool _retiringTailscale;
     private BackgroundNotice? _backgroundNotice;
     private readonly ZeroTierDownload _zeroTierDownload = new();
@@ -64,7 +64,7 @@ public partial class ShellWindow : Window
     private WindowState _previousState;
     private bool _browserFullScreen;
     private CaptureTestScene? _mediaTestScene;
-    private readonly System.Windows.Threading.DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(30) };
+    private readonly System.Windows.Threading.DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private static string DataDirectory => App.MediaTestDirectory is { } media
         ? Path.Combine(media, App.MediaTestRole ?? "profile")
         : (App.UiPreviewOutput ?? App.CaptureTestOutput ?? App.NetworkTestOutput ?? App.TrayTestOutput ?? App.PickerPreviewOutput) is { } diagnostic
@@ -157,10 +157,13 @@ public partial class ShellWindow : Window
             core.Navigate(_webOrigin + (App.TrayTestOutput is not null ? "/tray-test.html" : App.MediaTestRole is not null ? "/media-room-test.html" : App.CaptureTestOutput is not null ? "/capture-test.html" : App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
             _updateTimer.Tick += async (_, _) =>
             {
+                _updateTimer.Interval = TimeSpan.FromMinutes(30);
                 if (!await _updateCommands.WaitAsync(0)) return;
-                try { await CheckUpdatesAsync(); } finally { _updateCommands.Release(); }
+                try { await DownloadOfficialUpdateAsync(); } finally { _updateCommands.Release(); }
             };
-            if (!App.ZeroTierProof) _updateTimer.Start();
+            if (_updates.IsInstalled && !App.ZeroTierProof && App.UiPreviewOutput is null && App.MediaTestRole is null &&
+                App.NetworkTestOutput is null && App.CaptureTestOutput is null && App.TrayTestOutput is null && App.PickerPreviewOutput is null)
+                _updateTimer.Start();
         }
         catch (WebView2RuntimeNotFoundException)
         { MessageBox.Show("Instale o Microsoft Edge WebView2 Evergreen Runtime oficial e abra o StreamRoom novamente. O instalador do StreamRoom também pode instalar esse requisito.", "WebView2 necessário"); Close(); }
@@ -203,7 +206,7 @@ public partial class ShellWindow : Window
             var discordCommand = type?.StartsWith("discordSetup", StringComparison.Ordinal) == true;
             if (discordCommand && type != "discordSetupStatus" && !DiscordSetup.Available) throw new InvalidOperationException("Os arquivos do assistente do Discord estão indisponíveis.");
             if (discordCommand && _exitRequested) throw new InvalidOperationException("Aguarde a reinicialização do StreamRoom.");
-            commandGate = discordCommand ? _discordSetupCommands : type is "profilePhoto" or "profileSave" or "googleSignIn" or "googleDisconnect" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
+            commandGate = discordCommand ? _discordSetupCommands : type is "profilePhoto" or "profileSave" or "googleSignIn" or "googleDisconnect" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type == "installUpdate" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
             object? result = null;
@@ -246,6 +249,7 @@ public partial class ShellWindow : Window
                     break;
                 case "ready":
                     _ready = true;
+                    if (_downloadedUpdate is { } downloaded) EmitUpdate(downloaded, "ready");
                     JsonElement? settings = null;
                     var file = Path.Combine(DataDirectory, "settings-v2.json");
                     if (File.Exists(file))
@@ -518,29 +522,17 @@ public partial class ShellWindow : Window
                     _cameraAllowedUntil=Environment.TickCount64+15000;break;
                 case "cameraPermissionEnd": _cameraAllowedUntil=0;break;
                 case "audioStop": _audio.Dispose(); break;
-                case "checkUpdates": result = await CheckUpdatesAsync(); break;
-                case "downloadUpdate":
-                    if (App.ZeroTierProof) throw new InvalidOperationException("Atualizações estáveis desativadas neste protótipo.");
-                    if (_availableUpdate is null) throw new InvalidOperationException("Consulte as atualizações primeiro.");
-                    if (!_updateDownloaded)
-                    {
-                        await _updates.DownloadUpdatesAsync(_availableUpdate, progress => Emit(new { type = "updateProgress", progress }));
-                        _updateDownloaded = true;
-                    }
-                    result = new { downloaded = true };
-                    break;
                 case "installUpdate":
                     if (_retiringTailscale) throw new InvalidOperationException("Aguarde a remoção do Tailscale terminar antes de reiniciar.");
                     if (_discordSetupCommands.CurrentCount == 0) throw new InvalidOperationException("Aguarde a configuração do Discord terminar antes de reiniciar.");
                     if (App.ZeroTierProof) throw new InvalidOperationException("Atualizações estáveis desativadas neste protótipo.");
                     if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de atualizar.");
-                    if (_availableUpdate is null) throw new InvalidOperationException("Nenhuma atualização aprovada disponível.");
-                    if (!_updateDownloaded) throw new InvalidOperationException("Aguarde o download da atualização.");
+                    var update = _downloadedUpdate ?? throw new InvalidOperationException("Aguarde o download da atualização.");
                     _exitRequested = true;
                     try
                     {
-                        await File.WriteAllTextAsync(Path.Combine(DataDirectory, "update-transition.json"), JsonSerializer.Serialize(new { target = _availableUpdate.TargetFullRelease.Version.ToString() }));
-                        _updates.WaitExitThenApplyUpdates(_availableUpdate, silent: true, restart: true);
+                        await File.WriteAllTextAsync(Path.Combine(DataDirectory, "update-transition.json"), JsonSerializer.Serialize(new { target = update.Version.ToString() }));
+                        _updates.WaitExitThenApplyUpdates(update, silent: true, restart: true);
                         _ = Dispatcher.BeginInvoke(Close);
                     }
                     catch { _exitRequested = false; throw; }
@@ -705,18 +697,34 @@ public partial class ShellWindow : Window
         Volatile.Write(ref _nativePending, 0);
         _nativeWatchdog.Stop();
     }
-    private async Task<object> CheckUpdatesAsync()
+    private void EmitUpdate(VelopackAsset asset, string state) =>
+        Emit(new { type = "update", result = new { version = asset.Version.ToString(), state } });
+
+    private async Task DownloadOfficialUpdateAsync()
     {
-        if (App.ZeroTierProof) return new { available = false, message = "Protótipo experimental isolado." };
-        if (!_updates.IsInstalled) return new { available = false, message = "Atualizações automáticas funcionam na versão instalada." };
+        if (_closing || _exitRequested || _downloadedUpdate is not null) return;
+        VelopackAsset? target = null;
         try
         {
-            if (!_updateDownloaded) _availableUpdate = await _updates.CheckForUpdatesAsync();
-            var result = new { available = _availableUpdate is not null, version = _availableUpdate?.TargetFullRelease.Version.ToString(), downloaded = _updateDownloaded, message = _availableUpdate is null ? "Você está na versão oficial mais recente." : "Nova versão oficial disponível." };
-            Emit(new { type = "update", result });
-            return result;
+            var pending = _updates.UpdatePendingRestart;
+            if (pending is null)
+            {
+                var update = await _updates.CheckForUpdatesAsync();
+                if (update is null || _closing || _exitRequested) return;
+                target = update.TargetFullRelease;
+                EmitUpdate(target, "downloading");
+                await _updates.DownloadUpdatesAsync(update, progress => Emit(new { type = "updateProgress", progress }), _updateShutdown.Token);
+                pending = target;
+            }
+            _downloadedUpdate = pending;
+            _updateTimer.Stop();
+            EmitUpdate(pending, "ready");
         }
-        catch { return new { available = false, message = "Não foi possível consultar releases oficiais. Pode não haver uma versão publicada ainda." }; }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(ex.Message);
+            if (target is not null && !_closing) EmitUpdate(target, "retry");
+        }
     }
     private async Task<object> CreateNetworkTestAsync()
     {
@@ -757,7 +765,7 @@ public partial class ShellWindow : Window
             return;
         }
         e.Cancel = true;
-        _closing = true; _googleLogin?.Cancel(); _updateTimer.Stop(); StopNativeCapture();
+        _closing = true; _googleLogin?.Cancel(); _updateTimer.Stop(); _updateShutdown.Cancel(); StopNativeCapture();
         if (_discordSetupCommands.CurrentCount > 0) _discordSetup.DiscardPreparation();
         if (_backgroundNotice?.IsVisible == true) _backgroundNotice.Close(); _backgroundNotice = null;
         _mediaTestScene?.Close();
