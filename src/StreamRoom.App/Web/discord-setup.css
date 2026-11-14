@@ -55,6 +55,7 @@
   font-size: 11px;
 }
 .discord-setup-steps button { min-height: 36px; white-space: nowrap; }
+.discord-setup .discord-setup-import-error { color: #ffc7cf; }
 .discord-setup-option { display: flex; align-items: flex-start; gap: 10px; margin: 0 23px 14px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); cursor: pointer; }
 .discord-setup-option input { width: 16px; height: 16px; flex: 0 0 16px; margin: 1px 0 0; accent-color: var(--accent); }
 .discord-setup-option strong { display: block; font-size: 12px; }

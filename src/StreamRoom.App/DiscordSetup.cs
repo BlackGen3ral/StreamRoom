@@ -31,6 +31,7 @@ internal sealed class DiscordSetup
     private string? _preparedDirectory;
     private bool _repairOnly;
     public bool IsPrepared => _preparedDirectory is not null;
+    public string? ImportedFileName { get; private set; }
 
     public static bool Available => File.Exists(Path.Combine(Assets, "patcher.js")) && File.Exists(Path.Combine(Assets, "renderer.js"));
 
@@ -82,6 +83,11 @@ internal sealed class DiscordSetup
         var repairOnly = _repairOnly;
         var restart = false;
         var exitRefreshed = false;
+        if (!repairOnly)
+        {
+            progress(5, "Verificando a conexão do WireSock…");
+            await CheckWireSockAsync(releaseSavedProfile: false);
+        }
         try
         {
             var resources = DiscordResources();
@@ -112,6 +118,8 @@ internal sealed class DiscordSetup
                     exitRefreshed = await RefreshSavedDiscordExitAsync(verifiedExit.Value.Profile, verifiedExit.Value.Address);
             }
             else await ConfigureAsync(resources, scratch, installer, enableQuality, progress);
+            if (!IsPatched(asar, Patcher))
+                throw new IOException("Não consegui confirmar o Vencord na versão atual do Discord.");
         }
         catch (Exception ex) when (restart)
         {
@@ -183,10 +191,11 @@ internal sealed class DiscordSetup
     {
         var dialog = new OpenFileDialog { Filter = "Perfil WireGuard (*.conf)|*.conf", CheckFileExists = true };
         if (dialog.ShowDialog(owner) != true) return new { imported = false, fileName = "" };
+        var profile = DiscordProtonProfile.Read(dialog.FileName);
         DiscardPreparation();
-        _profile = null;
-        _profile = DiscordProtonProfile.Read(dialog.FileName);
-        return new { imported = true, fileName = Path.GetFileName(dialog.FileName) };
+        _profile = profile;
+        ImportedFileName = Path.GetFileName(dialog.FileName);
+        return new { imported = true, fileName = ImportedFileName };
     }
 
     private async Task ConfigureAsync(string resources, string scratch, string installer, bool enableQuality, Action<int, string> progress)
@@ -199,7 +208,7 @@ internal sealed class DiscordSetup
         try
         {
             progress(40, "Testando a saída dos EUA e o filtro por aplicativo…");
-            await ReleasePreviousDiscordTunnelAsync();
+            await CheckWireSockAsync(releaseSavedProfile: true);
             var egress = await VerifyProtonAsync(profile, scratch, id);
 
             progress(65, "Importando os perfis do Discord…");
@@ -211,6 +220,7 @@ internal sealed class DiscordSetup
             progress(80, "Guardando um backup e configurando o StreamFix…");
             await ConfigureVencordAsync(resources, installer, full, egress, enableQuality);
             _profile = null;
+            ImportedFileName = null;
         }
         catch
         {
@@ -247,21 +257,45 @@ internal sealed class DiscordSetup
         if (!File.Exists(WireSock)) throw new IOException("A instalação do WireSock não foi concluída.");
     }
 
-    private static async Task ReleasePreviousDiscordTunnelAsync()
+    internal static bool IsWireSockDisconnected(string status) =>
+        Regex.IsMatch(status.Trim(), @"^(?:Not\s*connected|Disconnected)\.?$", RegexOptions.IgnoreCase);
+
+    private static async Task CheckWireSockAsync(bool releaseSavedProfile)
     {
         var status = (await WireSockAsync("status")).Trim();
-        if (status.Equals("Not connected", StringComparison.OrdinalIgnoreCase)) return;
+        if (IsWireSockDisconnected(status)) return;
+        if (Regex.IsMatch(status, @"^Disconnecting\.?$", RegexOptions.IgnoreCase))
+        {
+            await WaitForWireSockDisconnectAsync();
+            return;
+        }
         var settings = Path.Combine(Vencord, "settings", "settings.json");
         var config = File.Exists(settings) ? JsonNode.Parse(await File.ReadAllTextAsync(settings)) : null;
         var profile = config?["plugins"]?["StreamFix"]?["perfilDoTunel"]?.GetValue<string>();
-        var active = Regex.Match(status, @"^(?:Connected to server|Establishing connection) using profile ([a-zA-Z0-9-]+)\r?$", RegexOptions.Multiline).Groups[1].Value;
+        var active = Regex.Match(status, @"^(?:Connected to server|Establishing connection) using profile ([a-zA-Z0-9-]+)\r?$", RegexOptions.Multiline | RegexOptions.IgnoreCase).Groups[1].Value;
         if (profile is not null && (profile.StartsWith("streamfix-", StringComparison.Ordinal) || profile.StartsWith("streamroom-discord-", StringComparison.Ordinal))
             && (active == profile || active == profile + "-controle"))
         {
+            if (!releaseSavedProfile) return;
             await WireSockAsync("disconnect");
-            if ((await WireSockAsync("status")).Trim().Equals("Not connected", StringComparison.OrdinalIgnoreCase)) return;
+            await WaitForWireSockDisconnectAsync();
+            return;
         }
-        throw new IOException("Há outro túnel ativo no WireSock. Desconecte-o e tente novamente.");
+        if (active.Length == 0 && !Regex.IsMatch(status, @"^(?:Connected|Connecting)(?:\s|\.|$)", RegexOptions.IgnoreCase))
+            throw new IOException("O StreamRoom não conseguiu confirmar o estado do WireSock. Abra o WireSock Secure Connect, confira se está desconectado e tente novamente.");
+        throw new IOException("Há uma conexão ativa no WireSock. No WireSock Secure Connect, desligue o botão da VPN, espere aparecer Desconectado e tente aplicar novamente.");
+    }
+
+    private static async Task WaitForWireSockDisconnectAsync()
+    {
+        var timeout = Stopwatch.StartNew();
+        do
+        {
+            if (IsWireSockDisconnected(await WireSockAsync("status"))) return;
+            await Task.Delay(300);
+        }
+        while (timeout.Elapsed < TimeSpan.FromSeconds(4));
+        throw new IOException("O WireSock ainda não desconectou. Desligue o botão da VPN, aguarde o estado Desconectado e tente aplicar novamente.");
     }
 
     private static void CleanScratch(string scratch)
@@ -436,8 +470,7 @@ internal sealed class DiscordSetup
                 if (connected)
                 {
                     await WireSockAsync("disconnect");
-                    if (!(await WireSockAsync("status")).Trim().Equals("Not connected", StringComparison.OrdinalIgnoreCase))
-                        throw new IOException("Confirme que o WireSock está desconectado antes de tentar novamente.");
+                    await WaitForWireSockDisconnectAsync();
                 }
             }
             finally { await DeleteProfileAsync(probe); }
