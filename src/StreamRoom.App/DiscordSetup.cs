@@ -506,15 +506,16 @@ internal sealed class DiscordSetup
 
     private static async Task<string> VerifyProtonAsync(DiscordProtonProfile profile, string scratch, string id)
     {
-        const string host = "www.cloudflare.com";
-        var addresses = await Dns.GetHostAddressesAsync(host, AddressFamily.InterNetwork).WaitAsync(TimeSpan.FromSeconds(10));
-        var address = addresses.FirstOrDefault() ?? throw new IOException("Não consegui consultar o endereço para testar a VPN.");
-        var args = new[] { "-4fsS", "--noproxy", "*", "--max-time", "7", "--resolve", $"{host}:443:{address}", $"https://{host}/cdn-cgi/trace" };
         var curl = Path.Combine(Environment.SystemDirectory, "curl.exe");
         var probe = $"sr-wg-probe-{id}";
         var executable = Path.Combine(scratch, probe + ".exe");
         File.Copy(curl, executable);
-        var baseline = ReadTrace(await RunAsync(curl, args, 9));
+        var baselines = await Task.WhenAll(
+            ReadProbeAsync(curl, "https://www.cloudflare.com/cdn-cgi/trace"),
+            ReadProbeAsync(curl, "https://1.1.1.1/cdn-cgi/trace"));
+        if (baselines.All(baseline => baseline.Address is null))
+            throw new IOException($"O teste de internet sem VPN falhou nos dois endereços. Confira a conexão deste PC e tente novamente. (VPN-DIRETA: {ProbeCodes(baselines)})");
+
         var connected = false;
         try
         {
@@ -523,11 +524,7 @@ internal sealed class DiscordSetup
             var log = await RunAsync(WireSock, ["connect", probe, "-log-level", "info", "-exit"], 18);
             if (!Regex.IsMatch(log, $@"AllowedApps\s*=\s*{probe}(?:\.exe)?(?=[""\s])", RegexOptions.IgnoreCase))
                 throw new IOException("O WireSock não confirmou o filtro de aplicativos. O túnel foi encerrado.");
-            var tunneled = ReadTrace(await RunAsync(executable, args, 9));
-            var direct = ReadTrace(await RunAsync(curl, args, 9));
-            if (tunneled.Country != "US" || tunneled.Ip.Equals(baseline.Ip) || !direct.Ip.Equals(baseline.Ip))
-                throw new IOException("Não consegui confirmar a saída dos EUA só para o aplicativo de teste. Desconecte outras VPNs ou tente outro servidor gratuito dos EUA.");
-            return tunneled.Ip.ToString();
+            return await ConfirmProbeRouteAsync(baselines, executable, curl);
         }
         finally
         {
@@ -539,12 +536,45 @@ internal sealed class DiscordSetup
         }
     }
 
-    private static (IPAddress Ip, string Country) ReadTrace(string response)
+    private sealed record ProbeResult(string Url, IPAddress? Address, string Country, string Error);
+
+    private static async Task<string> ConfirmProbeRouteAsync(ProbeResult[] baselines, string executable, string curl)
     {
+        var failures = new List<ProbeResult>();
+        foreach (var baseline in baselines)
+        {
+            if (baseline.Address is null) continue;
+            var tunneled = await ReadProbeAsync(executable, baseline.Url);
+            if (tunneled.Address is null) { failures.Add(tunneled); continue; }
+            var direct = await ReadProbeAsync(curl, baseline.Url);
+            if (direct.Address is null) { failures.Add(direct); continue; }
+            if (tunneled.Country != "US" || tunneled.Address.Equals(baseline.Address) || !direct.Address.Equals(baseline.Address))
+                throw new IOException("A VPN respondeu, mas o StreamRoom não confirmou a saída dos EUA só para o teste. Confira se outras VPNs estão desligadas ou tente outro servidor gratuito dos EUA. (VPN-ROTA)");
+            return tunneled.Address.ToString();
+        }
+        throw new IOException($"O WireSock iniciou o túnel, mas o teste HTTPS não conseguiu verificar a conexão. Tente aplicar novamente. Se persistir, envie o código do aviso. (VPN-TESTE: {ProbeCodes(failures)})");
+    }
+
+    private static string ProbeCodes(IEnumerable<ProbeResult> results) =>
+        string.Join(", ", results.Select(result => result.Error).Distinct());
+
+    private static async Task<ProbeResult> ReadProbeAsync(string executable, string url)
+    {
+        string response;
+        try
+        {
+            response = await RunAsync(executable, ["-q", "-4fsS", "--noproxy", "*", "--connect-timeout", "8", "--max-time", "14", url],
+                17, standardOutputOnly: true, reportExitCode: true);
+        }
+        catch (ProbeProcessException ex) { return new(url, null, "", ex.Code); }
+        catch (Win32Exception ex) { return new(url, null, "", $"Windows {ex.NativeErrorCode}"); }
+        catch (IOException) { return new(url, null, "", "processo"); }
+
         var value = Regex.Match(response, @"^ip=(.+)$", RegexOptions.Multiline).Groups[1].Value.Trim();
-        if (!IPAddress.TryParse(value, out var ip) || ip.AddressFamily != AddressFamily.InterNetwork)
-            throw new IOException("Não consegui verificar o IP de saída da VPN.");
-        return (ip, Regex.Match(response, @"^loc=([A-Z]{2})\r?$", RegexOptions.Multiline).Groups[1].Value);
+        var country = Regex.Match(response, @"^loc=([A-Z]{2})\r?$", RegexOptions.Multiline).Groups[1].Value;
+        return IPAddress.TryParse(value, out var ip) && ip.AddressFamily == AddressFamily.InterNetwork && country.Length != 0
+            ? new(url, ip, country, "")
+            : new(url, null, "", "resposta inválida");
     }
 
     private static async Task ImportAsync(string directory, string name, string contents)
@@ -568,7 +598,13 @@ internal sealed class DiscordSetup
     private static Task<string> WireSockAsync(params string[] args) =>
         RunAsync(WireSock, args, 8, standardOutputOnly: args is ["status"]);
 
-    private static async Task<string> RunAsync(string file, IEnumerable<string> args, int seconds, bool devInstall = false, bool standardOutputOnly = false)
+    private sealed class ProbeProcessException(string code) : IOException
+    {
+        public string Code { get; } = code;
+    }
+
+    private static async Task<string> RunAsync(string file, IEnumerable<string> args, int seconds, bool devInstall = false, bool standardOutputOnly = false,
+        bool reportExitCode = false)
     {
         var start = new ProcessStartInfo(file) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var arg in args) start.ArgumentList.Add(arg);
@@ -593,9 +629,14 @@ internal sealed class DiscordSetup
         catch (OperationCanceledException)
         {
             if (!process.HasExited) process.Kill(entireProcessTree: true);
+            if (reportExitCode) throw new ProbeProcessException("tempo esgotado");
             throw new IOException("Um componente demorou para responder. Se acabou de instalar o WireSock, reinicie o PC e tente novamente.");
         }
-        if (process.ExitCode != 0) throw new IOException($"{Path.GetFileName(file)} encontrou um erro. Confira se o Discord e outras VPNs estão fechados.");
+        if (process.ExitCode != 0)
+        {
+            if (reportExitCode) throw new ProbeProcessException($"curl {process.ExitCode}");
+            throw new IOException($"{Path.GetFileName(file)} encontrou um erro. Confira se o Discord e outras VPNs estão fechados.");
+        }
         var stderr = await errors;
         return standardOutputOnly ? await output : (await output) + "\n" + stderr;
     }
