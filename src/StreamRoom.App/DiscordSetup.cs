@@ -261,7 +261,8 @@ internal sealed class DiscordSetup
     }
 
     internal static bool IsWireSockDisconnected(string status) =>
-        Regex.IsMatch(status.Trim(), @"^(?:Not\s*connected|Disconnected|Não conectado|Desconectado)\.?$", WireSockStatusOptions);
+        Regex.IsMatch(status.Trim().TrimStart('\uFEFF').Normalize(),
+            @"^(?:Not\s*connected|Disconnected|Não conectado|Desconectado)\.?$", WireSockStatusOptions);
 
     internal static bool IsWireSockDisconnecting(string status) =>
         Regex.IsMatch(status.Trim(), @"^(?:Disconnecting|Desconectando)(?:\s+(?:from server using profile|do servidor usando o perfil) [a-z0-9-]+)?\.?$", WireSockStatusOptions);
@@ -275,7 +276,7 @@ internal sealed class DiscordSetup
 
     private static async Task CheckWireSockAsync(bool releaseSavedProfile)
     {
-        var status = (await WireSockAsync("status")).Trim();
+        var status = await ReadWireSockStatusAsync();
         if (IsWireSockDisconnected(status)) return;
         if (IsWireSockDisconnecting(status))
         {
@@ -290,12 +291,11 @@ internal sealed class DiscordSetup
             && (active == profile || active == profile + "-controle"))
         {
             if (!releaseSavedProfile) return;
-            await WireSockAsync("disconnect");
-            await WaitForWireSockDisconnectAsync();
+            await DisconnectWireSockAsync();
             return;
         }
         if (active is null && !Regex.IsMatch(status, @"^(?:Connected|Connecting|Conectado|Conectando)(?:\s|\.|$)", WireSockStatusOptions))
-            throw new IOException("O StreamRoom não conseguiu confirmar o estado do WireSock. Abra o WireSock Secure Connect, confira se está desconectado e tente novamente.");
+            throw new IOException("O WireSock respondeu com um estado que o StreamRoom não reconhece. Feche e abra o WireSock Secure Connect e tente aplicar novamente. (WS-STATUS)");
         throw new IOException("Há uma conexão ativa no WireSock. No WireSock Secure Connect, desligue o botão da VPN, espere aparecer Desconectado e tente aplicar novamente.");
     }
 
@@ -304,11 +304,35 @@ internal sealed class DiscordSetup
         var timeout = Stopwatch.StartNew();
         do
         {
-            if (IsWireSockDisconnected(await WireSockAsync("status"))) return;
+            if (IsWireSockDisconnected(await ReadWireSockStatusAsync())) return;
             await Task.Delay(300);
         }
         while (timeout.Elapsed < TimeSpan.FromSeconds(4));
         throw new IOException("O WireSock ainda não desconectou. Desligue o botão da VPN, aguarde o estado Desconectado e tente aplicar novamente.");
+    }
+
+    private static async Task DisconnectWireSockAsync()
+    {
+        // WireSock 3.8.2.1 can exit with code 2 after a successful disconnect.
+        // Confirm the resulting state before continuing, including after a CLI error.
+        try { await WireSockAsync("disconnect"); }
+        catch (IOException) { }
+        await WaitForWireSockDisconnectAsync();
+    }
+
+    private static async Task<string> ReadWireSockStatusAsync()
+    {
+        string status;
+        try { status = (await WireSockAsync("status")).Trim(); }
+        catch (Exception ex) when (ex is IOException or Win32Exception)
+        {
+            throw new IOException("O StreamRoom não conseguiu consultar o serviço do WireSock. Abra o WireSock Secure Connect e tente aplicar novamente. (WS-SERVIÇO)", ex);
+        }
+        if (status.Length == 0)
+            throw new IOException("O WireSock retornou uma resposta vazia. Aguarde alguns segundos e tente aplicar novamente. (WS-VAZIO)");
+        if (Regex.IsMatch(status, @"^(?:Network is locked|Rede bloqueada) \(Kill Switch\)\r?$", RegexOptions.Multiline | WireSockStatusOptions))
+            throw new IOException("O WireSock está com a rede bloqueada. Abra o WireSock Secure Connect e confira o estado da rede antes de aplicar. (WS-REDE)");
+        return status;
     }
 
     private static void CleanScratch(string scratch)
@@ -480,11 +504,7 @@ internal sealed class DiscordSetup
         {
             try
             {
-                if (connected)
-                {
-                    await WireSockAsync("disconnect");
-                    await WaitForWireSockDisconnectAsync();
-                }
+                if (connected) await DisconnectWireSockAsync();
             }
             finally { await DeleteProfileAsync(probe); }
         }
@@ -516,12 +536,21 @@ internal sealed class DiscordSetup
         try { await WireSockAsync("delete", name); } catch (IOException) { }
     }
 
-    private static Task<string> WireSockAsync(params string[] args) => RunAsync(WireSock, args, 8);
+    private static Task<string> WireSockAsync(params string[] args) =>
+        RunAsync(WireSock, args, 8, standardOutputOnly: args is ["status"]);
 
-    private static async Task<string> RunAsync(string file, IEnumerable<string> args, int seconds, bool devInstall = false)
+    private static async Task<string> RunAsync(string file, IEnumerable<string> args, int seconds, bool devInstall = false, bool standardOutputOnly = false)
     {
         var start = new ProcessStartInfo(file) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var arg in args) start.ArgumentList.Add(arg);
+        if (file == WireSock)
+        {
+            // The CLI's status strings are localized. Use its neutral resources
+            // in the child process so the Windows language/code page cannot change the protocol.
+            start.Environment["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1";
+            start.StandardOutputEncoding = Encoding.UTF8;
+            start.StandardErrorEncoding = Encoding.UTF8;
+        }
         if (devInstall)
         {
             start.Environment["VENCORD_USER_DATA_DIR"] = Vencord;
@@ -538,7 +567,8 @@ internal sealed class DiscordSetup
             throw new IOException("Um componente demorou para responder. Se acabou de instalar o WireSock, reinicie o PC e tente novamente.");
         }
         if (process.ExitCode != 0) throw new IOException($"{Path.GetFileName(file)} encontrou um erro. Confira se o Discord e outras VPNs estão fechados.");
-        return (await output) + "\n" + (await errors);
+        var stderr = await errors;
+        return standardOutputOnly ? await output : (await output) + "\n" + stderr;
     }
 
     private static async Task DownloadAsync(string url, string sha256, string destination)
