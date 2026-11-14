@@ -38,6 +38,8 @@ public partial class ShellWindow : Window
     private long _nativeSentAt;
     private bool _nativeDelayed;
     private VelopackAsset? _downloadedUpdate;
+    private string? _failedUpdateVersion;
+    private bool _applyingUpdate;
     private readonly CancellationTokenSource _updateShutdown = new();
     private bool _retiringTailscale;
     private BackgroundNotice? _backgroundNotice;
@@ -157,9 +159,23 @@ public partial class ShellWindow : Window
             core.Navigate(_webOrigin + (App.TrayTestOutput is not null ? "/tray-test.html" : App.MediaTestRole is not null ? "/media-room-test.html" : App.CaptureTestOutput is not null ? "/capture-test.html" : App.NetworkTestOutput is null ? "/index.html" : "/network-test.html"));
             _updateTimer.Tick += async (_, _) =>
             {
-                _updateTimer.Interval = TimeSpan.FromMinutes(30);
                 if (!await _updateCommands.WaitAsync(0)) return;
-                try { await DownloadOfficialUpdateAsync(); } finally { _updateCommands.Release(); }
+                try
+                {
+                    _updateTimer.Interval = _downloadedUpdate is null ? TimeSpan.FromMinutes(30) : TimeSpan.FromSeconds(5);
+                    await DownloadOfficialUpdateAsync();
+                    if (_downloadedUpdate is { } update && _ready && CanApplyUpdate() && _failedUpdateVersion != update.Version.ToString())
+                    {
+                        try { await ApplyUpdateAsync(update); }
+                        catch
+                        {
+                            _failedUpdateVersion = update.Version.ToString();
+                            _updateTimer.Stop();
+                            EmitUpdate(update, "applyFailed");
+                        }
+                    }
+                }
+                finally { _updateCommands.Release(); }
             };
             if (_updates.IsInstalled && !App.ZeroTierProof && App.UiPreviewOutput is null && App.MediaTestRole is null &&
                 App.NetworkTestOutput is null && App.CaptureTestOutput is null && App.TrayTestOutput is null && App.PickerPreviewOutput is null)
@@ -208,6 +224,8 @@ public partial class ShellWindow : Window
             if (discordCommand && _exitRequested) throw new InvalidOperationException("Aguarde a reinicialização do StreamRoom.");
             commandGate = discordCommand ? _discordSetupCommands : type is "profilePhoto" or "profileSave" or "googleSignIn" or "googleDisconnect" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type == "installUpdate" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
+            if (_applyingUpdate && type is not ("audioStop" or "captureStop" or "cameraPermissionEnd"))
+                throw new InvalidOperationException("O StreamRoom está reiniciando para aplicar a atualização.");
             var p = message.GetProperty("payload");
             object? result = null;
             switch (type)
@@ -249,7 +267,8 @@ public partial class ShellWindow : Window
                     break;
                 case "ready":
                     _ready = true;
-                    if (_downloadedUpdate is { } downloaded) EmitUpdate(downloaded, "ready");
+                    if (_downloadedUpdate is { } downloaded) EmitUpdate(downloaded,
+                        _failedUpdateVersion == downloaded.Version.ToString() ? "applyFailed" : "ready");
                     JsonElement? settings = null;
                     var file = Path.Combine(DataDirectory, "settings-v2.json");
                     if (File.Exists(file))
@@ -328,8 +347,13 @@ public partial class ShellWindow : Window
                         using var pending = JsonDocument.Parse(await File.ReadAllTextAsync(transition));
                         var target = pending.RootElement.GetProperty("target").GetString();
                         var actual = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0];
-                        result = new { message = actual == target ? $"StreamRoom {actual} atualizado com sucesso." : "A atualização anterior não foi concluída. Verifique as atualizações para tentar novamente." };
-                        File.Delete(transition);
+                        if (actual != target)
+                        {
+                            _failedUpdateVersion = target;
+                            if (_downloadedUpdate is { } failed && failed.Version.ToString() == target) EmitUpdate(failed, "applyFailed");
+                        }
+                        result = new { message = actual == target ? $"StreamRoom {actual} atualizado com sucesso." : "A atualização anterior não foi concluída. Use Reiniciar e atualizar quando a opção aparecer." };
+                        if (actual == target) File.Delete(transition);
                     }
                     break;
                 case "zeroTierStatus":
@@ -523,19 +547,10 @@ public partial class ShellWindow : Window
                 case "cameraPermissionEnd": _cameraAllowedUntil=0;break;
                 case "audioStop": _audio.Dispose(); break;
                 case "installUpdate":
-                    if (_retiringTailscale) throw new InvalidOperationException("Aguarde a remoção do Tailscale terminar antes de reiniciar.");
-                    if (_discordSetupCommands.CurrentCount == 0) throw new InvalidOperationException("Aguarde a configuração do Discord terminar antes de reiniciar.");
                     if (App.ZeroTierProof) throw new InvalidOperationException("Atualizações estáveis desativadas neste protótipo.");
                     if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de atualizar.");
-                    var update = _downloadedUpdate ?? throw new InvalidOperationException("Aguarde o download da atualização.");
-                    _exitRequested = true;
-                    try
-                    {
-                        await File.WriteAllTextAsync(Path.Combine(DataDirectory, "update-transition.json"), JsonSerializer.Serialize(new { target = update.Version.ToString() }));
-                        _updates.WaitExitThenApplyUpdates(update, silent: true, restart: true);
-                        _ = Dispatcher.BeginInvoke(Close);
-                    }
-                    catch { _exitRequested = false; throw; }
+                    if (!CanApplyUpdate()) throw new InvalidOperationException("Aguarde a operação em andamento terminar antes de reiniciar.");
+                    await ApplyUpdateAsync(_downloadedUpdate ?? throw new InvalidOperationException("Aguarde o download da atualização."));
                     break;
                 default: throw new ArgumentException("Comando desconhecido.");
             }
@@ -700,6 +715,54 @@ public partial class ShellWindow : Window
     private void EmitUpdate(VelopackAsset asset, string state) =>
         Emit(new { type = "update", result = new { version = asset.Version.ToString(), state } });
 
+    private bool CanApplyUpdate() => !_closing && !_exitRequested && !_retiringTailscale &&
+        _connection?.IsConnected != true && _nativeCapture is null &&
+        _commands.CurrentCount > 0 && _discordSetupCommands.CurrentCount > 0 && _profileCommands.CurrentCount > 0 &&
+        !_discordSetup.IsPrepared && !OtherInstalledInstanceRunning();
+
+    private static bool OtherInstalledInstanceRunning()
+    {
+        var processes = System.Diagnostics.Process.GetProcessesByName("StreamRoom");
+        try
+        {
+            foreach (var process in processes)
+            {
+                if (process.Id == Environment.ProcessId) continue;
+                try
+                {
+                    if (string.Equals(process.MainModule?.FileName, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                catch (Exception ex) when (ex is Win32Exception or InvalidOperationException) { }
+            }
+            return false;
+        }
+        finally { foreach (var process in processes) process.Dispose(); }
+    }
+
+    private async Task ApplyUpdateAsync(VelopackAsset update)
+    {
+        var transition = Path.Combine(DataDirectory, "update-transition.json");
+        _applyingUpdate = true;
+        _exitRequested = true;
+        try
+        {
+            await File.WriteAllTextAsync(transition, JsonSerializer.Serialize(new { target = update.Version.ToString() }));
+            _updates.WaitExitThenApplyUpdates(update, silent: true, restart: true);
+            _updateTimer.Stop();
+            EmitUpdate(update, "applying");
+            _ = Dispatcher.BeginInvoke(Close);
+        }
+        catch
+        {
+            _applyingUpdate = false;
+            _exitRequested = false;
+            try { File.Delete(transition); }
+            catch (IOException) { }
+            throw;
+        }
+    }
+
     private async Task DownloadOfficialUpdateAsync()
     {
         if (_closing || _exitRequested || _downloadedUpdate is not null) return;
@@ -717,8 +780,8 @@ public partial class ShellWindow : Window
                 pending = target;
             }
             _downloadedUpdate = pending;
-            _updateTimer.Stop();
-            EmitUpdate(pending, "ready");
+            _updateTimer.Interval = TimeSpan.FromSeconds(5);
+            EmitUpdate(pending, _failedUpdateVersion == pending.Version.ToString() ? "applyFailed" : "ready");
         }
         catch (Exception ex)
         {

@@ -19,7 +19,7 @@ public partial class App : Application
     [STAThread]
     public static void Main(string[] args)
     {
-        VelopackApp.Build().Run();
+        VelopackApp.Build().SetAutoApplyOnStartup(false).Run();
         int peopleTest=Array.IndexOf(args,"--people-self-test");
         if(peopleTest>=0){PeopleSelfTest.Run(System.IO.Path.GetFullPath(args.ElementAtOrDefault(peopleTest+1)??"people-test.json"),StreamRoom.Core.Invitations.ValidateServer(args.ElementAtOrDefault(peopleTest+2)??"http://127.0.0.1:8787")).GetAwaiter().GetResult();return;}
         int accountTest = Array.IndexOf(args, "--account-self-test");

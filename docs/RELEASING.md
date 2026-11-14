@@ -26,7 +26,7 @@ Candidatos beta devem ficar em draft/prerelease quando compartilhados por Releas
 
 - Verifica versões oficiais na inicialização e periodicamente (30 minutos).
 - Mostra aviso quando encontrar uma versão mais nova.
-- O pacote é baixado automaticamente e aplicado pelo Velopack na próxima abertura após sair pela bandeja. “Reiniciar e atualizar” aplica o pacote já baixado e exige sair da sala.
+- O pacote é baixado em segundo plano. O StreamRoom agenda a aplicação e o reinício pelo Velopack quando estiver fora da sala e sem operações em andamento. “Reiniciar e atualizar” permite uma nova tentativa manual.
 - Não contém token GitHub: o repositório é público e o cliente está sujeito aos limites anônimos do GitHub.
 - Uma versão portátil não se apresenta como instalada e informa que esse fluxo exige instalação.
 

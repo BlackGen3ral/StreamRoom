@@ -92,7 +92,7 @@ Worker: server/src/index.ts / MultiRoom, API v2. Compatibilidade v1: server/src/
 
 Após testes e confirmação do plano Free no painel: npm run deploy em server. Não configure TURN ou serviços pagos. A retirada do Tailscale é uma mudança do cliente e não exige alteração do Worker.
 
-O StreamRoom verifica Releases públicas oficiais estáveis e baixa a atualização em segundo plano. O Velopack instala o pacote na próxima abertura depois de sair do aplicativo pela bandeja. Quem já saiu da sala também pode usar **Reiniciar e atualizar** para aplicar na hora. O workflow de main compila, testa e publica o instalador e o feed após sucesso. Commits, drafts, prereleases e artefatos de Actions não são atualizações oficiais. [Aprovação e assinatura](docs/RELEASING.md).
+O StreamRoom verifica Releases públicas oficiais estáveis e baixa a atualização em segundo plano. O aplicativo reinicia e aplica o pacote automaticamente quando estiver fora da sala e terminar as operações em andamento, inclusive se estiver na bandeja. O workflow de main compila, testa e publica o instalador e o feed após sucesso. Commits, drafts, prereleases e artefatos de Actions não são atualizações oficiais. [Aprovação e assinatura](docs/RELEASING.md).
 
 O EXE, a janela e o instalador possuem ícone próprio. **Ícone não remove SmartScreen.** Não há certificado de assinatura de código disponível nesta sessão; mesmo apps assinados podem receber aviso enquanto constroem reputação. [Assinatura e avisos do Windows](docs/WINDOWS-SIGNING.md).
 

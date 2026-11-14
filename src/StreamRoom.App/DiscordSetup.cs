@@ -541,6 +541,7 @@ internal sealed class DiscordSetup
     private static async Task<string> ConfirmProbeRouteAsync(ProbeResult[] baselines, string executable, string curl)
     {
         var failures = new List<ProbeResult>();
+        string? routeError = null;
         foreach (var baseline in baselines)
         {
             if (baseline.Address is null) continue;
@@ -548,10 +549,21 @@ internal sealed class DiscordSetup
             if (tunneled.Address is null) { failures.Add(tunneled); continue; }
             var direct = await ReadProbeAsync(curl, baseline.Url);
             if (direct.Address is null) { failures.Add(direct); continue; }
-            if (tunneled.Country != "US" || tunneled.Address.Equals(baseline.Address) || !direct.Address.Equals(baseline.Address))
-                throw new IOException("A VPN respondeu, mas o StreamRoom não confirmou a saída dos EUA só para o teste. Confira se outras VPNs estão desligadas ou tente outro servidor gratuito dos EUA. (VPN-ROTA)");
+            if (!direct.Address.Equals(baseline.Address))
+                throw new IOException("A conexão normal do PC também mudou durante o teste. Em WireSock → Preferências → Rede, confira se as regras globais estão substituindo as do perfil. (VPN-ROTA-DIRETA)");
+            if (tunneled.Address.Equals(baseline.Address))
+            {
+                routeError = "O teste saiu pela mesma conexão do PC. Em WireSock → Preferências → Rede, confira se as regras globais estão substituindo as do perfil. (VPN-ROTA-FILTRO)";
+                continue;
+            }
+            if (tunneled.Country != "US")
+            {
+                routeError = $"A saída da VPN foi identificada como {tunneled.Country}. Gere outro perfil WireGuard em um servidor gratuito dos EUA e importe no StreamRoom. (VPN-ROTA-PAÍS)";
+                continue;
+            }
             return tunneled.Address.ToString();
         }
+        if (routeError is not null) throw new IOException(routeError);
         throw new IOException($"O WireSock iniciou o túnel, mas o teste HTTPS não conseguiu verificar a conexão. Tente aplicar novamente. Se persistir, envie o código do aviso. (VPN-TESTE: {ProbeCodes(failures)})");
     }
 

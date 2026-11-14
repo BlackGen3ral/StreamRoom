@@ -384,16 +384,21 @@ function showExpiry(expiresAt) {
   $('roomLifetime').textContent = state.role === 'host' ? 'Renovação automática enquanto você estiver conectado. Sem limite total de duração.' : 'A sala continua ativa enquanto o criador estiver conectado.';
 }
 function showUpdate(r) {
-  updateReady = r.state === 'ready';
+  updateReady = r.state === 'ready' || r.state === 'applyFailed';
   const downloading = r.state === 'downloading';
   $('updateNotice').hidden = false;
   $('updateHeading').textContent = r.version ? 'StreamRoom ' + r.version : 'Atualização do StreamRoom';
   $('updateDownloadProgress').hidden = !downloading;
   $('updateDownloadProgress').value = 0;
-  $('updateText').textContent = updateReady
-    ? 'Será instalada automaticamente quando você sair do StreamRoom pela bandeja e abrir de novo.'
-    : downloading ? 'Baixando a atualização em segundo plano…' : 'O download será retomado automaticamente.';
+  $('updateText').textContent = ({
+    ready: 'O StreamRoom reiniciará automaticamente quando você estiver fora da sala e as operações em andamento terminarem.',
+    applyFailed: 'A reinicialização automática falhou. Use Reiniciar e atualizar para tentar de novo.',
+    applying: 'Reiniciando para instalar a atualização…',
+    downloading: 'Baixando a atualização em segundo plano…',
+    retry: 'O download será retomado automaticamente.'
+  })[r.state] ?? '';
   $('installUpdate').hidden = !updateReady;
+  if (r.state === 'applying' && !document.querySelector('dialog[open]')) $('updateApplying').showModal();
   render();
 }
 $('name').addEventListener('input', renderProfile);
