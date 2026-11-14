@@ -27,6 +27,9 @@ internal sealed class DiscordSetup
     private static readonly string Vencord = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Vencord");
     private static readonly string Patcher = Path.Combine(Vencord, "dist", "patcher.js");
     private static readonly HttpClient Downloads = new() { Timeout = TimeSpan.FromMinutes(2) };
+    private const RegexOptions WireSockStatusOptions = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+    private const string WireSockConnected = "Connected to server using profile|Conectado ao servidor usando o perfil";
+    private const string WireSockConnecting = "Establishing connection using profile|Estabelecendo conexão usando o perfil";
     private DiscordProtonProfile? _profile;
     private string? _preparedDirectory;
     private bool _repairOnly;
@@ -144,9 +147,9 @@ internal sealed class DiscordSetup
         string status;
         try { status = await WireSockAsync("status"); }
         catch (IOException) { return null; }
-        var active = Regex.Match(status, @"^Connected to server using profile ([a-zA-Z0-9-]+)\r?$", RegexOptions.Multiline);
-        var exit = Regex.Match(status, @"^External address: ([0-9.]+), United States(?:,|\r?$)", RegexOptions.Multiline);
-        if (!active.Success || active.Groups[1].Value != profile ||
+        var active = ReadWireSockProfile(status, includeConnecting: false);
+        var exit = Regex.Match(status, @"^(?:External address|Endereço externo): ([0-9.]+), (?:United States|Estados Unidos)(?:,|\r?$)", RegexOptions.Multiline | WireSockStatusOptions);
+        if (active != profile ||
             !IPAddress.TryParse(exit.Groups[1].Value, out var address) || address.AddressFamily != AddressFamily.InterNetwork)
             return null;
         return (profile, address.ToString());
@@ -258,13 +261,23 @@ internal sealed class DiscordSetup
     }
 
     internal static bool IsWireSockDisconnected(string status) =>
-        Regex.IsMatch(status.Trim(), @"^(?:Not\s*connected|Disconnected)\.?$", RegexOptions.IgnoreCase);
+        Regex.IsMatch(status.Trim(), @"^(?:Not\s*connected|Disconnected|Não conectado|Desconectado)\.?$", WireSockStatusOptions);
+
+    internal static bool IsWireSockDisconnecting(string status) =>
+        Regex.IsMatch(status.Trim(), @"^(?:Disconnecting|Desconectando)(?:\s+(?:from server using profile|do servidor usando o perfil) [a-z0-9-]+)?\.?$", WireSockStatusOptions);
+
+    internal static string? ReadWireSockProfile(string status, bool includeConnecting)
+    {
+        var labels = includeConnecting ? $"{WireSockConnected}|{WireSockConnecting}" : WireSockConnected;
+        var match = Regex.Match(status.Trim(), $@"^(?:{labels}) ([a-z0-9-]+)(?:\r?\n|$)", WireSockStatusOptions);
+        return match.Success ? match.Groups[1].Value : null;
+    }
 
     private static async Task CheckWireSockAsync(bool releaseSavedProfile)
     {
         var status = (await WireSockAsync("status")).Trim();
         if (IsWireSockDisconnected(status)) return;
-        if (Regex.IsMatch(status, @"^Disconnecting\.?$", RegexOptions.IgnoreCase))
+        if (IsWireSockDisconnecting(status))
         {
             await WaitForWireSockDisconnectAsync();
             return;
@@ -272,7 +285,7 @@ internal sealed class DiscordSetup
         var settings = Path.Combine(Vencord, "settings", "settings.json");
         var config = File.Exists(settings) ? JsonNode.Parse(await File.ReadAllTextAsync(settings)) : null;
         var profile = config?["plugins"]?["StreamFix"]?["perfilDoTunel"]?.GetValue<string>();
-        var active = Regex.Match(status, @"^(?:Connected to server|Establishing connection) using profile ([a-zA-Z0-9-]+)\r?$", RegexOptions.Multiline | RegexOptions.IgnoreCase).Groups[1].Value;
+        var active = ReadWireSockProfile(status, includeConnecting: true);
         if (profile is not null && (profile.StartsWith("streamfix-", StringComparison.Ordinal) || profile.StartsWith("streamroom-discord-", StringComparison.Ordinal))
             && (active == profile || active == profile + "-controle"))
         {
@@ -281,7 +294,7 @@ internal sealed class DiscordSetup
             await WaitForWireSockDisconnectAsync();
             return;
         }
-        if (active.Length == 0 && !Regex.IsMatch(status, @"^(?:Connected|Connecting)(?:\s|\.|$)", RegexOptions.IgnoreCase))
+        if (active is null && !Regex.IsMatch(status, @"^(?:Connected|Connecting|Conectado|Conectando)(?:\s|\.|$)", WireSockStatusOptions))
             throw new IOException("O StreamRoom não conseguiu confirmar o estado do WireSock. Abra o WireSock Secure Connect, confira se está desconectado e tente novamente.");
         throw new IOException("Há uma conexão ativa no WireSock. No WireSock Secure Connect, desligue o botão da VPN, espere aparecer Desconectado e tente aplicar novamente.");
     }

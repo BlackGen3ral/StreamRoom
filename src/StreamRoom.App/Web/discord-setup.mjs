@@ -74,7 +74,9 @@ export function createDiscordSetup(native) {
       await native('discordSetupPrepare', { repairOnly });
       prepared = true;
       meter.hidden = true;
-      show('Arquivos verificados. Clique em Reiniciar Discord e aplicar para instalar o Vencord e o StreamFix.');
+      show(repairOnly
+        ? 'Arquivos verificados. Clique em Reiniciar Discord e aplicar para concluir o reparo.'
+        : 'Arquivos verificados. Clique em Reiniciar Discord e aplicar para registrar os perfis no WireSock e instalar o Vencord. Deixe a VPN desligada durante esta etapa.');
     } catch (error) {
       meter.hidden = true;
       show(error.message, true);
