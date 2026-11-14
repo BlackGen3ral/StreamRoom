@@ -1,6 +1,7 @@
 import { RtcRoom } from './rtc-room.mjs';
 import { createCapturePicker } from './capture-picker.mjs';
 import { createZeroTierUi } from './zerotier-ui.mjs';
+import { createDiscordSetup } from './discord-setup.mjs';
 import { createStreamViewport } from './stream-viewport.mjs';
 import { createProfileUi, showAvatar } from './profile-ui.mjs';
 import { createFriendsUi } from './friends-ui.mjs';
@@ -24,6 +25,7 @@ function selectPage(page, focus = false) {
   }
   if (previous !== page && previous === 'profile') profileUi.close();
   if (previous !== page && page === 'profile') profileUi.open();
+  if (previous !== page && page === 'connections') void discordSetup.start().catch(() => {});
 }
 const sidebarToggle = $('sidebarToggle');
 function setSidebarCompact(compact) {
@@ -48,7 +50,7 @@ const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
     const id = String(++sequence);
-    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'googleSignIn' ? 330000 : type === 'profilePhoto' ? 900000 : type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'downloadUpdate' ? 900000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
+    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'googleSignIn' ? 330000 : ['profilePhoto','discordSetupPrepare','discordSetupImport','discordSetupRestart','downloadUpdate'].includes(type) ? 900000 : type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'checkUpdates' ? 120000 : type === 'connect' ? 45000 : 25000);
     requests.set(id, { resolve, reject, timer }); window.chrome.webview.postMessage({ id, type, payload });
   });
 }
@@ -64,6 +66,7 @@ const cards = new Map(), remoteStreams = new Map();
 const remoteCameras=new Map();
 function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
 const zeroTierUi = createZeroTierUi(native, rtc, () => state.connected, status);
+const discordSetup = createDiscordSetup(native);
 const friendsUi = createFriendsUi(native, () => render());
 const profileUi = createProfileUi(native, (profile, note) => {
   $('name').value = profile.name; uiSounds.refresh(); render();
@@ -306,6 +309,7 @@ window.chrome.webview.addEventListener('message', ({ data }) => {
   else if (data.type === 'nativeCaptureResumed' && rtc.nativeBridge?.session === data.session) status('Vídeo retomado.');
   else if (data.type === 'pcm') rtc.pushPcm(data.data);
   else if (data.type === 'roomRenewed') showExpiry(data.expiresAt);
+  else if (data.type === 'discordSetupProgress') discordSetup.progress(data);
   else if (data.type === 'update') showUpdate(data.result);
   else if (data.type === 'updateProgress') { $('updateText').textContent = 'Baixando arquivos · ' + data.progress + '%'; $('updateDownloadProgress').value = data.progress; }
 });
@@ -519,6 +523,7 @@ try {
   welcomeUi.start(r);
   await refreshGroup();
   await zeroTierUi.start(r);
+  void discordSetup.start().catch(() => {});
   for (const [key,value] of Object.entries(r.settings ?? {})) { const input=$(key); if (!input) continue; if(input.type==='checkbox') input.checked=Boolean(value); else input.value=String(value); }
   profileUi.start(r.profile, r.google, Boolean(r.clientConfiguration?.googleClientId));
   await friendsUi.start();

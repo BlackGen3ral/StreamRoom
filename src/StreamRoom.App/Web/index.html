@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; media-src 'self' blob: mediastream:; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>StreamRoom</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="layout.css"><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="appearance.css"><link rel="stylesheet" href="studio.css"><link rel="stylesheet" href="monochrome.css"><script type="module" src="app.mjs"></script></head>
+<title>StreamRoom</title><link rel="stylesheet" href="app.css"><link rel="stylesheet" href="layout.css"><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="appearance.css"><link rel="stylesheet" href="studio.css"><link rel="stylesheet" href="monochrome.css"><link rel="stylesheet" href="discord-setup.css"><script type="module" src="app.mjs"></script></head>
 <body class="app-shell">
 <section id="welcomePage" class="welcome-page" aria-labelledby="welcomeTitle" hidden>
   <div class="welcome-brand"><span class="brand-glyph" aria-hidden="true">▣</span>StreamRoom</div>
@@ -142,9 +142,22 @@
     <div class="connection-actions"><p id="connectionNextStep">Aguarde a verificação da rede.</p><button id="zeroTierSetup" class="primary">Gerenciar conexão <span aria-hidden="true">↗</span></button></div>
   </details>
   <div class="connection-help"><section><span class="connection-help-icon" aria-hidden="true">①</span><div><h3>Conectar um amigo</h3><p>Usem a mesma rede ZeroTier. O proprietário autoriza cada computador; depois, entrem na sala do StreamRoom.</p></div></section><section><span class="connection-help-icon" aria-hidden="true">◇</span><div><h3>Você escolhe o que compartilhar</h3><p>Conectar à rede não inicia uma transmissão. Sua tela só é compartilhada depois da sua confirmação.</p></div></section></div><p class="connection-footnote">ZeroTier é opcional. Sem ele, o StreamRoom tenta conectar diretamente pela internet. Rede conectada não confirma que o vídeo está chegando: confira a transmissão em Sala e telas.</p>
-  <section id="discordPreview" class="card connection-card" aria-labelledby="discordPreviewTitle" hidden>
-    <div class="connection-heading"><div class="connection-brand"><span class="connection-symbol" aria-hidden="true">▣</span><div><h2 id="discordPreviewTitle">Compartilhar no Discord</h2><p>Disponível no canal experimental para Windows.</p></div></div></div>
-    <div class="connection-actions"><p id="discordPreviewStatus" role="status">Ao entrar no teste, as próximas atualizações virão desse canal.</p><button id="discordPreviewButton" class="primary" type="button">Experimentar integração com Discord</button></div>
+  <section id="discordSetup" class="discord-setup" aria-labelledby="discordSetupTitle" hidden>
+    <div class="discord-setup-heading">
+      <span class="discord-setup-icon" aria-hidden="true">▣</span>
+      <div><h2 id="discordSetupTitle">Compartilhar no Discord</h2><p>Configure uma vez para abrir lives com o Proton em segundo plano.</p></div>
+      <span class="discord-setup-badge">Experimental</span>
+    </div>
+    <div id="discordSetupRepairBox" class="discord-setup-repair" hidden><div><h3>O Discord precisa do Vencord novamente</h3><p>Prepare o reparo com o perfil e as preferências já salvos.</p></div><button id="discordSetupRepair" type="button" class="primary">Preparar reparo</button></div>
+    <ol class="discord-setup-steps">
+      <li><div><h3>Baixe o perfil do Proton</h3><p>Entre na sua conta. Em Downloads → WireGuard, escolha Windows e o servidor <strong>US-FREE#76</strong> ou outro gratuito dos EUA.</p></div><button id="discordSetupProton" class="quiet" type="button">Abrir Proton ↗</button></li>
+      <li><div><h3>Importe o arquivo .conf</h3><p id="discordSetupFile">Selecione o arquivo baixado. A chave fica neste PC.</p></div><button id="discordSetupImport" class="quiet" type="button">Importar arquivo</button></li>
+      <li><div><h3>Prepare a configuração</h3><p>Desconecte outras VPNs e autorize a instalação do WireSock se o Windows pedir. Você pode manter o Discord aberto.</p></div><button id="discordSetupApply" class="primary" type="button" disabled>Preparar Discord</button></li>
+    </ol>
+    <label class="discord-setup-option" for="discordSetupQuality"><input id="discordSetupQuality" type="checkbox" checked><span><strong>Ativar 1080p · 60 FPS no Discord</strong><small>Libera essa opção no seletor de qualidade ao compartilhar a tela.</small></span></label>
+    <div id="discordSetupFeedback" class="discord-setup-feedback" hidden><progress id="discordSetupProgress" max="100" value="0" aria-label="Progresso da configuração" hidden></progress><p id="discordSetupStatus" role="status" aria-live="polite"></p></div>
+    <div id="discordSetupRestartBox" class="discord-setup-repair" hidden><div><h3>Pronto para aplicar</h3><p>Ao reiniciar, o Discord sai da chamada e encerra qualquer live aberta.</p></div><button id="discordSetupRestart" class="primary" type="button">Reiniciar Discord e aplicar</button></div>
+    <p class="discord-setup-note">Usa Vencord com StreamFix. A atualização automática do Vencord fica pausada durante o teste.</p>
   </section>
   <details class="card" id="tailscalePanel"><summary>Tailscale <span class="tail-optional">Alternativa</span></summary>
     <div class="tail-status-row"><div class="tail-connection"><span class="tail-dot" id="tailscaleDot" aria-hidden="true"></span><div><strong>Tailscale</strong><span id="tailscaleStatus" role="status" aria-live="polite">Verificando…</span></div></div><button id="tailscaleRefresh" class="quiet tail-refresh" aria-label="Atualizar status do Tailscale" title="Atualizar status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 11-1l3 3M4 15l3 3a7 7 0 0 0 11-1"/></svg></button></div>

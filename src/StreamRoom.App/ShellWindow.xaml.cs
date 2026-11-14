@@ -21,11 +21,12 @@ public partial class ShellWindow : Window
     private readonly SemaphoreSlim _profileCommands = new(1, 1);
     private readonly SemaphoreSlim _tailscaleCommands = new(1, 1);
     private readonly SemaphoreSlim _zeroTierStatusCommands = new(1, 1);
+    private readonly SemaphoreSlim _discordSetupCommands = new(1, 1);
+    private readonly DiscordSetup _discordSetup = new();
     private readonly TailscaleService _tailscale = new();
     private bool _tailscaleWebRtcReady;
     private readonly SystemAudioCapture _audio = new();
-    private const string UpdateRepository = "https://github.com/BlackGen3ral/StreamRoom";
-    private UpdateManager _updates = new(new GithubSource(UpdateRepository, null, false));
+    private readonly UpdateManager _updates = new(new GithubSource("https://github.com/BlackGen3ral/StreamRoom", null, false));
     private readonly CaptureSources _captureSources = new();
     private NativeCapture? _nativeCapture;
     private CoreWebView2SharedBuffer? _nativeBuffer;
@@ -199,12 +200,27 @@ public partial class ShellWindow : Window
             if (type?.StartsWith("tailscale", StringComparison.Ordinal) == true)
                 throw new InvalidOperationException("A integração Tailscale foi retirada. Use a opção ZeroTier em Conexões.");
             if (type == "googleCancel") { _googleLogin?.Cancel(); Emit(new { type = "reply", id, ok = true, result = new { } }); return; }
-            commandGate = type is "profilePhoto" or "profileSave" or "googleSignIn" or "googleDisconnect" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" or "checkDiscordPreview" ? _updateCommands : _commands;
+            var discordCommand = type?.StartsWith("discordSetup", StringComparison.Ordinal) == true;
+            if (discordCommand && type != "discordSetupStatus" && !DiscordSetup.Available) throw new InvalidOperationException("Os arquivos do assistente do Discord estão indisponíveis.");
+            if (discordCommand && _exitRequested) throw new InvalidOperationException("Aguarde a reinicialização do StreamRoom.");
+            commandGate = discordCommand ? _discordSetupCommands : type is "profilePhoto" or "profileSave" or "googleSignIn" or "googleDisconnect" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
             object? result = null;
             switch (type)
             {
+                case "discordSetupStatus":
+                    result = new { available = DiscordSetup.Available, repairNeeded = DiscordSetup.Available && DiscordSetup.RepairNeeded(), prepared = _discordSetup.IsPrepared }; break;
+                case "discordSetupProton": DiscordSetup.OpenProton(); break;
+                case "discordSetupImport": result = _discordSetup.PickProfile(this); break;
+                case "discordSetupPrepare":
+                    var repairOnly = p.TryGetProperty("repairOnly", out var repair) && repair.ValueKind == JsonValueKind.True;
+                    await _discordSetup.PrepareAsync(repairOnly, (percent, label) => Emit(new { type = "discordSetupProgress", percent, label }));
+                    break;
+                case "discordSetupRestart":
+                    var enableQuality = p.TryGetProperty("quality", out var discordQuality) && discordQuality.ValueKind == JsonValueKind.True;
+                    result = await _discordSetup.ApplyAndRestartAsync(enableQuality, (percent, label) => Emit(new { type = "discordSetupProgress", percent, label }));
+                    break;
                 case "testCreate" when App.NetworkTestOutput is not null:
                     result = await CreateNetworkTestAsync();
                     break;
@@ -496,20 +512,6 @@ public partial class ShellWindow : Window
                 case "cameraPermissionEnd": _cameraAllowedUntil=0;break;
                 case "audioStop": _audio.Dispose(); break;
                 case "checkUpdates": result = await CheckUpdatesAsync(); break;
-                case "checkDiscordPreview":
-                    if (App.ZeroTierProof || !_updates.IsInstalled || _updates.IsPortable)
-                        throw new InvalidOperationException("A prévia do Discord está disponível na instalação do StreamRoom para Windows.");
-                    if (_updateDownloaded)
-                        throw new InvalidOperationException("Aplique a atualização já baixada antes de entrar na prévia.");
-                    var previewUpdates = new UpdateManager(new GithubSource(UpdateRepository, null, prerelease: true),
-                        new UpdateOptions { ExplicitChannel = "win-discord" });
-                    var previewUpdate = await previewUpdates.CheckForUpdatesAsync();
-                    if (previewUpdate is null)
-                        throw new InvalidOperationException("Nenhuma versão experimental mais recente está disponível.");
-                    _updates = previewUpdates;
-                    _availableUpdate = previewUpdate;
-                    result = UpdateResult();
-                    break;
                 case "downloadUpdate":
                     if (App.ZeroTierProof) throw new InvalidOperationException("Atualizações estáveis desativadas neste protótipo.");
                     if (_availableUpdate is null) throw new InvalidOperationException("Consulte as atualizações primeiro.");
@@ -522,6 +524,7 @@ public partial class ShellWindow : Window
                     break;
                 case "installUpdate":
                     if (_retiringTailscale) throw new InvalidOperationException("Aguarde a remoção do Tailscale terminar antes de reiniciar.");
+                    if (_discordSetupCommands.CurrentCount == 0) throw new InvalidOperationException("Aguarde a configuração do Discord terminar antes de reiniciar.");
                     if (App.ZeroTierProof) throw new InvalidOperationException("Atualizações estáveis desativadas neste protótipo.");
                     if (_connection?.IsConnected == true) throw new InvalidOperationException("Saia da sala antes de atualizar.");
                     if (_availableUpdate is null) throw new InvalidOperationException("Nenhuma atualização aprovada disponível.");
@@ -702,19 +705,12 @@ public partial class ShellWindow : Window
         try
         {
             if (!_updateDownloaded) _availableUpdate = await _updates.CheckForUpdatesAsync();
-            var result = UpdateResult();
+            var result = new { available = _availableUpdate is not null, version = _availableUpdate?.TargetFullRelease.Version.ToString(), downloaded = _updateDownloaded, message = _availableUpdate is null ? "Você está na versão oficial mais recente." : "Nova versão oficial disponível." };
             Emit(new { type = "update", result });
             return result;
         }
         catch { return new { available = false, message = "Não foi possível consultar releases oficiais. Pode não haver uma versão publicada ainda." }; }
     }
-    private object UpdateResult() => new
-    {
-        available = _availableUpdate is not null,
-        version = _availableUpdate?.TargetFullRelease.Version.ToString(),
-        downloaded = _updateDownloaded,
-        message = _availableUpdate is null ? "Você está na versão mais recente do seu canal." : "Nova versão disponível."
-    };
     private async Task<object> CreateNetworkTestAsync()
     {
         var server = Invitations.ValidateServer(Environment.GetEnvironmentVariable("STREAMROOM_TEST_URL") ?? "https://streamroom.arthostudio.com");
@@ -755,6 +751,7 @@ public partial class ShellWindow : Window
         }
         e.Cancel = true;
         _closing = true; _googleLogin?.Cancel(); _updateTimer.Stop(); StopNativeCapture();
+        if (_discordSetupCommands.CurrentCount > 0) _discordSetup.DiscardPreparation();
         if (_backgroundNotice?.IsVisible == true) _backgroundNotice.Close(); _backgroundNotice = null;
         _mediaTestScene?.Close();
         try { if (_ready) await Browser.ExecuteScriptAsync("window.streamroom?.shutdown()").WaitAsync(TimeSpan.FromSeconds(2)); } catch { }
