@@ -614,6 +614,8 @@ internal sealed class DiscordSetup(string dataDirectory)
             return tunneled.Address.ToString();
         }
         if (routeError is not null) throw new IOException(routeError);
+        if (failures.Any(result => result.Error == "curl 35"))
+            throw new IOException($"O túnel iniciou, mas o teste HTTPS falhou mesmo em modo de compatibilidade. Tente outro servidor gratuito dos EUA. O perfil atual continua salvo. (VPN-TLS: {ProbeCodes(failures)})");
         throw new IOException($"O WireSock iniciou o túnel, mas o teste HTTPS não conseguiu verificar a conexão. Tente aplicar novamente. Se persistir, envie o código do aviso. (VPN-TESTE: {ProbeCodes(failures)})");
     }
 
@@ -622,11 +624,19 @@ internal sealed class DiscordSetup(string dataDirectory)
 
     private static async Task<ProbeResult> ReadProbeAsync(string executable, string url)
     {
+        var result = await RunProbeAsync(executable, url, compatibility: false);
+        return result.Error == "curl 35" ? await RunProbeAsync(executable, url, compatibility: true) : result;
+    }
+
+    private static async Task<ProbeResult> RunProbeAsync(string executable, string url, bool compatibility)
+    {
         string response;
         try
         {
-            response = await RunAsync(executable, ["-q", "-4fsS", "--noproxy", "*", "--connect-timeout", "8", "--max-time", "14", url],
-                17, standardOutputOnly: true, reportExitCode: true);
+            var args = new List<string> { "-q", "-4fsS", "--noproxy", "*", "--connect-timeout", "8", "--max-time", "14", "--tlsv1.2" };
+            if (compatibility) args.AddRange(["--tls-max", "1.2", "--http1.1"]);
+            args.Add(url);
+            response = await RunAsync(executable, args, 17, standardOutputOnly: true, reportExitCode: true);
         }
         catch (ProbeProcessException ex) { return new(url, null, "", ex.Code); }
         catch (Win32Exception ex) { return new(url, null, "", $"Windows {ex.NativeErrorCode}"); }
