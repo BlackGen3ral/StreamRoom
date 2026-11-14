@@ -426,26 +426,6 @@ async function checkUpdates() {
   finally { updateBusy = false; $('updateButton').disabled = false; $('updateButton').textContent = 'Verificar atualização'; }
   if (result) showUpdate(result);
 }
-$('discordPreviewButton').addEventListener('click', async () => {
-  const feedback = $('discordPreviewStatus');
-  if (updateBusy || updateReady) {
-    feedback.textContent = 'Conclua a atualização em andamento e tente novamente.';
-    return;
-  }
-  updateBusy = true;
-  $('discordPreviewButton').disabled = $('updateButton').disabled = true;
-  feedback.textContent = 'Consultando o canal experimental…';
-  let result;
-  try {
-    result = await native('checkDiscordPreview');
-    feedback.textContent = 'Prévia encontrada. Acompanhe o download em Atualizações.';
-  } catch (error) { feedback.textContent = error.message; }
-  finally {
-    updateBusy = false;
-    $('discordPreviewButton').disabled = $('updateButton').disabled = false;
-  }
-  if (result) showUpdate(result);
-});
 $('name').addEventListener('input', renderProfile);
 $('showStage').addEventListener('click', () => { selectPage('screens', true); $('stage').scrollIntoView({ block: 'start' }); });
 $('stageShare').addEventListener('click', () => $('start').click());
@@ -544,10 +524,7 @@ try {
   }
   if (r.capturePreview) { capturePicker.open(); setTimeout(() => native('capturePreview'), 6000); }
   if (r.installed && !r.uiPreview) {
-    $('discordPreview').hidden = false;
     setTimeout(checkUpdates, 5000);
-  }
-  if (r.installed && !r.uiPreview) {
     const outcome = await native('updateOutcome');
     if (outcome?.message) status(outcome.message);
     setTimeout(async () => {
