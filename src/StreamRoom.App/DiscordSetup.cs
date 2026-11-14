@@ -614,8 +614,8 @@ internal sealed class DiscordSetup(string dataDirectory)
             return tunneled.Address.ToString();
         }
         if (routeError is not null) throw new IOException(routeError);
-        if (failures.Any(result => result.Error == "curl 35"))
-            throw new IOException($"O túnel iniciou, mas o teste HTTPS falhou mesmo em modo de compatibilidade. Tente outro servidor gratuito dos EUA. O perfil atual continua salvo. (VPN-TLS: {ProbeCodes(failures)})");
+        if (failures.Any(result => IsTlsHandshakeFailure(result.Error)))
+            throw new IOException($"O teste HTTPS pelo túnel falhou. Importe um perfil de outro servidor gratuito dos EUA e tente novamente. Se repetir, envie este código para identificar a falha do Windows. (VPN-TLS: {ProbeCodes(failures)})");
         throw new IOException($"O WireSock iniciou o túnel, mas o teste HTTPS não conseguiu verificar a conexão. Tente aplicar novamente. Se persistir, envie o código do aviso. (VPN-TESTE: {ProbeCodes(failures)})");
     }
 
@@ -625,7 +625,21 @@ internal sealed class DiscordSetup(string dataDirectory)
     private static async Task<ProbeResult> ReadProbeAsync(string executable, string url)
     {
         var result = await RunProbeAsync(executable, url, compatibility: false);
-        return result.Error == "curl 35" ? await RunProbeAsync(executable, url, compatibility: true) : result;
+        if (!IsTlsHandshakeFailure(result.Error)) return result;
+        var compatible = await RunProbeAsync(executable, url, compatibility: true);
+        if (compatible.Address is not null) return compatible;
+        return compatible with { Error = result.Error == compatible.Error ? result.Error : $"{result.Error}; {compatible.Error}" };
+    }
+
+    private static bool IsTlsHandshakeFailure(string code) => code.StartsWith("curl 35", StringComparison.Ordinal);
+
+    internal static string ProbeErrorCode(int exitCode, string stderr)
+    {
+        // Only expose Windows error identifiers. The rest of stderr can contain
+        // addresses, local paths or certificates and stays out of the UI.
+        var identifiers = Regex.Matches(stderr, @"\b(?:0x[0-9A-Fa-f]{8}|(?:SEC|CRYPT|CERT)_E_[A-Z0-9_]{1,80})\b")
+            .Select(match => match.Value.ToUpperInvariant()).Distinct().Take(4).ToArray();
+        return $"curl {exitCode}" + (identifiers.Length == 0 ? "" : " [" + string.Join(", ", identifiers) + "]");
     }
 
     private static async Task<ProbeResult> RunProbeAsync(string executable, string url, bool compatibility)
@@ -706,7 +720,7 @@ internal sealed class DiscordSetup(string dataDirectory)
         }
         if (process.ExitCode != 0)
         {
-            if (reportExitCode) throw new ProbeProcessException($"curl {process.ExitCode}");
+            if (reportExitCode) throw new ProbeProcessException(ProbeErrorCode(process.ExitCode, await errors));
             throw new IOException($"{Path.GetFileName(file)} encontrou um erro. Confira se o Discord e outras VPNs estão fechados.");
         }
         var stderr = await errors;
