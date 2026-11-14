@@ -210,7 +210,7 @@ public partial class ShellWindow : Window
             switch (type)
             {
                 case "discordSetupStatus":
-                    result = new { available = DiscordSetup.Available, repairNeeded = DiscordSetup.Available && DiscordSetup.RepairNeeded(), prepared = _discordSetup.IsPrepared }; break;
+                    result = new { available = DiscordSetup.Available, repairAvailable = DiscordSetup.Available && DiscordSetup.RepairAvailable(), prepared = _discordSetup.IsPrepared }; break;
                 case "discordSetupProton": DiscordSetup.OpenProton(); break;
                 case "discordSetupImport": result = _discordSetup.PickProfile(this); break;
                 case "discordSetupPrepare":

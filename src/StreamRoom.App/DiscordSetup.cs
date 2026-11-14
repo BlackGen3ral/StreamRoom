@@ -35,10 +35,10 @@ internal sealed class DiscordSetup
 
     public static void OpenProton() => Process.Start(new ProcessStartInfo("https://account.protonvpn.com/downloads") { UseShellExecute = true });
 
-    public static bool RepairNeeded()
+    public static bool RepairAvailable()
     {
-        try { return CanRepair() && !IsPatched(Path.Combine(DiscordResources(), "app.asar"), Patcher); }
-        catch (IOException) { return false; }
+        try { return CanRepair() && File.Exists(Path.Combine(DiscordResources(), "app.asar")); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 
     private static bool CanRepair() => File.Exists(Patcher) &&
@@ -80,6 +80,7 @@ internal sealed class DiscordSetup
         var scratch = _preparedDirectory ?? throw new IOException("Prepare a configuração primeiro.");
         var repairOnly = _repairOnly;
         var restart = false;
+        var exitRefreshed = false;
         try
         {
             var resources = DiscordResources();
@@ -90,6 +91,7 @@ internal sealed class DiscordSetup
                     throw new IOException("O instalador preparado não passou na verificação. Prepare novamente.");
             if (!IsPatched(asar, Patcher)) EnsureUnmodified(resources);
             if (repairOnly && !CanRepair()) throw new IOException("Os arquivos do StreamFix não estão mais disponíveis.");
+            var verifiedExit = repairOnly ? await ReadActiveDiscordExitAsync() : null;
 
             progress(12, "Fechando o Discord para aplicar a configuração…");
             restart = true;
@@ -105,6 +107,8 @@ internal sealed class DiscordSetup
                     EnsureUnmodified(resources);
                     await PatchDiscordAsync(installer, asar);
                 }
+                if (verifiedExit is not null)
+                    exitRefreshed = await RefreshSavedDiscordExitAsync(verifiedExit.Value.Profile, verifiedExit.Value.Address);
             }
             else await ConfigureAsync(resources, scratch, installer, enableQuality, progress);
         }
@@ -116,7 +120,47 @@ internal sealed class DiscordSetup
         finally { DiscardPreparation(); }
 
         progress(95, "Abrindo o Discord…");
-        return new { repairOnly, reopened = TryReopenDiscord() };
+        return new { repairOnly, reopened = TryReopenDiscord(), exitRefreshed };
+    }
+
+    private static async Task<(string Profile, string Address)?> ReadActiveDiscordExitAsync()
+    {
+        if (!File.Exists(WireSock)) return null;
+        var settings = Path.Combine(Vencord, "settings", "settings.json");
+        var configuration = JsonNode.Parse(await File.ReadAllTextAsync(settings));
+        var plugin = configuration?["plugins"]?["StreamFix"] as JsonObject;
+        var profile = plugin?["perfilDoTunel"]?.GetValue<string>();
+        if (profile is null || !Regex.IsMatch(profile, @"^(?:streamfix-proton|streamroom-discord-[a-f0-9]{32})$"))
+            return null;
+        string status;
+        try { status = await WireSockAsync("status"); }
+        catch (IOException) { return null; }
+        var active = Regex.Match(status, @"^Connected to server using profile ([a-zA-Z0-9-]+)\r?$", RegexOptions.Multiline);
+        var exit = Regex.Match(status, @"^External address: ([0-9.]+), United States(?:,|\r?$)", RegexOptions.Multiline);
+        if (!active.Success || active.Groups[1].Value != profile ||
+            !IPAddress.TryParse(exit.Groups[1].Value, out var address) || address.AddressFamily != AddressFamily.InterNetwork)
+            return null;
+        return (profile, address.ToString());
+    }
+
+    private static async Task<bool> RefreshSavedDiscordExitAsync(string profile, string address)
+    {
+        var settings = Path.Combine(Vencord, "settings", "settings.json");
+        var configuration = JsonNode.Parse(await File.ReadAllTextAsync(settings));
+        var plugin = configuration?["plugins"]?["StreamFix"] as JsonObject;
+        if (plugin?["perfilDoTunel"]?.GetValue<string>() != profile ||
+            plugin["enderecoDaSaida"]?.GetValue<string>() == address)
+            return false;
+        plugin["enderecoDaSaida"] = address;
+        var pending = settings + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await File.WriteAllTextAsync(pending, configuration!.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            RequireClosedDiscord();
+            File.Move(pending, settings, overwrite: true);
+            return true;
+        }
+        finally { File.Delete(pending); }
     }
 
     private static bool TryReopenDiscord()

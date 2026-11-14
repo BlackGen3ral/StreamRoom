@@ -41,7 +41,7 @@ export function createDiscordSetup(native) {
     const result = await native('discordSetupStatus');
     if (busy) return;
     panel.hidden = !result.available;
-    repairBox.hidden = !result.repairNeeded;
+    repairBox.hidden = !result.repairAvailable;
     prepared = result.prepared;
     updateButtons(false);
   }
@@ -82,9 +82,11 @@ export function createDiscordSetup(native) {
         imported = false;
         file.textContent = 'Perfil configurado neste PC.';
       }
-      repairBox.hidden = true;
       meter.value = 100;
-      show(result.reopened ? 'Configuração aplicada. O Discord foi reaberto.' : 'Configuração aplicada. Abra o Discord pelo menu Iniciar.');
+      const applied = result.exitRefreshed ? 'Saída do Proton atualizada.' : 'Configuração aplicada.';
+      show(applied + (result.reopened ? ' O Discord foi reaberto.' : ' Abra o Discord pelo menu Iniciar.'));
+      const setup = await native('discordSetupStatus').catch(() => null);
+      if (setup) repairBox.hidden = !setup.repairAvailable;
     } catch (error) {
       meter.hidden = true;
       show(error.message, true);
