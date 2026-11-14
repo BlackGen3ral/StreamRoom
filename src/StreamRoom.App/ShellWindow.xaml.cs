@@ -24,7 +24,8 @@ public partial class ShellWindow : Window
     private readonly TailscaleService _tailscale = new();
     private bool _tailscaleWebRtcReady;
     private readonly SystemAudioCapture _audio = new();
-    private readonly UpdateManager _updates = new(new GithubSource("https://github.com/BlackGen3ral/StreamRoom", null, false));
+    private const string UpdateRepository = "https://github.com/BlackGen3ral/StreamRoom";
+    private UpdateManager _updates = new(new GithubSource(UpdateRepository, null, false));
     private readonly CaptureSources _captureSources = new();
     private NativeCapture? _nativeCapture;
     private CoreWebView2SharedBuffer? _nativeBuffer;
@@ -198,7 +199,7 @@ public partial class ShellWindow : Window
             if (type?.StartsWith("tailscale", StringComparison.Ordinal) == true)
                 throw new InvalidOperationException("A integração Tailscale foi retirada. Use a opção ZeroTier em Conexões.");
             if (type == "googleCancel") { _googleLogin?.Cancel(); Emit(new { type = "reply", id, ok = true, result = new { } }); return; }
-            commandGate = type is "profilePhoto" or "profileSave" or "googleSignIn" or "googleDisconnect" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" ? _updateCommands : _commands;
+            commandGate = type is "profilePhoto" or "profileSave" or "googleSignIn" or "googleDisconnect" ? _profileCommands : type == "captureThumbnail" ? _previewCommands : type == "zeroTierStatus" ? _zeroTierStatusCommands : type?.StartsWith("tailscale", StringComparison.Ordinal) == true ? _tailscaleCommands : type is "checkUpdates" or "downloadUpdate" or "installUpdate" or "checkDiscordPreview" ? _updateCommands : _commands;
             await commandGate.WaitAsync();
             var p = message.GetProperty("payload");
             object? result = null;
@@ -495,6 +496,20 @@ public partial class ShellWindow : Window
                 case "cameraPermissionEnd": _cameraAllowedUntil=0;break;
                 case "audioStop": _audio.Dispose(); break;
                 case "checkUpdates": result = await CheckUpdatesAsync(); break;
+                case "checkDiscordPreview":
+                    if (App.ZeroTierProof || !_updates.IsInstalled || _updates.IsPortable)
+                        throw new InvalidOperationException("A prévia do Discord está disponível na instalação do StreamRoom para Windows.");
+                    if (_updateDownloaded)
+                        throw new InvalidOperationException("Aplique a atualização já baixada antes de entrar na prévia.");
+                    var previewUpdates = new UpdateManager(new GithubSource(UpdateRepository, null, prerelease: true),
+                        new UpdateOptions { ExplicitChannel = "win-discord" });
+                    var previewUpdate = await previewUpdates.CheckForUpdatesAsync();
+                    if (previewUpdate is null)
+                        throw new InvalidOperationException("Nenhuma versão experimental mais recente está disponível.");
+                    _updates = previewUpdates;
+                    _availableUpdate = previewUpdate;
+                    result = UpdateResult();
+                    break;
                 case "downloadUpdate":
                     if (App.ZeroTierProof) throw new InvalidOperationException("Atualizações estáveis desativadas neste protótipo.");
                     if (_availableUpdate is null) throw new InvalidOperationException("Consulte as atualizações primeiro.");
@@ -687,12 +702,19 @@ public partial class ShellWindow : Window
         try
         {
             if (!_updateDownloaded) _availableUpdate = await _updates.CheckForUpdatesAsync();
-            var result = new { available = _availableUpdate is not null, version = _availableUpdate?.TargetFullRelease.Version.ToString(), downloaded = _updateDownloaded, message = _availableUpdate is null ? "Você está na versão oficial mais recente." : "Nova versão oficial disponível." };
+            var result = UpdateResult();
             Emit(new { type = "update", result });
             return result;
         }
         catch { return new { available = false, message = "Não foi possível consultar releases oficiais. Pode não haver uma versão publicada ainda." }; }
     }
+    private object UpdateResult() => new
+    {
+        available = _availableUpdate is not null,
+        version = _availableUpdate?.TargetFullRelease.Version.ToString(),
+        downloaded = _updateDownloaded,
+        message = _availableUpdate is null ? "Você está na versão mais recente do seu canal." : "Nova versão disponível."
+    };
     private async Task<object> CreateNetworkTestAsync()
     {
         var server = Invitations.ValidateServer(Environment.GetEnvironmentVariable("STREAMROOM_TEST_URL") ?? "https://streamroom.arthostudio.com");
