@@ -23,6 +23,7 @@ internal sealed class DiscordSetup
     private static readonly string WireSock = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
         "WireSock Secure Connect", "command-line", "wiresock-connect-cli.exe");
     private static readonly string LocalData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    private static readonly string DiscordRoot = Path.Combine(LocalData, "Discord");
     private static readonly string Vencord = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Vencord");
     private static readonly string Patcher = Path.Combine(Vencord, "dist", "patcher.js");
     private static readonly HttpClient Downloads = new() { Timeout = TimeSpan.FromMinutes(2) };
@@ -95,7 +96,7 @@ internal sealed class DiscordSetup
 
             progress(12, "Fechando o Discord para aplicar a configuração…");
             restart = true;
-            await DiscordRestart.CloseAsync(Path.Combine(LocalData, "Discord"));
+            await DiscordRestart.CloseAsync(DiscordRoot);
             RequireClosedDiscord();
             resources = DiscordResources();
             asar = Path.Combine(resources, "app.asar");
@@ -167,8 +168,7 @@ internal sealed class DiscordSetup
     {
         try
         {
-            var root = Path.Combine(LocalData, "Discord");
-            if (DiscordRestart.IsRunning(root)) return true;
+            if (DiscordRestart.IsRunning(DiscordRoot)) return true;
             var executable = Path.Combine(Path.GetDirectoryName(DiscordResources())!, "Discord.exe");
             using var process = Process.Start(new ProcessStartInfo(executable)
             {
@@ -271,9 +271,8 @@ internal sealed class DiscordSetup
 
     private static string DiscordResources()
     {
-        var discord = Path.Combine(LocalData, "Discord");
-        if (!Directory.Exists(discord)) throw new IOException("Instale e abra o Discord para Windows uma vez antes de configurar.");
-        return Directory.EnumerateDirectories(discord, "app-*")
+        if (!Directory.Exists(DiscordRoot)) throw new IOException("Instale e abra o Discord para Windows uma vez antes de configurar.");
+        return Directory.EnumerateDirectories(DiscordRoot, "app-*")
             .Where(app => File.Exists(Path.Combine(app, "Discord.exe")) && File.Exists(Path.Combine(app, "resources", "app.asar")))
             .OrderByDescending(app => Version.TryParse(Path.GetFileName(app)[4..], out var version) ? version : new Version())
             .Select(app => Path.Combine(app, "resources")).FirstOrDefault()
@@ -282,9 +281,8 @@ internal sealed class DiscordSetup
 
     private static void RequireClosedDiscord()
     {
-        var processes = Process.GetProcessesByName("Discord");
-        foreach (var process in processes) process.Dispose();
-        if (processes.Length > 0) throw new IOException("O Discord ainda está aberto. Tente aplicar novamente.");
+        if (DiscordRestart.IsRunning(DiscordRoot))
+            throw new IOException("O Discord voltou a abrir durante a configuração. Saia dele pela bandeja do Windows e tente aplicar novamente.");
     }
 
     private static async Task ConfigureVencordAsync(string resources, string preparedInstaller, string profile, string egress, bool enableQuality)

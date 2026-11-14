@@ -15,41 +15,55 @@ internal static class DiscordRestart
 
     public static async Task CloseAsync(string root)
     {
+        RequestClose(root, force: false);
+        if (await WaitUntilClosedAsync(root, TimeSpan.FromSeconds(2), force: false)) return;
+
+        // Closing the window can leave Discord in the tray. Check again after each
+        // pass so a renderer or launcher that starts during shutdown is also stopped.
+        if (!await WaitUntilClosedAsync(root, TimeSpan.FromSeconds(8), force: true))
+            throw new IOException("O Discord demorou para encerrar. Saia dele pela bandeja do Windows e tente aplicar novamente.");
+    }
+
+    private static void RequestClose(string root, bool force)
+    {
         var processes = Process.GetProcessesByName("Discord");
         try
         {
-            var installed = processes.Where(process => IsInstalledProcess(process, root)).ToArray();
-            if (installed.Length == 0) return;
-
-            foreach (var process in installed)
+            foreach (var process in processes)
             {
-                try { if (!process.HasExited) process.CloseMainWindow(); }
-                catch (InvalidOperationException) when (process.HasExited) { }
+                if (!IsInstalledProcess(process, root)) continue;
+                try
+                {
+                    if (force) process.Kill();
+                    else process.CloseMainWindow();
+                }
+                catch (Exception ex) when ((ex is InvalidOperationException or Win32Exception) && process.HasExited) { }
             }
-            if (await WaitAsync(installed, TimeSpan.FromSeconds(2))) return;
-
-            // Discord can minimize to the tray when it receives the normal close request.
-            // Only stop processes whose executable belongs to this user's Discord installation.
-            foreach (var process in installed)
-            {
-                try { if (!process.HasExited && IsInstalledProcess(process, root)) process.Kill(); }
-                catch (InvalidOperationException) when (process.HasExited) { }
-            }
-            if (!await WaitAsync(installed, TimeSpan.FromSeconds(5)))
-                throw new IOException("O Discord demorou para encerrar. Tente aplicar novamente.");
         }
         finally { foreach (var process in processes) process.Dispose(); }
     }
 
-    private static async Task<bool> WaitAsync(Process[] processes, TimeSpan timeout)
+    private static async Task<bool> WaitUntilClosedAsync(string root, TimeSpan timeout, bool force)
     {
-        using var deadline = new CancellationTokenSource(timeout);
-        try
+        var elapsed = Stopwatch.StartNew();
+        var delay = TimeSpan.FromMilliseconds(150);
+        TimeSpan? emptySince = null;
+        do
         {
-            await Task.WhenAll(processes.Select(process => process.WaitForExitAsync(deadline.Token)));
-            return true;
+            if (IsRunning(root))
+            {
+                emptySince = null;
+                if (force) RequestClose(root, force: true);
+            }
+            else
+            {
+                emptySince ??= elapsed.Elapsed;
+                if (elapsed.Elapsed - emptySince >= TimeSpan.FromMilliseconds(400)) return true;
+            }
+            await Task.Delay(delay);
         }
-        catch (OperationCanceledException) { return false; }
+        while (elapsed.Elapsed < timeout);
+        return false;
     }
 
     private static bool IsInstalledProcess(Process process, string root)
@@ -57,7 +71,10 @@ internal static class DiscordRestart
         try
         {
             if (process.HasExited || process.MainModule?.FileName is not { } executable) return false;
-            var relative = Path.GetRelativePath(root, executable).Split(Path.DirectorySeparatorChar);
+            var path = Path.GetRelativePath(root, executable);
+            if (path.Equals("Discord.exe", StringComparison.OrdinalIgnoreCase)) return true;
+
+            var relative = path.Split(Path.DirectorySeparatorChar);
             return relative.Length == 2 && relative[0].StartsWith("app-", StringComparison.OrdinalIgnoreCase)
                 && Version.TryParse(relative[0][4..], out _)
                 && relative[1].Equals("Discord.exe", StringComparison.OrdinalIgnoreCase);
