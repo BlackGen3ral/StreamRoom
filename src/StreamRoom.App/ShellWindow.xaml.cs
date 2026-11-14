@@ -22,7 +22,7 @@ public partial class ShellWindow : Window
     private readonly SemaphoreSlim _tailscaleCommands = new(1, 1);
     private readonly SemaphoreSlim _zeroTierStatusCommands = new(1, 1);
     private readonly SemaphoreSlim _discordSetupCommands = new(1, 1);
-    private readonly DiscordSetup _discordSetup = new();
+    private readonly DiscordSetup _discordSetup = new(DataDirectory);
     private readonly TailscaleService _tailscale = new();
     private bool _tailscaleWebRtcReady;
     private readonly SystemAudioCapture _audio = new();
@@ -40,6 +40,7 @@ public partial class ShellWindow : Window
     private VelopackAsset? _downloadedUpdate;
     private string? _failedUpdateVersion;
     private bool _applyingUpdate;
+    private bool _resumeDiscordAfterUpdate = App.RestartedAfterUpdate;
     private readonly CancellationTokenSource _updateShutdown = new();
     private bool _retiringTailscale;
     private BackgroundNotice? _backgroundNotice;
@@ -231,23 +232,41 @@ public partial class ShellWindow : Window
             switch (type)
             {
                 case "discordSetupStatus":
+                    _discordSetup.LoadProfile();
                     result = new
                     {
                         available = DiscordSetup.Available,
                         repairAvailable = DiscordSetup.Available && DiscordSetup.RepairAvailable(),
                         prepared = _discordSetup.IsPrepared,
-                        fileName = _discordSetup.ImportedFileName
+                        fileName = _discordSetup.ImportedFileName,
+                        savedQuality = _discordSetup.SavedQuality,
+                        pending = _discordSetup.HasPendingProfile,
+                        profileError = _discordSetup.ProfileLoadError
                     };
                     break;
                 case "discordSetupProton": DiscordSetup.OpenProton(); break;
-                case "discordSetupImport": result = _discordSetup.PickProfile(this); break;
+                case "discordSetupImport":
+                    result = _discordSetup.PickProfile(this, ReadDiscordQuality(p));
+                    break;
+                case "discordSetupQuality":
+                    _discordSetup.SaveQuality(ReadDiscordQuality(p));
+                    break;
                 case "discordSetupPrepare":
                     var repairOnly = p.TryGetProperty("repairOnly", out var repair) && repair.ValueKind == JsonValueKind.True;
                     await _discordSetup.PrepareAsync(repairOnly, (percent, label) => Emit(new { type = "discordSetupProgress", percent, label }));
                     break;
                 case "discordSetupRestart":
-                    var enableQuality = p.TryGetProperty("quality", out var discordQuality) && discordQuality.ValueKind == JsonValueKind.True;
-                    result = await _discordSetup.ApplyAndRestartAsync(enableQuality, (percent, label) => Emit(new { type = "discordSetupProgress", percent, label }));
+                    _resumeDiscordAfterUpdate = false;
+                    result = await _discordSetup.ApplyAndRestartAsync(ReadDiscordQuality(p), ReportDiscordProgress);
+                    break;
+                case "discordSetupResume":
+                    if (!_resumeDiscordAfterUpdate) { result = new { skipped = true }; break; }
+                    try
+                    {
+                        result = await _discordSetup.ResumeAfterUpdateAsync(ReportDiscordProgress);
+                        if (!_discordSetup.HasPendingProfile) _resumeDiscordAfterUpdate = false;
+                    }
+                    catch { _resumeDiscordAfterUpdate = false; throw; }
                     break;
                 case "testCreate" when App.NetworkTestOutput is not null:
                     result = await CreateNetworkTestAsync();
@@ -342,6 +361,7 @@ public partial class ShellWindow : Window
                     break;
                 case "updateOutcome":
                     var transition = Path.Combine(DataDirectory, "update-transition.json");
+                    string? updateMessage = null;
                     if (File.Exists(transition))
                     {
                         using var pending = JsonDocument.Parse(await File.ReadAllTextAsync(transition));
@@ -352,9 +372,11 @@ public partial class ShellWindow : Window
                             _failedUpdateVersion = target;
                             if (_downloadedUpdate is { } failed && failed.Version.ToString() == target) EmitUpdate(failed, "applyFailed");
                         }
-                        result = new { message = actual == target ? $"StreamRoom {actual} atualizado com sucesso." : "A atualização anterior não foi concluída. Use Reiniciar e atualizar quando a opção aparecer." };
+                        if (actual == target) _resumeDiscordAfterUpdate = true;
+                        updateMessage = actual == target ? $"StreamRoom {actual} atualizado com sucesso." : "A atualização anterior não foi concluída. Use Reiniciar e atualizar quando a opção aparecer.";
                         if (actual == target) File.Delete(transition);
                     }
+                    result = new { message = updateMessage, resumeDiscord = _resumeDiscordAfterUpdate };
                     break;
                 case "zeroTierStatus":
                     var zeroTier = new ZeroTierService(); var zeroTierConfig = ZeroTierPreferences.Load();
@@ -715,10 +737,16 @@ public partial class ShellWindow : Window
     private void EmitUpdate(VelopackAsset asset, string state) =>
         Emit(new { type = "update", result = new { version = asset.Version.ToString(), state } });
 
+    private static bool ReadDiscordQuality(JsonElement payload) =>
+        !payload.TryGetProperty("quality", out var quality) || quality.ValueKind != JsonValueKind.False;
+
+    private void ReportDiscordProgress(int percent, string label) =>
+        Emit(new { type = "discordSetupProgress", percent, label });
+
     private bool CanApplyUpdate() => !_closing && !_exitRequested && !_retiringTailscale &&
         _connection?.IsConnected != true && _nativeCapture is null &&
         _commands.CurrentCount > 0 && _discordSetupCommands.CurrentCount > 0 && _profileCommands.CurrentCount > 0 &&
-        !_discordSetup.IsPrepared && !OtherInstalledInstanceRunning();
+        !_discordSetup.HasRepairPreparation && !OtherInstalledInstanceRunning();
 
     private static bool OtherInstalledInstanceRunning()
     {

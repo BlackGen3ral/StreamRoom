@@ -6,6 +6,7 @@ public partial class App : Application
     public static bool ZeroTierProof { get; private set; }
     public static bool ZeroTierEnabled { get; private set; }
     public static bool ZeroTierContextUnavailable { get; private set; }
+    public static bool RestartedAfterUpdate { get; private set; }
     internal static void UseNormalNetworkContext() { ZeroTierEnabled = false; ZeroTierContextUnavailable = true; }
     public static string? UiPreviewOutput { get; private set; }
     public static string? PlayerLayoutTestOutput { get; private set; }
@@ -19,7 +20,8 @@ public partial class App : Application
     [STAThread]
     public static void Main(string[] args)
     {
-        VelopackApp.Build().SetAutoApplyOnStartup(false).Run();
+        VelopackApp.Build().SetAutoApplyOnStartup(false)
+            .OnRestarted(_ => RestartedAfterUpdate = true).Run();
         int peopleTest=Array.IndexOf(args,"--people-self-test");
         if(peopleTest>=0){PeopleSelfTest.Run(System.IO.Path.GetFullPath(args.ElementAtOrDefault(peopleTest+1)??"people-test.json"),StreamRoom.Core.Invitations.ValidateServer(args.ElementAtOrDefault(peopleTest+2)??"http://127.0.0.1:8787")).GetAwaiter().GetResult();return;}
         int accountTest = Array.IndexOf(args, "--account-self-test");

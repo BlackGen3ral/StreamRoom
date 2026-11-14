@@ -50,7 +50,7 @@ const requests = new Map(); let sequence = 0;
 function native(type, payload = {}) {
   return new Promise((resolve, reject) => {
     const id = String(++sequence);
-    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'googleSignIn' ? 330000 : ['profilePhoto','discordSetupPrepare','discordSetupImport','discordSetupRestart'].includes(type) ? 900000 : type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'connect' ? 45000 : 25000);
+    const timer = setTimeout(() => { requests.delete(id); reject(Error('O aplicativo demorou para responder. Tente novamente.')); }, type === 'googleSignIn' ? 330000 : ['profilePhoto','discordSetupPrepare','discordSetupImport','discordSetupRestart','discordSetupResume'].includes(type) ? 900000 : type === 'zeroTierDownload' ? 330000 : type === 'retireTailscale' ? 660000 : type === 'zeroTierJoin' ? 180000 : type === 'connect' ? 45000 : 25000);
     requests.set(id, { resolve, reject, timer }); window.chrome.webview.postMessage({ id, type, payload });
   });
 }
@@ -500,6 +500,12 @@ try {
   if (r.installed && !r.uiPreview) {
     const outcome = await native('updateOutcome');
     if (outcome?.message) status(outcome.message);
+    if (outcome?.resumeDiscord) {
+      void discordSetup.resumeAfterUpdate().then(resumed => {
+        if (resumed && currentPage === 'screens' && !state.connected && !document.querySelector('dialog[open]'))
+          selectPage('connections');
+      }).catch(error => status(error.message, true));
+    }
     setTimeout(async () => {
       try { const result = await native('retireTailscale'); if (result?.message) { $('maintenanceText').textContent = result.message; $('maintenanceNotice').hidden = false; } }
       catch (error) { $('maintenanceText').textContent = 'Tailscale: ' + error.message; $('maintenanceNotice').hidden = false; }

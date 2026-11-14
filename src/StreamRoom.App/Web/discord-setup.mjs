@@ -6,6 +6,8 @@ export function createDiscordSetup(native) {
   let fileName = null;
   let busy = false;
   let prepared = false;
+  let pending = false;
+  let resumeTimer;
 
   function show(message, error = false) {
     feedback.hidden = false;
@@ -22,9 +24,11 @@ export function createDiscordSetup(native) {
     importError.hidden = true;
     let accepted = false;
     try {
-      const result = await native('discordSetupImport');
+      const result = await native('discordSetupImport', { quality: quality.checked });
       if (result.imported) {
+        clearTimeout(resumeTimer);
         fileName = result.fileName;
+        pending = true;
         prepared = false;
         feedback.hidden = true;
         accepted = true;
@@ -50,6 +54,9 @@ export function createDiscordSetup(native) {
     repairBox.hidden = !result.repairAvailable;
     prepared = result.prepared;
     fileName = result.fileName;
+    pending = result.pending;
+    if (typeof result.savedQuality === 'boolean') quality.checked = result.savedQuality;
+    if (result.profileError) show(result.profileError, true);
   }
 
   function updateButtons(working) {
@@ -58,13 +65,16 @@ export function createDiscordSetup(native) {
     apply.disabled = working || !fileName;
     restart.disabled = working;
     restartBox.hidden = !prepared;
-    file.textContent = fileName ? `Arquivo aceito · ${fileName}` : 'Selecione o arquivo baixado. A chave fica neste PC.';
+    file.textContent = fileName
+      ? `${pending ? 'Perfil salvo neste PC' : 'Perfil salvo · configuração aplicada'} · ${fileName}`
+      : 'Selecione o arquivo baixado. A chave fica neste PC.';
     nextStep.textContent = fileName
       ? 'Clique em Preparar Discord. Se o Windows pedir, autorize a instalação do WireSock.'
       : 'Importe um arquivo .conf válido no passo anterior para continuar.';
   }
 
   async function configure(repairOnly) {
+    clearTimeout(resumeTimer);
     prepared = false;
     updateButtons(true);
     meter.hidden = false;
@@ -83,15 +93,29 @@ export function createDiscordSetup(native) {
     } finally { updateButtons(false); }
   }
 
-  restart.addEventListener('click', async () => {
+  async function applySetup(automatic = false) {
+    if (busy) {
+      if (automatic) resumeTimer = setTimeout(() => void applySetup(true), 5000);
+      return;
+    }
+    clearTimeout(resumeTimer);
     updateButtons(true);
-    meter.hidden = false;
-    meter.value = 0;
-    show('Preparando a reinicialização do Discord…');
+    if (!automatic) {
+      meter.hidden = false;
+      meter.value = 0;
+      show('Preparando a reinicialização do Discord…');
+    }
     try {
-      const result = await native('discordSetupRestart', { quality: quality.checked });
+      const result = await native(automatic ? 'discordSetupResume' : 'discordSetupRestart', { quality: quality.checked });
+      if (result.skipped || result.waiting) {
+        meter.hidden = true;
+        if (result.waiting) {
+          show('O perfil está salvo. A configuração vai continuar assim que o Discord estiver fechado.');
+          resumeTimer = setTimeout(() => void applySetup(true), 5000);
+        } else feedback.hidden = true;
+        return;
+      }
       prepared = false;
-      if (!result.repairOnly) fileName = null;
       meter.value = 100;
       const applied = result.exitRefreshed ? 'Vencord e StreamFix verificados. Saída do Proton atualizada.' : 'Vencord e StreamFix aplicados ao Discord.';
       show(applied + (result.reopened ? ' O Discord foi reaberto.' : ' Abra o Discord pelo menu Iniciar.'));
@@ -103,12 +127,22 @@ export function createDiscordSetup(native) {
       if (setup) readStatus(setup);
       updateButtons(false);
     }
+  }
+  restart.addEventListener('click', () => void applySetup());
+  quality.addEventListener('change', () => {
+    if (fileName) void native('discordSetupQuality', { quality: quality.checked }).catch(error => show(error.message, true));
   });
   apply.addEventListener('click', () => configure(false));
   repair.addEventListener('click', () => configure(true));
 
   return {
     start: refresh,
-    progress({ percent, label }) { meter.value = percent; show(label); }
+    async resumeAfterUpdate() {
+      await refresh();
+      if (panel.hidden || !pending) return false;
+      void applySetup(true);
+      return true;
+    },
+    progress({ percent, label }) { meter.hidden = false; meter.value = percent; show(label); }
   };
 }

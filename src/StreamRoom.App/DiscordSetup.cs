@@ -13,7 +13,7 @@ using Microsoft.Win32;
 
 namespace StreamRoom.App;
 
-internal sealed class DiscordSetup
+internal sealed class DiscordSetup(string dataDirectory)
 {
     private const string WireSockUrl = "https://wiresock.net/_api/download-release.php?platform=windows_x64&product=wiresock-secure-connect&version=3.8.2.1";
     private const string WireSockHash = "BB46770C2BE2AF619AA08BC0F53F430088317AF0E966192B653F91E1E8483504";
@@ -30,15 +30,44 @@ internal sealed class DiscordSetup
     private const RegexOptions WireSockStatusOptions = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
     private const string WireSockConnected = "Connected to server using profile|Conectado ao servidor usando o perfil";
     private const string WireSockConnecting = "Establishing connection using profile|Estabelecendo conexão usando o perfil";
-    private DiscordProtonProfile? _profile;
+    private SavedDiscordSetup? _savedProfile;
+    private bool _profileLoaded;
     private string? _preparedDirectory;
     private bool _repairOnly;
     public bool IsPrepared => _preparedDirectory is not null;
-    public string? ImportedFileName { get; private set; }
+    public bool HasRepairPreparation => IsPrepared && _repairOnly;
+    public string? ImportedFileName => _savedProfile?.FileName;
+    public bool? SavedQuality => _savedProfile?.EnableQuality;
+    public bool HasPendingProfile => _savedProfile?.Pending == true;
+    public string? ProfileLoadError { get; private set; }
 
     public static bool Available => File.Exists(Path.Combine(Assets, "patcher.js")) && File.Exists(Path.Combine(Assets, "renderer.js"));
 
     public static void OpenProton() => Process.Start(new ProcessStartInfo("https://account.protonvpn.com/downloads") { UseShellExecute = true });
+
+    public void LoadProfile()
+    {
+        if (_profileLoaded) return;
+        _profileLoaded = true;
+        try { _savedProfile = SavedDiscordSetup.Load(dataDirectory); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        { ProfileLoadError = "O perfil salvo não pôde ser aberto. Importe o arquivo .conf novamente."; }
+    }
+
+    public void SaveQuality(bool enableQuality)
+    {
+        LoadProfile();
+        if (_savedProfile is { } saved && saved.EnableQuality != enableQuality)
+            SaveProfile(saved with { EnableQuality = enableQuality });
+    }
+
+    private void SaveProfile(SavedDiscordSetup saved)
+    {
+        saved.Save(dataDirectory);
+        _savedProfile = saved;
+        ProfileLoadError = null;
+        _profileLoaded = true;
+    }
 
     public static bool RepairAvailable()
     {
@@ -66,8 +95,9 @@ internal sealed class DiscordSetup
     public async Task PrepareAsync(bool repairOnly, Action<int, string> progress)
     {
         DiscardPreparation();
+        LoadProfile();
         if (repairOnly && !CanRepair()) throw new IOException("Configure o StreamFix neste PC antes de usar o reparo.");
-        if (!repairOnly && _profile is null) throw new IOException("Importe o arquivo .conf primeiro.");
+        if (!repairOnly && _savedProfile is null) throw new IOException("Importe o arquivo .conf primeiro.");
         var resources = DiscordResources();
         var installed = IsPatched(Path.Combine(resources, "app.asar"), Patcher);
         if (!installed) EnsureUnmodified(resources);
@@ -96,10 +126,24 @@ internal sealed class DiscordSetup
         if (directory is not null) CleanScratch(directory);
     }
 
-    public async Task<object> ApplyAndRestartAsync(bool enableQuality, Action<int, string> progress)
+    public async Task<object> ResumeAfterUpdateAsync(Action<int, string> progress)
+    {
+        LoadProfile();
+        if (ProfileLoadError is { } error) throw new IOException(error);
+        if (!HasPendingProfile || _savedProfile is not { } saved) return new { skipped = true };
+        if (DiscordRestart.IsRunning(DiscordRoot)) return new { waiting = true };
+        progress(0, "Retomando a configuração com o perfil salvo…");
+        if (!IsPrepared || _repairOnly) await PrepareAsync(repairOnly: false, progress);
+        return await ApplyAndRestartAsync(saved.EnableQuality, progress, allowClosingDiscord: false);
+    }
+
+    public async Task<object> ApplyAndRestartAsync(bool enableQuality, Action<int, string> progress, bool allowClosingDiscord = true)
     {
         var scratch = _preparedDirectory ?? throw new IOException("Prepare a configuração primeiro.");
         var repairOnly = _repairOnly;
+        if (!allowClosingDiscord && DiscordRestart.IsRunning(DiscordRoot)) return new { waiting = true };
+        if (!repairOnly && _savedProfile is { } saved && (!saved.Pending || saved.EnableQuality != enableQuality))
+            SaveProfile(saved with { EnableQuality = enableQuality, Pending = true });
         var restart = false;
         var exitRefreshed = false;
         if (!repairOnly)
@@ -107,6 +151,7 @@ internal sealed class DiscordSetup
             progress(5, "Verificando a conexão do WireSock…");
             await CheckWireSockAsync(releaseSavedProfile: false);
         }
+        if (!allowClosingDiscord && DiscordRestart.IsRunning(DiscordRoot)) return new { waiting = true };
         try
         {
             var resources = DiscordResources();
@@ -116,9 +161,12 @@ internal sealed class DiscordSetup
             if (repairOnly && !CanRepair()) throw new IOException("Os arquivos do StreamFix não estão mais disponíveis.");
             var verifiedExit = repairOnly ? await ReadActiveDiscordExitAsync() : null;
 
-            progress(12, "Fechando o Discord para aplicar a configuração…");
             restart = true;
-            await DiscordRestart.CloseAsync(DiscordRoot);
+            if (allowClosingDiscord)
+            {
+                progress(12, "Fechando o Discord para aplicar a configuração…");
+                await DiscordRestart.CloseAsync(DiscordRoot);
+            }
             RequireClosedDiscord();
             resources = DiscordResources();
             asar = Path.Combine(resources, "app.asar");
@@ -203,20 +251,20 @@ internal sealed class DiscordSetup
         catch (Exception ex) when (ex is Win32Exception or IOException or UnauthorizedAccessException) { return false; }
     }
 
-    public object PickProfile(System.Windows.Window owner)
+    public object PickProfile(System.Windows.Window owner, bool enableQuality)
     {
         var dialog = new OpenFileDialog { Filter = "Perfil WireGuard (*.conf)|*.conf", CheckFileExists = true };
         if (dialog.ShowDialog(owner) != true) return new { imported = false, fileName = "" };
         var profile = DiscordProtonProfile.Read(dialog.FileName);
+        SaveProfile(new(Path.GetFileName(dialog.FileName), profile, enableQuality, Pending: true));
         DiscardPreparation();
-        _profile = profile;
-        ImportedFileName = Path.GetFileName(dialog.FileName);
         return new { imported = true, fileName = ImportedFileName };
     }
 
     private async Task ConfigureAsync(string resources, string scratch, string installer, bool enableQuality, Action<int, string> progress)
     {
-        var profile = _profile ?? throw new IOException("Importe o arquivo .conf primeiro.");
+        var saved = _savedProfile ?? throw new IOException("Importe o arquivo .conf primeiro.");
+        var profile = saved.Profile;
         var id = Guid.NewGuid().ToString("N");
         var full = $"streamroom-discord-{id}";
         var control = full + "-controle";
@@ -235,14 +283,16 @@ internal sealed class DiscordSetup
             }
             progress(80, "Guardando um backup e configurando o StreamFix…");
             await ConfigureVencordAsync(resources, installer, full, egress, enableQuality);
-            _profile = null;
-            ImportedFileName = null;
         }
         catch
         {
             foreach (var name in imported) await DeleteProfileAsync(name);
             throw;
         }
+        _savedProfile = saved with { Pending = false };
+        try { SaveProfile(_savedProfile); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { throw new IOException("O StreamFix foi aplicado, mas o Windows não conseguiu registrar a conclusão do perfil salvo.", ex); }
     }
 
     private static async Task InstallWireSockAsync(string scratch, Action<int, string> progress)
